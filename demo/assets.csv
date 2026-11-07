@@ -1,0 +1,8 @@
+asset_id,name,type,location,patterns
+PDU-A,PDU A (Rack R12),pdu,Row 1 / Rack R12,R12 PDU A;PDU A
+PDU-B,PDU B (Rack R12),pdu,Row 1 / Rack R12,R12 PDU B;PDU B
+R12,Rack R12,rack,Row 1,RACK 12;RACK R12
+R13,Rack R13,rack,Row 1,RACK 13;RACK R13
+SW-CORE-1,Core switch 1,switch,Row 1 / Rack R13,CORE-1;CORESW1
+CRAC-2,CRAC unit 2,crac,Row 1 end,/crac\s*0?2/
+UPS-1,UPS 1,ups,Electrical room,UPS1;UPS 01

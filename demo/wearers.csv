@@ -1,0 +1,3 @@
+device_id,name,role,shift
+REPLACE-WITH-GARY-DEVICE-ID,Gary,Operator,Day
+REPLACE-WITH-EDWARD-DEVICE-ID,Edward,Operator,Night
