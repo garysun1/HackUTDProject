@@ -1,0 +1,18 @@
+# Issues to create when the repo exists (gh issue create; labels: area, status)
+
+| # | Title | Area | Owner | Body |
+|---|---|---|---|---|
+| 1 | Photo capture app: standalone photo + shutter-button listener → ingest_photo | capture | Edward | Toolkit 1.0 standalone photo (no stream). Registration via Meta AI app, camera permission, device session, photo child started. Capture button calls capturePhoto(.full, .high); shutter-button photos arrive on the same listener. Resize 1600 px, blur faces, HEIC→JPEG, base64, POST to the module's ingest_photo per docs/CONTRACT.md. Poll status and show accepted → perceived → in_graph. MockDeviceKit / MockCameraCaptureKit first. |
+| 2 | Camera-roll import (fallback) | capture | Edward | Only if shutter-button delivery needs the foreground. Watch the Photos library; upload new glasses photos with original creation timestamps as source=camera_roll. |
+| 3 | Spacetime vertical slice (hour 0–2, time-boxed) | backend | Gary | TypeScript module with event + photo tables, ingest_photo and ping procedures, published to Maincloud; a web page subscribing to event and showing rows live; fixture replay posting one photo. Acceptance: a row inserted by HTTP appears in the browser without reload. If not done by 14:30, fall back to Postgres + Neo4j and drop the Spacetime track. |
+| 4 | Fixtures: shift-hour | backend | Gary | ~20 photos from one venue hour as event_json + jpg, one with a label; replay script with speed control. |
+| 5 | perceive procedure | backend | Gary | Scheduled from ingest_photo. phash dedupe; ctx.http.fetch Azure gpt-4o structured JSON with previous-event context; Azure Vision image embedding; withTx writes; entities, edges (NEXT, INVOLVES, CHANGES, EVIDENCED_BY, SIMILAR_TO); status in_graph. Explicit HTTP timeouts. < 15 s. |
+| 6 | segment procedure: episodes | backend | Gary | Boundaries on place change, gap, embedding jump; Nemotron titles and summaries for the affected episode; episode table. |
+| 7 | ask procedure: Nemotron tool loop | backend | Gary | OpenAI-style tool calling against integrate.api.nvidia.com; tools = the eight MCP functions over tables; returns answer + event_id citations; bounded rounds; gpt-5 fallback. |
+| 8 | handoff procedure | backend | Gary | summarize_handoff(since): Nemotron summary grouped by place and entity with citations; cached in handoff table. NMC² demo beat. |
+| 9 | MCP server (Node, stdio) + Claude Desktop config | mcp | Gary | Eight tools mapping to module procedures via the TypeScript SDK; citations → photo URLs; config snippet for Claude Desktop. |
+| 10 | Real-glasses measurements | capture | Edward | First: do shutter-button photos reach the app while backgrounded? Then capture-to-bytes latency at .full/.high, HEIC vs JPEG, startup failure rate, battery over a day of button photos. |
+| 11 | Demo script, rehearsals, backup recording, submission text | demo | both | Shift-framed script incl. live beat and handoff; five rehearsals; recorded backup; submission paragraphs for NVIDIA, NMC², Spacetime. |
+| 12 | Live web view | web | Gary | Timeline left, force graph right, subscribed to event/entity/edge/episode; new rows animate in. Neo4j Browser is no longer available, so this is required, not optional. |
+| 13 | Nemotron VL bake-off (optional) | backend | Gary | Run nemotron-3.5-super-vl vs gpt-4o on the fixtures; compare JSON validity and change detection; pick one. |
+| 14 | Module secrets config | backend | Gary | Admin reducer to set Azure, NVIDIA, and ingest_token in a private config table; never in the repo. |
