@@ -1,0 +1,31 @@
+{
+  "id": "warehouse-dc",
+  "title": "Distribution center safety walk",
+  "summary": "A shift lead's safety walk of a distribution center: a dock door, forklift charging, pallet racking that is found damaged, and a freezer reading. Shows anomaly detection without any status text.",
+  "shift_start": "2026-11-07T05:30:00-06:00",
+  "style": "Unedited first-person snapshot from a head-mounted wearable camera at eye level, deep focus with everything sharp, no bokeh, inside a large distribution center warehouse, slightly off-level framing, high-bay LED lighting, light sensor noise, realistic, no people or faces in frame.",
+  "wearers": [ { "key": "jordan", "name": "Jordan (shift lead)", "role": "Warehouse shift lead", "shift": "Early" } ],
+  "assets": [
+    { "asset_id": "DOCK-14", "name": "Dock door 14", "type": "dock", "location": "Inbound docks", "patterns": ["DOCK 14"] },
+    { "asset_id": "CHG-05", "name": "Forklift charger 05", "type": "charger", "location": "Charging bay", "patterns": ["CHG 05"] },
+    { "asset_id": "A22-B07", "name": "Racking aisle 22 bay 07", "type": "racking", "location": "Aisle 22", "patterns": ["AISLE 22"] },
+    { "asset_id": "FZ-1", "name": "Freezer FZ-1", "type": "freezer", "location": "Cold storage", "patterns": ["FZ 1"] }
+  ],
+  "shots": [
+    { "id": "01-dock-door", "t": 0, "wearer": "jordan",
+      "prompt": "An open warehouse loading dock door with a trailer backed in and pallets of boxes; a large yellow sign above the door reads \"DOCK 14\".",
+      "read": ["DOCK 14"] },
+    { "id": "02-charger", "t": 11, "wearer": "jordan",
+      "prompt": "An industrial forklift battery charger on a wall with a cable plugged into a forklift; a large label reads \"CHG-05\" and its display shows \"78%\".",
+      "read": ["CHG-05"] },
+    { "id": "03-racking-ok", "t": 20, "wearer": "jordan", "pair": "rack",
+      "prompt": "Orange and blue steel pallet racking loaded with shrink-wrapped pallets; a large aisle sign reads \"AISLE 22\"; the uprights and beams are straight and intact.",
+      "read": ["AISLE 22"] },
+    { "id": "04-racking-damaged", "t": 38, "wearer": "jordan", "pair": "rack",
+      "prompt": "Orange and blue steel pallet racking loaded with shrink-wrapped pallets; a large aisle sign reads \"AISLE 22\"; the front blue upright is visibly bent and buckled at the base from a forklift impact, with scraped paint.",
+      "read": ["AISLE 22"], "expect": "alert" },
+    { "id": "05-freezer", "t": 52, "wearer": "jordan",
+      "prompt": "Insulated walk-in freezer door with frost around the seal; a label reads \"FZ-1\" and a digital display beside it shows \"-18C\".",
+      "read": ["FZ-1"] }
+  ]
+}
