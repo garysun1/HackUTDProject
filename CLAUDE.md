@@ -71,9 +71,12 @@ adding a service or dependency.
   calls ingest_photo over HTTP with JSON args; the web view and MCP server subscribe via
   the TypeScript SDK. Spacetime docs: https://spacetimedb.com/docs (verify API names there,
   never guess).
-- Models: Azure OpenAI gpt-4o for perception, Azure AI Vision multimodal embeddings for
-  image search, NVIDIA Nemotron (integrate.api.nvidia.com, OpenAI-compatible) for the agent
-  loop, episode titles, and handoff. Azure gpt-5 is the fallback agent. Azure Speech is
+- Models: NVIDIA Nemotron end to end via integrate.api.nvidia.com (OpenAI-compatible):
+  `nvidia/nemotron-3.5-super-vl-120b-a12b` for perception, `nvidia/nemotron-3.5-lightning-30b-a3b`
+  for the agent loop, episode titles, and handoff; pass `chat_template_kwargs:
+  {enable_thinking: false}` unless you want reasoning and give it budget. Azure gpt-4o is
+  the perception fallback and Azure gpt-5 the agent fallback. Azure AI Vision multimodal
+  embeddings for image search. Azure Speech is
   provisioned, unused. Claude Desktop is the MCP client in the demo.
 - Azure resource (created 2026-11-07): resource group `hackutd-wm`, East US, multi-service
   resource `hackutd-wm-garysun`. Deployments `vlm-gpt-4o`, `agent-gpt-5`,

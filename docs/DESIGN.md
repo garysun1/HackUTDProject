@@ -172,17 +172,22 @@ Per photo, inside `perceive`:
 
 1. Perceptual hash against the previous few photos; near-duplicates get a `SIMILAR_TO` edge
    and skip the VLM (status `in_graph`, summary copied).
-2. gpt-4o (`vlm-gpt-4o`) with the image and the previous event's summary as context, returning
-   JSON: `scene`, `location_guess`, `objects[]` (name, attributes, position), `people_count`
-   (no identity), `activity`, `text_in_scene[]`, `changes_since_previous[]`
-   (`{entity, attr, from, to}`), `summary`, `confidence`. Text in the scene (rack labels,
-   panel readouts, cable tags) is read by the VLM; no separate OCR.
+2. **Nemotron 3.5 Super VL** (`nvidia/nemotron-3.5-super-vl-120b-a12b`, reasoning disabled
+   via `chat_template_kwargs: {enable_thinking: false}`) with the image and the previous
+   event's summary as context, returning JSON: `scene`, `location_guess`, `objects[]` (name,
+   attributes, position), `people_count` (no identity), `activity`, `text_in_scene[]`,
+   `changes_since_previous[]` (`{entity, attr, from, to}`), `summary`, `confidence`. Text in
+   the scene (rack labels, panel readouts, cable tags) is read by the VLM; no separate OCR.
+   Fallback on 429 or timeout: Azure gpt-4o (`vlm-gpt-4o`) with the same prompt and
+   `response_format: json_object`. Bake-off 2026-11-07 on a rack-label scene: both read all
+   eight strings and detected all three changes; Nemotron 4.7 s vs gpt-4o 7.3 s.
 3. Azure AI Vision image embedding (1024-d) stored on the event for `search_memory` and the
    episode boundary test. Query text is embedded with the same Vision text endpoint so image
    and text vectors are comparable. Cosine similarity is a loop over events; at hundreds of
    rows this is fast enough.
-4. Optional bake-off (issue 12): `nvidia/nemotron-3.5-super-vl-120b-a12b` as the VLM instead of gpt-4o. Keep
-   whichever yields better structured JSON on the fixtures.
+4. With reasoning left on, the VL model spends most of its token budget thinking and can
+   truncate the JSON; keep `enable_thinking: false` for perception and give the agent loop
+   a budget if reasoning is wanted there.
 
 Target under 15 seconds from upload to `in_graph`.
 
@@ -216,7 +221,10 @@ anything that looked abnormal," each line citing an `event_id`.
 **Agent = Nemotron inside the `ask` procedure.** Model via NVIDIA's OpenAI-compatible endpoint
 `https://integrate.api.nvidia.com/v1` with a Developer Program key. Default
 `nvidia/nemotron-3.5-lightning-30b-a3b` for latency; `nvidia/nemotron-3-ultra-550b-a55b` if answer quality
-needs it. Verify exact IDs on build.nvidia.com; free-tier lists change. The loop: system
+needs it. It is a reasoning model: `chat_template_kwargs: {enable_thinking: false}` turns
+thinking off (verified), otherwise allow several hundred tokens of budget or the content
+comes back empty. With perception also on Nemotron, the pipeline is Nemotron end to end:
+perception, episode summaries, the agent loop, and the handoff. Verify exact IDs on build.nvidia.com; free-tier lists change. The loop: system
 prompt with the tool schema → model → tool calls executed against tables → model → final
 answer with citations. This is the NVIDIA "multi-step workflow with tool integration."
 
@@ -279,7 +287,10 @@ web view (3–9, 12). Both: demo (11).
   multi-service resource `hackutd-wm-garysun`. Deployments `vlm-gpt-4o` (200K TPM),
   `text-embedding-3-small` (unused if Vision text embeddings suffice), `agent-gpt-5`
   (fallback agent if Nemotron is unavailable). Speech is provisioned, unused.
-- **NVIDIA**: Developer Program key for `integrate.api.nvidia.com`. Brev credits unused.
+- **NVIDIA**: Developer Program key for `integrate.api.nvidia.com` (free tier, about 40
+  requests per minute per model; perception plus agent traffic stays well under that).
+  Brev credits unused. Optional: `nvidia/llama-nemotron-embed-vl-1b-v2` could replace Azure
+  Vision embeddings to make the stack all-NVIDIA; untested.
 - Secrets: the module reads keys from its own config table written by an admin reducer, or
   from publish-time environment if supported; never in the repo. Laptop `.env` for the MCP
   server and scripts. Cloud agent sessions: proxy-injected keys, set the variable to
@@ -315,6 +326,8 @@ nodes; learned bindings; multi-shift consolidation; row-level security per weare
 
 ## Changelog
 
+- 2026-11-07 v4.1: Nemotron 3.5 Super VL is the primary perception model after a bake-off;
+  gpt-4o is the fallback. Exact model IDs recorded. Decision 0025.
 - 2026-11-07 v4: Spacetime module replaces Postgres, Neo4j, API server and LangGraph;
   Nemotron is the agent; NMC² shift-handoff framing; `summarize_handoff` added; phone uploads
   base64 JSON to a procedure; hosting moves to Maincloud. Decisions 0021–0024.

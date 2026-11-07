@@ -14,5 +14,5 @@
 | 10 | Real-glasses measurements | capture | Edward | First: do shutter-button photos reach the app while backgrounded? Then capture-to-bytes latency at .full/.high, HEIC vs JPEG, startup failure rate, battery over a day of button photos. |
 | 11 | Demo script, rehearsals, backup recording, submission text | demo | both | Shift-framed script incl. live beat and handoff; five rehearsals; recorded backup; submission paragraphs for NVIDIA, NMC², Spacetime. |
 | 12 | Live web view | web | Gary | Timeline left, force graph right, subscribed to event/entity/edge/episode; new rows animate in. Neo4j Browser is no longer available, so this is required, not optional. |
-| 13 | Nemotron VL bake-off (optional) | backend | Gary | Run nemotron-3.5-super-vl vs gpt-4o on the fixtures; compare JSON validity and change detection; pick one. |
+| 13 | Nemotron VL bake-off | backend | Gary | DONE 2026-11-07: Nemotron 3.5 Super VL (thinking off) matched gpt-4o on text reading and change detection at 4.7 s vs 7.3 s. Nemotron is primary perception; gpt-4o fallback. |
 | 14 | Module secrets config | backend | Gary | Admin reducer to set Azure, NVIDIA, and ingest_token in a private config table; never in the repo. |
