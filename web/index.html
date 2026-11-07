@@ -31,7 +31,7 @@ function render(events){const tl=document.getElementById('timeline');events.sort
   const when=new Date(Number(BigInt(e.t_micros)/1000n)).toLocaleTimeString();
   el.innerHTML=`<img data-id="${e.event_id}" alt=""><div><div class="t">${when} · ${e.source} · <span class="st ${e.status}">${e.status}</span></div><div class="s">${e.summary||'<i>processing…</i>'}</div><div class="tags">${e.label?`<span>label: ${e.label}</span>`:''}${e.location_guess?`<span>place: ${e.location_guess}</span>`:''}${e.note?`<span>note: ${e.note}</span>`:''}</div></div>`;
   const img=el.querySelector('img'); if(!img.src) loadThumb(e.event_id,img);}}
-async function loadThumb(id,img){try{const rows=await sql(`SELECT mime, jpeg_b64 FROM photo WHERE event_id='${id}'`);if(rows[0])img.src=`data:${rows[0].mime};base64,${rows[0].jpeg_b64}`;}catch{}}
+async function loadThumb(id,img){try{const rows=await sql(`SELECT mime, jpeg_b_64 FROM photo WHERE event_id='${id}'`);if(rows[0])img.src=`data:${rows[0].mime};base64,${rows[0].jpeg_b_64}`;}catch{}}
 function drawGraph(){const c=document.getElementById('c'),ctx=c.getContext('2d');const W=c.width=c.clientWidth*devicePixelRatio,H=c.height=c.clientHeight*devicePixelRatio;ctx.clearRect(0,0,W,H);
  const evs=[...seen.keys()];const nodes=new Map();const cx=W/2,cy=H/2,R=Math.min(W,H)*0.36;
  evs.forEach((id,i)=>nodes.set(id,{x:cx+R*Math.cos(2*Math.PI*i/Math.max(evs.length,1)),y:cy+R*Math.sin(2*Math.PI*i/Math.max(evs.length,1)),k:'event'}));
