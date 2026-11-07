@@ -30,17 +30,17 @@ cd module && node --experimental-strip-types --test test/rules.test.ts
 ## Secrets and config (#14)
 
 Secrets are the database's environment variables, declared in the schema and never in the repo.
-From a logged-in laptop (`spacetime login` first), in `module/`: publish the code first so the
-new variables are declared, then set their values with `--env-only` (the form used for #3):
-
-```bash
-spacetime publish wm-physical --server maincloud
-```
+From a logged-in laptop (`spacetime login` first), in `module/`. `spacetime publish` reads every
+declared variable from the shell (CLI 2.14.1), so one command publishes the code and sets the keys;
+unspecified variables keep their stored values:
 
 ```bash
 NVIDIA_API_KEY=... AZURE_AI_KEY=... SLACK_WEBHOOK_URL=https://hooks.slack.com/services/... ADMIN_TOKEN=... \
-  spacetime publish wm-physical --env-only --server maincloud
+  spacetime publish wm-physical --server maincloud
 ```
+
+Change values later without uploading code with `--env-only`, remove one with `--unset-env KEY`.
+Tested locally: publishing this version over a database running the #3 slice keeps its data.
 
 Verify with `spacetime describe wm-physical env --server maincloud` (lists the declared env).
 
@@ -54,7 +54,8 @@ Verify with `spacetime describe wm-physical env --server maincloud` (lists the d
 | `AZURE_OPENAI_ENDPOINT`, `AZURE_VLM_DEPLOYMENT`, `AZURE_AI_SERVICES_ENDPOINT` | no | default to the `hackutd-wm-garysun` resource and `vlm-gpt-4o` |
 | `SLACK_WEBHOOK_URL` | for alert posting | Slack incoming webhook for the alerts channel |
 
-Check the webhook end to end:
+Check the webhook end to end (module HTTP calls to private addresses are refused, so this needs
+the real Slack URL):
 
 ```bash
 curl -X POST https://maincloud.spacetimedb.com/v1/database/wm-physical/call/slack_test \
@@ -93,3 +94,18 @@ After setting the keys, re-run the events that only got the stub:
 curl -X POST https://maincloud.spacetimedb.com/v1/database/wm-physical/call/reperceive \
   -H 'Content-Type: application/json' -d '["<ADMIN_TOKEN>", ""]'
 ```
+
+## Local testing
+
+```bash
+spacetime start                      # in another terminal
+INGEST_TOKEN=test ADMIN_TOKEN=test NVIDIA_API_KEY=... AZURE_AI_KEY=... \
+  spacetime publish wm-local --server local --yes
+SPACETIME_HOST=http://127.0.0.1:3000 SPACETIME_DB_NAME=wm-local ADMIN_TOKEN=test node scripts/seed.mjs ../demo/assets.csv
+spacetime sql wm-local --server local "SELECT event_id, status, summary FROM event"
+```
+
+Verified locally on 2026-11-07 with the real models: healthy panel → faulted panel → repeat photo
+gives one alert on PDU A (`PSU2 status: OK → FAULT · temperature: 27C → 41C OVERTEMP · …`), the
+repeat photo folds into it, a "DO NOT PROP DOOR OPEN" sign raises nothing, Nemotron 3–4.5 s warm
+(9.5 s cold), and a broken Nemotron model ID falls back to gpt-4o in 6.1 s.

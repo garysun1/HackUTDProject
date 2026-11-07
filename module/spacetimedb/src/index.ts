@@ -14,6 +14,7 @@ import {
   base64ToBytes,
   cosine,
   parseJsonObject,
+  summarizeFindings,
   type AssetLike,
 } from './rules';
 
@@ -490,7 +491,7 @@ export const perceive = spacetimedb.procedure(
         embedding,
       });
 
-      const assets: (AssetLike & { location: string })[] = [...tx.db.asset.iter()];
+      const assets: (AssetLike & { location: string; assetType: string })[] = [...tx.db.asset.iter()];
       const assetById = new Map(assets.map(a => [a.assetId, a]));
       const now = ev.tMicros;
 
@@ -611,18 +612,21 @@ export const perceive = spacetimedb.procedure(
             { tag: 'unbounded' }
           )
         )];
-      // Group findings by the asset/entity they are about: one alert per asset per photo.
-      // Target: the rule's entity if it is an asset, else an asset named in the same text,
-      // else the single asset seen in the photo, else the rule's entity, else the label.
-      const groups = new Map<string, { entityId: string; entityName: string; location: string; kind: string; items: string[] }>();
+      // Group findings by the asset they are about: one alert per asset per photo.
+      // Target: the rule's entity if it is a registry asset, else an asset named in the same
+      // text, else the photo's primary asset (equipment before the rack it sits in), else the
+      // wearer's label, else none. Part names like "PSU2" or "TEMP" are not targets: they
+      // stay in the alert text and the alert lands on the asset that contains them.
+      const groups = new Map<string, { entityId: string; entityName: string; location: string; kind: string; items: { kind: string; text: string }[] }>();
       const rank = (k: string) => (k === 'state_change' ? 0 : k === 'fault_text' ? 1 : 2);
+      const primary =
+        sceneAssets.find(m => assetById.get(m.assetId)?.assetType !== 'rack') ?? sceneAssets[0] ?? null;
+      const fallback = primary ? resolve(primary.assetId) : ev.label ? resolve(ev.label) : null;
       for (const c of candidates) {
         let target = c.entity ? resolve(c.entity) : null;
         if (!target || !target.isAsset) {
           const inText = assets.length ? matchAssets([c.text], assets) : [];
-          if (inText.length) target = resolve(inText[0].assetId);
-          else if (sceneAssets.length === 1) target = resolve(sceneAssets[0].assetId);
-          else if (!target && ev.label) target = resolve(ev.label);
+          target = inText.length ? resolve(inText[0].assetId) : fallback;
         }
         const entityId = target?.id ?? '';
         const a = target?.isAsset ? assetById.get(target.name) : undefined;
@@ -632,21 +636,31 @@ export const perceive = spacetimedb.procedure(
           groups.set(entityId, g);
         }
         if (rank(c.kind) < rank(g.kind)) g.kind = c.kind;
-        g.items.push(c.text);
+        // drop the entity name from a state change filed under that same entity
+        const sameEntity = c.short && c.entity && resolve(c.entity).id === entityId;
+        g.items.push({ kind: c.kind, text: sameEntity ? c.short! : c.text });
       }
 
       const inserted: { alertId: bigint; text: string; kind: string; entityName: string; location: string }[] = [];
       for (const g of groups.values()) {
-        g.items.sort(); // stable text for the same findings
-        const open = recent.find(r => !r.acked && r.entityId === g.entityId);
+        // Findings with no asset never absorb other photos' alerts.
+        const open = g.entityId ? recent.find(r => !r.acked && r.entityId === g.entityId) : undefined;
         if (open) {
-          // One open alert per asset: fold new findings into it, no new Slack post.
-          const have = squash(open.text);
-          const add = g.items.filter(i => !have.includes(squash(i)));
-          if (add.length) tx.db.alert.alertId.update({ ...open, text: [open.text, ...add].join(' · ') });
+          // One open alert per asset: fold in new readings from the equipment (fault text),
+          // up to 5 lines, no new Slack post. A repeat photo's "changes" compare against the
+          // already-faulted previous photo, so they are not folded in.
+          const lines = open.text.split(' · ');
+          const keys = lines.map(squash);
+          for (const i of g.items) {
+            const k = squash(i.text);
+            if (i.kind !== 'fault_text' || lines.length >= 5 || keys.some(x => x.includes(k) || k.includes(x))) continue;
+            lines.push(i.text);
+            keys.push(k);
+          }
+          if (lines.length !== open.text.split(' · ').length) tx.db.alert.alertId.update({ ...open, text: lines.join(' · ') });
           continue;
         }
-        const text = g.items.slice(0, 4).join(' · ');
+        const text = summarizeFindings(g.items).join(' · ');
         const row = tx.db.alert.insert({
           alertId: 0n,
           eventId,
@@ -785,9 +799,9 @@ export const upsertWearer = spacetimedb.reducer(
   }
 );
 
-// Re-run perception on one event, or ('' ) on every event that is failed or was perceived
-// by the keyless stub. Clears that event's outgoing edges and its incoming NEXT edge first so
-// perceive can rebuild them without duplicates. Alerts already raised are kept.
+// Re-run perception on one event, or ('') on every event that is failed or was perceived
+// by the keyless stub. Clears the edges that event's perceive wrote so it can rebuild them
+// without duplicates. Alerts already raised are kept.
 export const reperceive = spacetimedb.reducer(
   { adminToken: t.string(), eventId: t.string() },
   (ctx, { adminToken, eventId }) => {
@@ -801,7 +815,9 @@ export const reperceive = spacetimedb.reducer(
     let i = 0n;
     for (const ev of targets) {
       if (!ev) continue;
-      for (const e of [...ctx.db.edge.fromId.filter(ev.eventId)]) ctx.db.edge.edgeId.delete(e.edgeId);
+      // edges this event's perceive wrote: everything outgoing except NEXT (the next event
+      // owns that one), plus the incoming NEXT from its predecessor
+      for (const e of [...ctx.db.edge.fromId.filter(ev.eventId)]) if (e.kind !== 'NEXT') ctx.db.edge.edgeId.delete(e.edgeId);
       for (const e of [...ctx.db.edge.toId.filter(ev.eventId)]) if (e.kind === 'NEXT') ctx.db.edge.edgeId.delete(e.edgeId);
       ctx.db.event.eventId.update({ ...ev, status: 'accepted' });
       // oldest first, 8 s apart: each sees its predecessor in the graph, and we stay well

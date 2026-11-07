@@ -66,9 +66,6 @@ export function matchAssets(texts: string[], assets: AssetLike[]): AssetMatch[] 
 export const FAULT_RE =
   /\b(FAULT(?:Y|ED)?|FAIL(?:ED|URE|ING)?|ALARM(?:ING)?|CRITICAL|OVER[- ]?TEMP(?:ERATURE)?|OVERHEAT(?:ING)?|OVERLOAD(?:ED)?|DEGRADED|TRIPPED|LEAK(?:ING)?|OFFLINE|DOWN|ERROR|ERR)\b/i;
 
-// Values that mean "healthy"; a change from one of these to a FAULT_RE value is an alert.
-const OK_RE = /^\s*(OK|NORMAL|GOOD|ONLINE|UP|ON|GREEN|HEALTHY|RUNNING|ACTIVE|READY|PASS(ED)?|NONE|)\s*$/i;
-
 export interface ChangeLike {
   entity?: unknown;
   attr?: unknown;
@@ -86,6 +83,7 @@ export interface AlertCandidate {
   kind: 'fault_text' | 'state_change' | 'anomaly';
   text: string;
   entity: string; // entity or asset name the alert is about, '' if unknown
+  short?: string; // text without the entity name (state changes only)
 }
 
 /**
@@ -112,8 +110,15 @@ export function detectAlerts(
     if (FAULT_RE.test(to) && !FAULT_RE.test(from)) {
       const entity = String(c?.entity ?? '');
       const attr = String(c?.attr ?? '');
-      const fromPart = from.trim() && !OK_RE.test(from) ? `${from} → ` : from.trim() ? `${from} → ` : '';
-      push({ kind: 'state_change', entity, text: `${entity}${attr ? ' ' + attr : ''}: ${fromPart}${to}`.trim() });
+      // `short` omits the entity, for when the alert is already filed under that entity's
+      // asset: "PSU2 status: OK → FAULT" instead of "PDU-A PSU2 status: OK → FAULT".
+      const change = `${from.trim() ? from.trim() + ' → ' : ''}${to.trim()}`;
+      push({
+        kind: 'state_change',
+        entity,
+        text: `${[entity, attr].filter(Boolean).join(' ')}: ${change}`,
+        short: `${attr || entity}: ${change}`,
+      });
     }
   }
   for (const t of textInScene) {
@@ -178,4 +183,27 @@ export function parseJsonObject(content: string): any {
   const e = content.lastIndexOf('}');
   if (s < 0 || e <= s) throw new Error('no_json_object');
   return JSON.parse(content.slice(s, e + 1));
+}
+
+const KIND_RANK: Record<string, number> = { state_change: 0, fault_text: 1, anomaly: 2 };
+
+/**
+ * The lines an alert shows: concrete findings first (state changes, then text read on the
+ * equipment); prose anomalies only when there is nothing concrete. Near-duplicates dropped.
+ */
+export function summarizeFindings(items: { kind: string; text: string }[], max = 3): string[] {
+  const concrete = items.some(i => i.kind !== 'anomaly');
+  const sorted = items
+    .filter(i => !concrete || i.kind !== 'anomaly')
+    .sort((a, b) => (KIND_RANK[a.kind] ?? 9) - (KIND_RANK[b.kind] ?? 9));
+  const out: string[] = [];
+  const keys: string[] = [];
+  for (const i of sorted) {
+    const k = squash(i.text);
+    if (!k || keys.some(x => x.includes(k) || k.includes(x))) continue;
+    keys.push(k);
+    out.push(i.text);
+    if (out.length >= max) break;
+  }
+  return out;
 }

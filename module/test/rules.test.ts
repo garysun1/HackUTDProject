@@ -1,7 +1,7 @@
 // Run: node --experimental-strip-types --test test/rules.test.ts   (from module/)
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { matchAssets, detectAlerts, base64ToBytes, cosine, parseJsonObject, squash } from '../spacetimedb/src/rules.ts';
+import { matchAssets, detectAlerts, base64ToBytes, cosine, parseJsonObject, squash, summarizeFindings } from '../spacetimedb/src/rules.ts';
 
 const assets = [
   { assetId: 'PDU-A', name: 'PDU A (Rack R12)', patterns: ['R12 PDU'] },
@@ -65,4 +65,16 @@ test('cosine and JSON extraction', () => {
   assert.equal(cosine([], []), 0);
   assert.deepEqual(parseJsonObject('```json\n{"a": {"b": 1}}\n```'), { a: { b: 1 } });
   assert.equal(squash('PDU-a 1'), 'PDUA1');
+});
+
+test('alert summary: concrete first, anomalies only as a last resort, near-duplicates dropped', () => {
+  const lines = summarizeFindings([
+    { kind: 'anomaly', text: 'PSU2 fault indicated' },
+    { kind: 'fault_text', text: 'PSU2: FAULT' },
+    { kind: 'state_change', text: 'PSU2 status: OK → FAULT' },
+    { kind: 'fault_text', text: 'TEMP 41C OVERTEMP' },
+    { kind: 'state_change', text: 'temperature: 27C → 41C OVERTEMP' },
+  ]);
+  assert.deepEqual(lines, ['PSU2 status: OK → FAULT', 'temperature: 27C → 41C OVERTEMP', 'PSU2: FAULT']);
+  assert.deepEqual(summarizeFindings([{ kind: 'anomaly', text: 'water under rack' }]), ['water under rack']);
 });
