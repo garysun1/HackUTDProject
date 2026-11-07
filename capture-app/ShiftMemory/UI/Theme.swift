@@ -147,6 +147,7 @@ struct StatusPill: View {
 /// The console's ink-filled primary button and outlined secondary button.
 struct InkButtonStyle: ButtonStyle {
   var prominent = true
+  @Environment(\.isEnabled) private var isEnabled
   func makeBody(configuration: Configuration) -> some View {
     configuration.label
       .font(.subheadline.weight(.semibold))
@@ -162,7 +163,7 @@ struct InkButtonStyle: ButtonStyle {
         RoundedRectangle(cornerRadius: Theme.radiusSmall, style: .continuous)
           .strokeBorder(prominent ? Color.clear : Theme.lineStrong, lineWidth: 1)
       )
-      .opacity(configuration.isPressed ? 0.85 : 1)
+      .opacity(configuration.isPressed ? 0.85 : (isEnabled ? 1 : 0.4))
       .scaleEffect(configuration.isPressed ? 0.995 : 1)
       .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
   }
