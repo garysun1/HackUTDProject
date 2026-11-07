@@ -1,8 +1,8 @@
 // The signature move: the entity graph drawn as a floor schematic.
 // Places are zones (columns); assets are fixed tiles inside their zone; events are marks on a
 // vertical time axis beneath the asset they touched; NEXT edges trace the operator's path.
-import { state, visibleEvents, placeOf, assetsOf, displayName, edgesFrom, props, alertsFor, wearerColor, fmtTime, nowMicros, notify, type Ev, type Ent } from './store';
-import { select } from './timeline';
+import { state, visibleEvents, placeOf, assetsOf, displayName, edgesFrom, props, alertsFor, wearerColor, wearerName, fmtTime, nowMicros, notify, loadPhoto, type Ev, type Ent } from './store';
+import { select, esc } from './timeline';
 
 const canvas = document.getElementById('floor') as HTMLCanvasElement;
 const empty = document.getElementById('floor-empty') as HTMLElement;
@@ -12,18 +12,49 @@ type Tile = { x0: number; y0: number; w: number; h: number; id: string };
 let marks: Mark[] = []; let tiles: Tile[] = [];
 let hover: string | null = null;
 const tip = document.createElement('div');
-tip.style.cssText = 'position:fixed;pointer-events:none;background:var(--ground);border:1px solid var(--line-strong);color:var(--ink);font:12px/1.4 var(--font);padding:6px 8px;border-radius:6px;max-width:280px;display:none;z-index:9;box-shadow:var(--shadow)';
+tip.className = 'floor-tip'; tip.style.display = 'none';
 document.body.appendChild(tip);
 
+function placeTip(e: MouseEvent) {
+  const pad = 14; const w = tip.offsetWidth || 260, h = tip.offsetHeight || 120;
+  const x = e.clientX + pad + w > innerWidth ? e.clientX - pad - w : e.clientX + pad;
+  const y = e.clientY + pad + h > innerHeight ? e.clientY - pad - h : e.clientY + pad;
+  tip.style.left = `${x}px`; tip.style.top = `${y}px`;
+}
 canvas.addEventListener('mousemove', e => {
   const r = canvas.getBoundingClientRect(); const x = e.clientX - r.left, y = e.clientY - r.top;
   const m = marks.find(m => Math.hypot(m.x - x, m.y - y) <= Math.max(m.r + 7, 12));
   const t = !m && tiles.find(t => x >= t.x0 && x <= t.x0 + t.w && y >= t.y0 && y <= t.y0 + t.h);
-  hover = m?.id ?? null; canvas.style.cursor = m || t ? 'pointer' : 'default';
-  if (m) { const ev = state.events.get(m.id)!; tip.innerHTML = `<div style="color:var(--ink-3);font-family:var(--mono);font-size:11px">${fmtTime(ev.tMicros)}</div>${ev.summary || 'processing…'}`; tip.style.display = 'block'; tip.style.left = `${e.clientX + 12}px`; tip.style.top = `${e.clientY + 12}px`; } else tip.style.display = 'none';
-  renderFloor();
+  const prev = hover; hover = m?.id ?? null; canvas.style.cursor = m || t ? 'pointer' : 'default';
+  if (m) {
+    const ev = state.events.get(m.id)!; const url = state.photos.get(m.id); if (!url) loadPhoto(m.id).then(() => { if (hover === m.id) renderTip(m.id); });
+    if (prev !== m.id) renderTip(m.id);
+    tip.style.display = 'block'; placeTip(e);
+  } else if (t) {
+    const a = state.entities.get(t.id); const last = visibleEvents().find(ev => assetsOf(ev.eventId).some(x => x.entityId === t.id));
+    tip.innerHTML = `<div class="tt"><b>${esc(a ? displayName(a) : t.id)}</b>${a && displayName(a) !== a.canonicalName ? ` <span class="mono">${esc(a.canonicalName)}</span>` : ''}</div><div class="ts">${last ? `last seen ${fmtTime(last.tMicros)} by ${esc(wearerName(last.deviceId))} · click to trace` : 'click to trace'}</div>`;
+    tip.style.display = 'block'; placeTip(e);
+  } else tip.style.display = 'none';
+  if (prev !== hover) renderFloor();
 });
+function renderTip(id: string) {
+  const ev = state.events.get(id)!; const url = state.photos.get(id); const alerts = alertsFor(ev).filter(a => !a.acked); const place = placeOf(id);
+  tip.innerHTML = `${url ? `<img src="${url}" alt="">` : '<div class="ph"></div>'}<div class="tb"><div class="tt"><span class="mono">${fmtTime(ev.tMicros)}</span> · <i style="background:${wearerColor(ev.deviceId)}"></i>${esc(wearerName(ev.deviceId))}${place ? ` · ${esc(place.canonicalName)}` : ''}</div>${alerts.length ? `<div class="ta">${esc(alerts[0].text)}${alerts[0].assetName ? ` · ${esc(alerts[0].assetName)}` : ''}</div>` : ''}<div class="ts">${esc(ev.summary || 'reading the photo…')}</div>${ev.note ? `<div class="tn">“${esc(ev.note)}”</div>` : ''}</div>`;
+}
 canvas.addEventListener('mouseleave', () => { hover = null; tip.style.display = 'none'; renderFloor(); });
+// Keyboard: step through the shift in time order; Escape is handled by the detail panel.
+document.addEventListener('keydown', e => {
+  if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) return;
+  const tag = (e.target as HTMLElement).tagName; if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
+  const chrono = [...visibleEvents()].reverse(); if (!chrono.length) return;
+  const i = chrono.findIndex(ev => ev.eventId === state.selected); const fwd = e.key === 'ArrowRight' || e.key === 'ArrowDown';
+  const next = i < 0 ? (fwd ? chrono[0] : chrono[chrono.length - 1]) : chrono[Math.min(chrono.length - 1, Math.max(0, i + (fwd ? 1 : -1)))];
+  e.preventDefault(); select(next.eventId);
+});
+// Arrival pulse: a ring expands from a new mark for ~1.2 s.
+const arrived = new Map<string, number>();
+let raf = 0;
+function animateIfFresh() { if (state.fresh.size && !raf) raf = requestAnimationFrame(() => { raf = 0; renderFloor(); }); }
 canvas.addEventListener('click', e => {
   if (hover) { select(hover); return; }
   const r = canvas.getBoundingClientRect(); const x = e.clientX - r.left, y = e.clientY - r.top;
@@ -116,10 +147,15 @@ export function renderFloor() {
     if (!assets.length) { const x = x0 + zoneW / 2; ctx.strokeStyle = C.soft; ctx.setLineDash([2, 4]); ctx.beginPath(); ctx.moveTo(x, axisTop); ctx.lineTo(x, axisBottom); ctx.stroke(); ctx.setLineDash([]); }
   });
 
-  // time ticks down the left: one per event where there is room, hour marks otherwise
+  // time ticks down the left: one per event where there is room
   ctx.font = '11px "JetBrains Mono", monospace'; ctx.fillStyle = C.ink3; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
   let lastTickY = -99;
   for (const e of chrono) { const yy = yOf(e.eventId); if (yy - lastTickY >= 16) { ctx.fillText(fmtTime(e.tMicros), pad + 6, yy); lastTickY = yy; } }
+  // "now" edge: the shift continues below the last mark
+  if (!state.windowMin || true) {
+    const yNow = axisBottom; ctx.strokeStyle = C.line; ctx.setLineDash([3, 4]); ctx.beginPath(); ctx.moveTo(pad, yNow); ctx.lineTo(W - pad, yNow); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle = C.ink3; ctx.font = '11px "JetBrains Mono", monospace'; ctx.textAlign = 'left'; ctx.textBaseline = 'bottom'; ctx.fillText(`now ${fmtTime(nowMicros())}`, pad + 6, yNow - 4); ctx.textBaseline = 'middle';
+  }
 
   // event positions
   const pos = new Map<string, { x: number; y: number }>();
@@ -140,12 +176,19 @@ export function renderFloor() {
   for (const e of evs) {
     const p = pos.get(e.eventId)!; const alerts = alertsFor(e); const sel = state.selected === e.eventId || hover === e.eventId;
     const r = sel ? 8 : 6;
-    if (alerts.length) { ctx.fillStyle = 'rgba(208,59,59,0.18)'; ctx.beginPath(); ctx.arc(p.x, p.y, r + 7 + (state.fresh.has(e.eventId) ? 4 : 0), 0, 7); ctx.fill(); }
+    if (state.fresh.has(e.eventId)) {
+      if (!arrived.has(e.eventId)) arrived.set(e.eventId, performance.now());
+      const k = Math.min(1, (performance.now() - arrived.get(e.eventId)!) / 1200);
+      ctx.strokeStyle = alerts.some(a => !a.acked) ? C.crit : wearerColor(e.deviceId); ctx.globalAlpha = 1 - k; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(p.x, p.y, r + 4 + k * 22, 0, 7); ctx.stroke(); ctx.globalAlpha = 1;
+    } else arrived.delete(e.eventId);
+    if (alerts.some(a => !a.acked)) { ctx.fillStyle = 'rgba(208,59,59,0.18)'; ctx.beginPath(); ctx.arc(p.x, p.y, r + 7, 0, 7); ctx.fill(); }
     ctx.fillStyle = alerts.some(a => !a.acked) ? C.crit : wearerColor(e.deviceId); ctx.strokeStyle = C.ground; ctx.lineWidth = 2;
     ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, 7); ctx.fill(); ctx.stroke();
     if (sel) { ctx.strokeStyle = C.ink; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(p.x, p.y, r + 4, 0, 7); ctx.stroke(); }
     marks.push({ x: p.x, y: p.y, r, id: e.eventId });
   }
+  animateIfFresh();
 }
 function slug(name: string): string { return name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, ''); }
 function roundRect(x: number, y: number, w: number, h: number, r: number) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }

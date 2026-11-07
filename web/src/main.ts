@@ -25,7 +25,7 @@ function renderChips() {
 }
 wearersEl.addEventListener('click', e => { const b = (e.target as HTMLElement).closest('.chip') as HTMLElement | null; if (!b) return; const id = b.dataset.id!; if (state.hiddenWearers.has(id)) state.hiddenWearers.delete(id); else state.hiddenWearers.add(id); notify(); });
 
-onChange(() => { renderChips(); renderTimeline(); renderFloor(); renderRail(); });
+onChange(() => { renderChips(); renderTimeline(); renderRail(); renderFloor(); }); // detail panel first: it changes the canvas width
 
 // Timeline collapse: the floor takes the width. Remembered per browser.
 const grid = document.querySelector('.grid') as HTMLElement; const tlToggle = document.getElementById('tl-toggle') as HTMLButtonElement;
