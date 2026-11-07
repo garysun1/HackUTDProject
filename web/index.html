@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Shift Memory — live</title>
+<style>
+:root{--bg:#0f1115;--fg:#e6e6e6;--mut:#8b93a7;--card:#171a21;--acc:#4cc38a;--warn:#ffb454;--bad:#ff6b6b}
+body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.4 -apple-system,Segoe UI,Helvetica,Arial,sans-serif}
+header{padding:12px 16px;border-bottom:1px solid #262a33;display:flex;gap:16px;align-items:baseline}
+header h1{font-size:16px;margin:0}header span{color:var(--mut)}
+main{display:grid;grid-template-columns:1fr 1fr;gap:0;height:calc(100vh - 45px)}
+#timeline{overflow:auto;padding:12px 16px;border-right:1px solid #262a33}
+#graph{position:relative}canvas{width:100%;height:100%;display:block}
+.ev{display:grid;grid-template-columns:96px 1fr;gap:12px;background:var(--card);border-radius:8px;padding:10px;margin-bottom:10px;animation:in .6s ease}
+@keyframes in{from{background:#2a3b33}to{background:var(--card)}}
+.ev img{width:96px;height:72px;object-fit:cover;border-radius:4px;background:#000}
+.t{color:var(--mut);font-size:12px}.s{margin:2px 0}.st{font-size:11px;padding:1px 6px;border-radius:10px;background:#262a33}
+.in_graph{color:var(--acc)}.accepted{color:var(--warn)}.failed{color:var(--bad)}
+.tags span{display:inline-block;font-size:11px;color:var(--mut);margin-right:8px}
+</style></head><body>
+<header><h1>Shift Memory</h1><span id="db"></span><span id="count"></span><span id="err" style="color:var(--bad)"></span></header>
+<main><section id="timeline"></section><section id="graph"><canvas id="c"></canvas></section></main>
+<script>
+// Vertical-slice view: polls the SQL endpoint every 2 s. Issue 12 replaces this with
+// TypeScript SDK subscriptions (WebSocket) and a proper graph layout.
+const DB = new URLSearchParams(location.search).get('db') || 'wm-physical';
+const HOST = 'https://maincloud.spacetimedb.com';
+document.getElementById('db').textContent = DB;
+async function sql(q){const r=await fetch(`${HOST}/v1/database/${DB}/sql`,{method:'POST',headers:{'Content-Type':'text/plain'},body:q});if(!r.ok)throw new Error(q+' -> '+r.status);const [res]=await r.json();const cols=res.schema.elements.map(e=>e.name.some);return res.rows.map(row=>Object.fromEntries(row.map((v,i)=>[cols[i],Array.isArray(v)&&v.length===2&&(v[0]===0||v[0]===1)?(v[0]===0?v[1]:null):v])));}
+const seen=new Map(); let edges=[], entities=[];
+function render(events){const tl=document.getElementById('timeline');events.sort((a,b)=>Number(BigInt(b.t_micros)-BigInt(a.t_micros)));document.getElementById('count').textContent=events.length+' events';
+ for(const e of events){let el=seen.get(e.event_id);if(!el){el=document.createElement('div');el.className='ev';seen.set(e.event_id,el);tl.prepend(el);}
+  const when=new Date(Number(BigInt(e.t_micros)/1000n)).toLocaleTimeString();
+  el.innerHTML=`<img data-id="${e.event_id}" alt=""><div><div class="t">${when} · ${e.source} · <span class="st ${e.status}">${e.status}</span></div><div class="s">${e.summary||'<i>processing…</i>'}</div><div class="tags">${e.label?`<span>label: ${e.label}</span>`:''}${e.location_guess?`<span>place: ${e.location_guess}</span>`:''}${e.note?`<span>note: ${e.note}</span>`:''}</div></div>`;
+  const img=el.querySelector('img'); if(!img.src) loadThumb(e.event_id,img);}}
+async function loadThumb(id,img){try{const rows=await sql(`SELECT mime, jpeg_b64 FROM photo WHERE event_id='${id}'`);if(rows[0])img.src=`data:${rows[0].mime};base64,${rows[0].jpeg_b64}`;}catch{}}
+function drawGraph(){const c=document.getElementById('c'),ctx=c.getContext('2d');const W=c.width=c.clientWidth*devicePixelRatio,H=c.height=c.clientHeight*devicePixelRatio;ctx.clearRect(0,0,W,H);
+ const evs=[...seen.keys()];const nodes=new Map();const cx=W/2,cy=H/2,R=Math.min(W,H)*0.36;
+ evs.forEach((id,i)=>nodes.set(id,{x:cx+R*Math.cos(2*Math.PI*i/Math.max(evs.length,1)),y:cy+R*Math.sin(2*Math.PI*i/Math.max(evs.length,1)),k:'event'}));
+ entities.forEach((en,i)=>nodes.set(en.entity_id,{x:cx+R*0.5*Math.cos(2*Math.PI*i/Math.max(entities.length,1)+1),y:cy+R*0.5*Math.sin(2*Math.PI*i/Math.max(entities.length,1)+1),k:en.kind,name:en.canonical_name}));
+ ctx.lineWidth=1*devicePixelRatio;for(const e of edges){const a=nodes.get(e.from_id),b=nodes.get(e.to_id);if(!a||!b||a===b)continue;ctx.strokeStyle=e.kind==='NEXT'?'#4cc38a':e.kind==='CHANGES'?'#ffb454':'#3a4252';ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();}
+ ctx.font=`${11*devicePixelRatio}px sans-serif`;ctx.textAlign='center';for(const [id,n] of nodes){ctx.fillStyle=n.k==='event'?'#e6e6e6':n.k==='place'?'#7aa2f7':'#ffb454';ctx.beginPath();ctx.arc(n.x,n.y,(n.k==='event'?5:4)*devicePixelRatio,0,7);ctx.fill();ctx.fillStyle='#8b93a7';ctx.fillText(n.k==='event'?id.slice(0,6):n.name,n.x,n.y-8*devicePixelRatio);}}
+async function tick(){try{const [events,ed,en]=await Promise.all([sql('SELECT event_id, t_micros, source, status, summary, label, location_guess, note FROM event'),sql('SELECT from_id, to_id, kind FROM edge'),sql('SELECT entity_id, canonical_name, kind FROM entity')]);edges=ed;entities=en;render(events);drawGraph();document.getElementById('err').textContent='';}catch(e){document.getElementById('err').textContent=String(e.message||e);}}
+tick();setInterval(tick,2000);addEventListener('resize',drawGraph);
+</script></body></html>
