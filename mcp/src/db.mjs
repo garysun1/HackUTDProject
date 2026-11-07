@@ -1,0 +1,101 @@
+// Read access to the wm-physical SpacetimeDB module over its HTTP API.
+// Tables are public; procedures/reducers are called through /call/<name>.
+const HOST = (process.env.SPACETIME_HOST || 'https://maincloud.spacetimedb.com').replace(/\/+$/, '');
+const DB = process.env.SPACETIME_DB_NAME || 'wm-physical';
+const TZ = process.env.WM_TZ || 'America/Chicago';
+
+function decode(v) {
+  // Option<T> arrives as [0, value] (some) or [1, []] (none); nested arrays of options too.
+  if (Array.isArray(v) && v.length === 2 && (v[0] === 0 || v[0] === 1) && !(Array.isArray(v[1]) && v[1].length && v[0] === 0 && typeof v[1][0] === 'number' && v[1].length > 2)) {
+    return v[0] === 0 ? decode(v[1]) : null;
+  }
+  return v;
+}
+
+export async function sql(query) {
+  const r = await fetch(`${HOST}/v1/database/${DB}/sql`, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: query });
+  if (!r.ok) throw new Error(`sql ${r.status}: ${(await r.text()).slice(0, 200)}`);
+  const [res] = await r.json();
+  const cols = res.schema.elements.map(e => e.name.some);
+  return res.rows.map(row => Object.fromEntries(row.map((v, i) => [cols[i], decode(v)])));
+}
+
+export async function call(name, args) {
+  const r = await fetch(`${HOST}/v1/database/${DB}/call/${name}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(args) });
+  const text = await r.text();
+  if (!r.ok) throw new Error(`${name} ${r.status}: ${text.slice(0, 300)}`);
+  try { return JSON.parse(text); } catch { return text; }
+}
+
+let schemaCache = { t: 0, names: new Set() };
+export async function hasProcedure(name) {
+  if (Date.now() - schemaCache.t > 30_000) {
+    try {
+      const r = await fetch(`${HOST}/v1/database/${DB}/schema?version=9`);
+      const txt = r.ok ? await r.text() : '';
+      schemaCache = { t: Date.now(), names: new Set([...txt.matchAll(/"name":"([a-z_]+)"/g)].map(m => m[1])) };
+    } catch { schemaCache = { t: Date.now(), names: new Set() }; }
+  }
+  return schemaCache.names.has(name);
+}
+
+// ---------- typed loaders (small tables; load whole, filter in memory) ----------
+const esc = s => String(s).replace(/'/g, "''");
+export const events = () => sql('SELECT event_id, device_id, client_t, t_micros, source, status, note, label, scene, location_guess, activity, summary, people_count, confidence, perception_json FROM event');
+export const eventsWithEmbedding = () => sql('SELECT event_id, embedding FROM event');
+export const entities = () => sql('SELECT entity_id, canonical_name, kind, aliases, first_seen_micros, last_seen_micros FROM entity');
+export const edges = () => sql('SELECT edge_id, from_id, to_id, kind, props FROM edge');
+export const alerts = () => sql('SELECT alert_id, event_id, t_micros, kind, text, entity_id, entity_name, device_id, wearer_name, acked, acked_micros, slack_status FROM alert');
+export const wearers = () => sql('SELECT device_id, name, role, shift FROM wearer');
+export const assets = () => sql('SELECT asset_id, name, asset_type, location, patterns FROM asset');
+export const episodes = () => sql('SELECT episode_id, t_start_micros, t_end_micros, title, summary, event_ids FROM episode');
+export const handoffs = () => sql('SELECT handoff_id, since_micros, generated_micros, text, event_ids FROM handoff');
+export async function photo(eventId) {
+  const rows = await sql(`SELECT mime, jpeg_b_64 FROM photo WHERE event_id = '${esc(eventId)}'`);
+  return rows[0] ? { mime: rows[0].mime, b64: rows[0].jpeg_b_64 } : null;
+}
+
+// ---------- helpers ----------
+export function fmtTime(micros) {
+  return new Intl.DateTimeFormat('en-US', { timeZone: TZ, hour: 'numeric', minute: '2-digit' }).format(new Date(Number(micros) / 1000));
+}
+export function fmtDateTime(micros) {
+  return new Intl.DateTimeFormat('en-US', { timeZone: TZ, month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(new Date(Number(micros) / 1000));
+}
+export function parseSince(since) {
+  // Accepts ISO string, "2h"/"45m"/"1d", or a unix millis number. Returns micros.
+  if (since == null || since === '') return 0;
+  if (typeof since === 'number') return since * 1000;
+  const m = /^(\d+)\s*([mhd])$/.exec(String(since).trim());
+  if (m) { const n = Number(m[1]); const ms = { m: 60e3, h: 3600e3, d: 86400e3 }[m[2]] * n; return (Date.now() - ms) * 1000; }
+  const t = Date.parse(since); return Number.isNaN(t) ? 0 : t * 1000;
+}
+export function perception(e) { try { return e.perception_json ? JSON.parse(e.perception_json) : null; } catch { return null; } }
+export function props(edge) { try { return JSON.parse(edge.props || '{}'); } catch { return {}; } }
+
+export async function snapshot() {
+  const [ev, en, ed, al, we, as, ep] = await Promise.all([events(), entities(), edges(), alerts(), wearers(), assets(), episodes()]);
+  const wearerName = id => we.find(w => w.device_id === id)?.name || String(id).replace(/[-_]?(iphone|phone|device)$/i, '') || id;
+  const entityById = new Map(en.map(x => [x.entity_id, x]));
+  const byEvent = new Map();
+  for (const e of ed) { if (!byEvent.has(e.from_id)) byEvent.set(e.from_id, []); byEvent.get(e.from_id).push(e); }
+  const placeOf = id => { const e = (byEvent.get(id) || []).find(x => x.kind === 'INVOLVES' && props(x).role === 'setting'); return e ? entityById.get(e.to_id) : null; };
+  const assetsOf = id => (byEvent.get(id) || []).filter(x => x.kind === 'INVOLVES' && props(x).role !== 'setting').map(x => entityById.get(x.to_id)).filter(Boolean);
+  const changesOf = id => (byEvent.get(id) || []).filter(x => x.kind === 'CHANGES').map(x => ({ ...props(x), entity: entityById.get(x.to_id) }));
+  ev.sort((a, b) => a.t_micros - b.t_micros);
+  return { events: ev, entities: en, edges: ed, alerts: al, wearers: we, assets: as, episodes: ep, wearerName, entityById, placeOf, assetsOf, changesOf, byEvent };
+}
+
+export function matchEntity(snap, query) {
+  const q = String(query || '').toLowerCase().trim(); if (!q) return [];
+  const qs = q.replace(/[^a-z0-9]+/g, '_');
+  return snap.entities.filter(e => e.entity_id === qs || e.entity_id.includes(qs) || e.canonical_name.toLowerCase().includes(q) || (e.aliases || []).some(a => String(a).toLowerCase().includes(q)))
+    .sort((a, b) => (b.kind === 'asset') - (a.kind === 'asset'));
+}
+
+export function cite(snap, e) { return `[event:${e.event_id.slice(0, 8)} ${fmtTime(e.t_micros)} ${snap.wearerName(e.device_id)}]`; }
+
+export async function imageBlock(eventId) {
+  const p = await photo(eventId); if (!p) return null;
+  return { type: 'image', data: p.b64, mimeType: p.mime || 'image/jpeg' };
+}
