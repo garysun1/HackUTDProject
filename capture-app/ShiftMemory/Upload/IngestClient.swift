@@ -34,7 +34,7 @@ final class IngestClient: IngestClientProtocol, Sendable {
     let sentAt = Date()
     let reply = try await send(request)
     let receivedAt = Date()
-    guard let object = Self.jsonObject(reply.body),
+    guard let object = Self.jsonObject(reply.body, positional: ["serverT", "tMicros"]),
           let raw = Self.string(object, "serverT", "server_t"),
           let serverT = ISO8601Dates.parse(raw)
     else { throw .decoding("ping reply: \(Self.excerpt(reply.body))") }
@@ -54,7 +54,7 @@ final class IngestClient: IngestClientProtocol, Sendable {
   func ingest(eventJSON: String, photoBase64: String) async throws(IngestError) -> IngestResult {
     let request = try procedureRequest("ingest_photo", arguments: [eventJSON, photoBase64], timeout: Self.ingestTimeout)
     let reply = try await send(request)
-    guard let object = Self.jsonObject(reply.body),
+    guard let object = Self.jsonObject(reply.body, positional: ["eventId", "serverT", "status"]),
           let eventId = Self.string(object, "eventId", "event_id"),
           let status = Self.string(object, "status")
     else { throw .decoding("ingest_photo reply: \(Self.excerpt(reply.body))") }
@@ -149,8 +149,18 @@ final class IngestClient: IngestClientProtocol, Sendable {
 
   // MARK: - JSON helpers
 
-  private static func jsonObject(_ data: Data) -> [String: Any]? {
-    (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+  /// The HTTP `/call` endpoint returns a procedure's product type as a positional JSON array
+  /// (`["2026-…Z","1794…"]` for `Pong`), while the docs show it as an object. Accept both: an array is
+  /// zipped onto the module's field order in `positional`.
+  static func jsonObject(_ data: Data, positional: [String]) -> [String: Any]? {
+    guard let any = try? JSONSerialization.jsonObject(with: data) else { return nil }
+    if let object = any as? [String: Any] { return object }
+    if let array = any as? [Any] {
+      var object: [String: Any] = [:]
+      for (name, value) in zip(positional, array) { object[name] = value }
+      return object
+    }
+    return nil
   }
 
   /// The first string present under any of the spellings (the module answers camelCase, the
