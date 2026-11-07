@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Copy to Config.plist (gitignored) next to this file to pre-fill Settings on first launch.
+	     Every value can also be typed in the app's Settings screen; the token is kept in the
+	     Keychain, never in the repo. -->
+	<key>SPACETIME_HOST</key>
+	<string>https://maincloud.spacetimedb.com</string>
+	<key>SPACETIME_DB_NAME</key>
+	<string>wm-physical</string>
+	<key>INGEST_TOKEN</key>
+	<string></string>
+	<key>WEARER_NAME</key>
+	<string>Edward</string>
+	<key>DEVICE_ID</key>
+	<string>edward-iphone</string>
+</dict>
+</plist>
