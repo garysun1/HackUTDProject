@@ -181,7 +181,7 @@ Per photo, inside `perceive`:
    episode boundary test. Query text is embedded with the same Vision text endpoint so image
    and text vectors are comparable. Cosine similarity is a loop over events; at hundreds of
    rows this is fast enough.
-4. Optional bake-off (issue 12): `nemotron-3.5-super-vl` as the VLM instead of gpt-4o. Keep
+4. Optional bake-off (issue 12): `nvidia/nemotron-3.5-super-vl-120b-a12b` as the VLM instead of gpt-4o. Keep
    whichever yields better structured JSON on the fixtures.
 
 Target under 15 seconds from upload to `in_graph`.
@@ -215,7 +215,7 @@ anything that looked abnormal," each line citing an `event_id`.
 
 **Agent = Nemotron inside the `ask` procedure.** Model via NVIDIA's OpenAI-compatible endpoint
 `https://integrate.api.nvidia.com/v1` with a Developer Program key. Default
-`nemotron-3.5-lightning-30b-a3b` for latency; `nemotron-3-ultra-550b-a55b` if answer quality
+`nvidia/nemotron-3.5-lightning-30b-a3b` for latency; `nvidia/nemotron-3-ultra-550b-a55b` if answer quality
 needs it. Verify exact IDs on build.nvidia.com; free-tier lists change. The loop: system
 prompt with the tool schema → model → tool calls executed against tables → model → final
 answer with citations. This is the NVIDIA "multi-step workflow with tool integration."
