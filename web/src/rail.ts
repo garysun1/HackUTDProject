@@ -1,4 +1,4 @@
-import { state, visibleEvents, allAlerts, ackAlert, edgesFrom, props, placeOf, assetsOf, fmtTime, wearerName, wearerColor, loadPhoto, perception, callProcedure, hasProcedure, nowMicros, type Ev } from './store';
+import { state, visibleEvents, allAlerts, ackAlert, edgesFrom, props, placeOf, assetsOf, displayName, fmtTime, wearerName, wearerColor, loadPhoto, perception, callProcedure, hasProcedure, nowMicros, type Ev } from './store';
 import { select, esc } from './timeline';
 
 const alertsEl = document.getElementById('alerts') as HTMLUListElement;
@@ -30,7 +30,8 @@ function renderAlerts() {
   alertCount.textContent = alerts.length ? String(alerts.length) : ''; alertsEmpty.hidden = alerts.length > 0; alertsEl.innerHTML = '';
   for (const a of alerts) {
     const li = document.createElement('li'); li.className = 'alert';
-    const asset = a.assetName || (a.assetId ? state.entities.get(a.assetId)?.canonicalName : undefined);
+    const assetEnt = a.assetId ? state.entities.get(a.assetId) : undefined;
+    const asset = assetEnt ? displayName(assetEnt) : a.assetName;
     const who = a.wearerName || wearerName(a.deviceId);
     const busy = acking.has(a.id);
     li.innerHTML = `<button class="alert-open" type="button" data-open="${esc(a.eventId)}" aria-label="Open photo for ${esc(a.text)}">${ICON[a.kind]}<span><span class="txt">${esc(a.text)}</span><span class="t">${fmtTime(a.tMicros)}${asset ? ` · ${esc(asset)}` : ''} · ${esc(who)} · ${esc(a.rawKind.replace('_', ' '))}</span></span></button><button class="btn ghost" type="button" data-ack="${esc(a.id)}" ${busy ? 'disabled' : ''}>${busy ? '…' : 'Acknowledge'}</button>`;
@@ -49,7 +50,7 @@ function handoffSkeleton(): string {
   const alerts = allAlerts();
   if (alerts.length) html += `<h3>Needs attention</h3><ul>${alerts.map(a => `<li><span>${esc(a.text)}</span>${cite(a.eventId)}</li>`).join('')}</ul>`;
   const changes: { asset: string; line: string; id: string }[] = [];
-  for (const e of evs) for (const ed of edgesFrom(e.eventId, 'CHANGES')) { const p = props(ed); const asset = state.entities.get(ed.toId)?.canonicalName ?? ed.toId; changes.push({ asset, line: `${asset}${p.attr ? ` ${esc(String(p.attr))}` : ''}: ${esc(String(p.from ?? ''))} → ${esc(String(p.to ?? ''))}`, id: e.eventId }); }
+  for (const e of evs) for (const ed of edgesFrom(e.eventId, 'CHANGES')) { const p = props(ed); const ent = state.entities.get(ed.toId); const asset = ent ? displayName(ent) : ed.toId; changes.push({ asset, line: `${asset}${p.attr ? ` ${esc(String(p.attr))}` : ''}: ${esc(String(p.from ?? ''))} → ${esc(String(p.to ?? ''))}`, id: e.eventId }); }
   if (changes.length) html += `<h3>What changed</h3><ul>${changes.map(c => `<li><span>${c.line}</span>${cite(c.id)}</li>`).join('')}</ul>`;
   const byPlace = new Map<string, Ev[]>();
   for (const e of evs) { const p = placeOf(e.eventId)?.canonicalName ?? 'unplaced'; (byPlace.get(p) ?? byPlace.set(p, []).get(p)!).push(e); }
@@ -92,7 +93,8 @@ async function renderDrawer() {
     ['Summary', e.summary && e.confidence > 0 ? esc(e.summary) : `<span class="muted">${e.status === 'failed' ? 'This photo could not be read.' : e.summary ? 'Stored. Perception has not run on this photo yet.' : 'Reading the photo…'}</span>`],
     ['Status', `<span class="st ${e.status}">${e.status.replace('_', ' ')}</span>`],
     ['Place', place ? esc(place.canonicalName) : '—'],
-    ['Assets', assets.length ? assets.map(a => esc(a.canonicalName)).join(', ') : '—'],
+    ['Assets', assets.filter(a => a.kind === 'asset').length ? assets.filter(a => a.kind === 'asset').map(a => `<span title="${esc(a.canonicalName)}">${esc(displayName(a))}</span>`).join(', ') : '<span class="muted">none in registry</span>'],
+    ...(assets.some(a => a.kind !== 'asset') ? [['Also seen', assets.filter(a => a.kind !== 'asset').map(a => esc(a.canonicalName)).join(', ')] as [string, string]] : []),
     ['Activity', esc(e.activity || '—')],
     ['People', String(e.peopleCount)],
     ['Confidence', e.confidence ? e.confidence.toFixed(2) : '—'],

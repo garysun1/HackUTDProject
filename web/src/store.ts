@@ -78,6 +78,15 @@ export function placeOf(eventId: string): Ent | undefined {
 export function assetsOf(eventId: string): Ent[] {
   return edgesFrom(eventId, 'INVOLVES').filter(x => props(x).role !== 'setting').map(x => state.entities.get(x.toId)).filter((x): x is Ent => !!x);
 }
+// One name per asset on every surface: the registry code (PDU-A) when the registry name is long,
+// otherwise the name itself. Objects that are not in the registry keep their perceived name.
+export function displayName(ent: Ent): string {
+  if (ent.kind === 'asset' && ent.canonicalName.length > 12) {
+    const code = ent.entityId.toUpperCase().replace(/_/g, '-');
+    if (state.assets.has(code)) return code;
+  }
+  return ent.canonicalName;
+}
 // Alerts are rows written by the module's rule in `perceive`; the browser derives nothing.
 export function alertsFor(e: Ev): Alert[] { return [...state.alerts.values()].filter(a => a.eventId === e.eventId); }
 export function openAlerts(): Alert[] {

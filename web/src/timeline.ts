@@ -15,11 +15,12 @@ function card(e: Ev): HTMLLIElement {
 }
 function fill(li: HTMLLIElement, e: Ev) {
   const place = placeOf(e.eventId); const alerts = alertsFor(e);
+  const open = alerts.filter(a => !a.acked), acked = alerts.filter(a => a.acked);
   const img = state.photos.get(e.eventId);
   li.innerHTML = `<img alt="" ${img ? `src="${img}"` : ''}><div>
-    <div class="meta"><span>${fmtTime(e.tMicros)}</span><span class="who"><i style="background:${wearerColor(e.deviceId)}"></i>${wearerName(e.deviceId)}</span><span class="st ${e.status}">${e.status.replace('_', ' ')}</span></div>
+    <div class="meta"><span>${fmtTime(e.tMicros)}</span><span class="who"><i style="background:${wearerColor(e.deviceId)}"></i>${wearerName(e.deviceId)}</span>${e.status === 'in_graph' ? '' : `<span class="st ${e.status}">${e.status.replace('_', ' ')}</span>`}</div>
     <p class="sum ${e.summary && e.confidence > 0 ? '' : 'processing'}">${e.summary && e.confidence > 0 ? esc(e.summary) : e.status === 'failed' ? 'could not read this photo' : e.summary ? 'stored, awaiting perception' : 'reading the photo…'}</p>
-    <div class="tags">${e.label ? `<span><b>${esc(e.label)}</b></span>` : ''}${place ? `<span>${esc(place.canonicalName)}</span>` : ''}${alerts.length ? `<span style="color:var(--critical)">${alerts.length} alert${alerts.length > 1 ? 's' : ''}</span>` : ''}${e.note ? `<span>“${esc(e.note)}”</span>` : ''}</div></div>`;
+    <div class="tags">${e.label ? `<span><b>${esc(e.label)}</b></span>` : ''}${place ? `<span>${esc(place.canonicalName)}</span>` : ''}${open.length ? `<span style="color:var(--critical)">${open.length} alert${open.length > 1 ? 's' : ''}</span>` : acked.length ? `<span class="muted">${acked.length} acked</span>` : ''}${e.note ? `<span>“${esc(e.note)}”</span>` : ''}</div></div>`;
   li.setAttribute('aria-pressed', String(state.selected === e.eventId)); li.dataset.selected = String(state.selected === e.eventId);
   li.classList.toggle('fresh', state.fresh.has(e.eventId));
   if (!img) loadPhoto(e.eventId);

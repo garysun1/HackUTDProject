@@ -1,7 +1,7 @@
 // The signature move: the entity graph drawn as a floor schematic.
 // Places are zones (columns); assets are fixed tiles inside their zone; events are marks on a
 // vertical time axis beneath the asset they touched; NEXT edges trace the operator's path.
-import { state, visibleEvents, placeOf, assetsOf, edgesFrom, props, alertsFor, wearerColor, fmtTime, nowMicros, notify, type Ev, type Ent } from './store';
+import { state, visibleEvents, placeOf, assetsOf, displayName, edgesFrom, props, alertsFor, wearerColor, fmtTime, nowMicros, notify, type Ev, type Ent } from './store';
 import { select } from './timeline';
 
 const canvas = document.getElementById('floor') as HTMLCanvasElement;
@@ -97,7 +97,7 @@ export function renderFloor() {
     const x0 = pad + i * zoneW; const slotW = zoneW / Math.max(assets.length + 1, 2);
     assets.forEach((a, j) => {
       const x = x0 + slotW * (j + 1); assetX.set(a.entityId, x);
-      const shortName = a.kind === 'asset' && a.canonicalName.length > 14 ? (state.assets.get(a.entityId.toUpperCase().replace(/_/g, '-'))?.assetId ?? a.canonicalName) : a.canonicalName;
+      const shortName = displayName(a);
       const label = shortName.length > 18 ? shortName.slice(0, 17) + '…' : shortName;
       ctx.font = '500 12px "JetBrains Mono", monospace'; const tw = Math.max(72, ctx.measureText(label).width + 18);
       const hasAlert = evs.some(e => alertsFor(e).some(al => al.assetId === a.entityId && !al.acked));

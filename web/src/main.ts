@@ -24,6 +24,18 @@ function renderChips() {
 wearersEl.addEventListener('click', e => { const b = (e.target as HTMLElement).closest('.chip') as HTMLElement | null; if (!b) return; const id = b.dataset.id!; if (state.hiddenWearers.has(id)) state.hiddenWearers.delete(id); else state.hiddenWearers.add(id); notify(); });
 
 onChange(() => { renderChips(); renderTimeline(); renderFloor(); renderRail(); });
+
+// Timeline collapse: the floor takes the width. Remembered per browser.
+const grid = document.querySelector('.grid') as HTMLElement; const tlToggle = document.getElementById('tl-toggle') as HTMLButtonElement;
+function setTimeline(open: boolean) {
+  grid.dataset.tl = open ? 'open' : 'collapsed';
+  tlToggle.setAttribute('aria-expanded', String(open)); tlToggle.title = open ? 'Hide timeline' : 'Show timeline';
+  try { localStorage.setItem('wm.timeline', open ? 'open' : 'collapsed'); } catch { /* private mode */ }
+  renderFloor();
+}
+tlToggle.addEventListener('click', () => setTimeline(grid.dataset.tl === 'collapsed'));
+grid.addEventListener('transitionend', e => { if (e.propertyName === 'grid-template-columns') renderFloor(); });
+try { if (localStorage.getItem('wm.timeline') === 'collapsed') setTimeline(false); } catch { /* ignore */ }
 document.addEventListener('select', () => notify());
 setInterval(() => { if (visibleEvents().length) renderFloor(); }, 15000); // the "now" edge of the time axis advances
 
