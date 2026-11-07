@@ -32,8 +32,9 @@ export async function hasProcedure(name) {
   if (Date.now() - schemaCache.t > 30_000) {
     try {
       const r = await fetch(`${HOST}/v1/database/${DB}/schema?version=9`);
-      const txt = r.ok ? await r.text() : '';
-      schemaCache = { t: Date.now(), names: new Set([...txt.matchAll(/"name":"([a-z_]+)"/g)].map(m => m[1])) };
+      // Procedures live under misc_exports; a table of the same name (handoff) must not count.
+      const s = r.ok ? await r.json() : {};
+      schemaCache = { t: Date.now(), names: new Set((s.misc_exports ?? []).map(x => x?.Procedure?.name).filter(Boolean)) };
     } catch { schemaCache = { t: Date.now(), names: new Set() }; }
   }
   return schemaCache.names.has(name);

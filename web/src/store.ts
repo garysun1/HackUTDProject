@@ -116,7 +116,8 @@ export async function callProcedure<T = any>(name: string, args: unknown[]): Pro
   const text = await r.text(); try { return JSON.parse(text); } catch { return text as unknown as T; }
 }
 export async function hasProcedure(name: string): Promise<boolean> {
-  try { const r = await fetch(`${HOST}/v1/database/${DB}/schema?version=9`); if (!r.ok) return false; return (await r.text()).includes(`"${name}"`); } catch { return false; }
+  // Procedures are listed under misc_exports; a table of the same name (handoff) must not count.
+  try { const r = await fetch(`${HOST}/v1/database/${DB}/schema?version=9`); if (!r.ok) return false; const s = await r.json(); return (s.misc_exports ?? []).some((x: any) => x?.Procedure?.name === name); } catch { return false; }
 }
 
 // ---------- connection ----------
