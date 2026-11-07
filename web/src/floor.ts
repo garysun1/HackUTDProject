@@ -60,7 +60,8 @@ export function renderFloor() {
   for (const e of [...allEvs].reverse()) {
     const p = placeOf(e.eventId); const z = p?.entityId ?? '_none';
     if (!zoneOrder.includes(z)) zoneOrder.push(z); zoneOf.set(e.eventId, z);
-    for (const a of assetsOf(e.eventId)) { assetSet.set(a.entityId, a); assetZone.set(a.entityId, z); }
+    const labelId = e.label ? slug(e.label) : null;
+    for (const a of assetsOf(e.eventId)) if (a.kind === 'asset' || a.entityId === labelId) { assetSet.set(a.entityId, a); assetZone.set(a.entityId, z); }
   }
   const pad = 16, top = 46, axisTop = top + 64, axisBottom = H - 28;
   const zoneW = (W - pad * 2) / zoneOrder.length;
@@ -96,7 +97,8 @@ export function renderFloor() {
     const x0 = pad + i * zoneW; const slotW = zoneW / Math.max(assets.length + 1, 2);
     assets.forEach((a, j) => {
       const x = x0 + slotW * (j + 1); assetX.set(a.entityId, x);
-      const label = a.canonicalName.length > 18 ? a.canonicalName.slice(0, 17) + '…' : a.canonicalName;
+      const shortName = a.kind === 'asset' && a.canonicalName.length > 14 ? (state.assets.get(a.entityId.toUpperCase().replace(/_/g, '-'))?.assetId ?? a.canonicalName) : a.canonicalName;
+      const label = shortName.length > 18 ? shortName.slice(0, 17) + '…' : shortName;
       ctx.font = '500 12px "JetBrains Mono", monospace'; const tw = Math.max(72, ctx.measureText(label).width + 18);
       const hasAlert = evs.some(e => alertsFor(e).some(al => al.assetId === a.entityId && !al.acked));
       const active = state.assetFilter === a.entityId;
@@ -124,7 +126,7 @@ export function renderFloor() {
   const laneCount = new Map<string, number>();
   for (const e of chrono) {
     const z = zoneOf.get(e.eventId)!; const zi = zoneOrder.indexOf(z);
-    const a = assetsOf(e.eventId)[0]; const x = a && assetX.has(a.entityId) ? assetX.get(a.entityId)! : pad + zi * zoneW + zoneW / 2;
+    const a = assetsOf(e.eventId).find(a => assetX.has(a.entityId)); const x = a ? assetX.get(a.entityId)! : pad + zi * zoneW + zoneW / 2;
     const key = `${x}:${Math.round(yOf(e.eventId))}`; const n = laneCount.get(key) ?? 0; laneCount.set(key, n + 1);
     pos.set(e.eventId, { x: x + (n ? (n % 2 ? 1 : -1) * Math.ceil(n / 2) * 12 : 0), y: yOf(e.eventId) });
   }
@@ -145,4 +147,5 @@ export function renderFloor() {
     marks.push({ x: p.x, y: p.y, r, id: e.eventId });
   }
 }
+function slug(name: string): string { return name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, ''); }
 function roundRect(x: number, y: number, w: number, h: number, r: number) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }

@@ -94,6 +94,7 @@ body[data-conn="connecting"] .col, body[data-conn="error"] .col { opacity: .7; }
 .empty[hidden] { display: none; }
 .empty a { color: var(--link); cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
 #alerts-empty { font-size: 14px; color: var(--good-ink); font-weight: 500; display: flex; align-items: center; gap: 8px; }
+#alerts-empty[hidden] { display: none; }
 #alerts-empty::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--good); }
 
 /* timeline */
