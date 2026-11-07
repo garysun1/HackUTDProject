@@ -33,6 +33,7 @@ phone-side face blur, clock offset) carry over. Changes go through `#log` as `[D
   "note": null,
   "label": null,
   "clock_offset_ms": 0,
+  "wearer": "optional display name; otherwise resolved from device_id via the wearer table",
   "ingest_token": "shared secret from the app's local config",
   "app_version": "0.1.0"
 }

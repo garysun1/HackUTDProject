@@ -4,9 +4,11 @@ Two humans (Gary, Edward) and several coding agents. This file is the agent entr
 
 ## What this is
 
-Working memory for the physical world, framed for data center shift handoffs (NMC² track).
-The wearer takes one photo per discrete event with Meta Ray-Ban glasses (image-only: no
-audio, no stream, no triggers). A SpacetimeDB module on Maincloud stores the photos, runs
+Enterprise operational memory for physical work: the missing modality in enterprise
+knowledge. Operators take one photo per discrete event with Meta Ray-Ban glasses (image-only:
+no audio, no stream, no triggers); events are attributed to a wearer and shift and resolved
+against an asset registry. The shown application is a data center shift change (NMC² track);
+it is one application, not the product boundary. A SpacetimeDB module on Maincloud stores the photos, runs
 perception (Azure gpt-4o), builds the event graph, generates the timeline and shift handoff,
 and runs a Nemotron tool-calling agent (NVIDIA track). An MCP server exposes it to any agent.
 Physical-only: no laptop screen capture; cross-modal hooks are reserved, unused.
@@ -84,9 +86,10 @@ adding a service or dependency.
 - MCP tools: `search_memory`, `get_timeline`, `what_changed`, `find_object`,
   `get_current_context`, `explain_change`, `get_provenance`, `summarize_handoff`.
 - Capability scope: A recall, B object/state tracking, D live context, F handoff summary,
-  plus the generated timeline are MVP. C cross-modal provenance and E consistency are
-  deferred (physical-only). F protocol compliance is stretch. G (multi-wearer memory,
-  identifying bystanders) is excluded.
+  alerts from fault-like text or changes, wearer attribution, asset registry matching, plus
+  the generated timeline are MVP. C cross-modal provenance and full E consistency are
+  deferred (physical-only). Protocol compliance is stretch. Excluded: identifying people in
+  photos, SSO, multi-tenancy, admin console.
 - Time box: if the Spacetime vertical slice is not working by 14:30 on day 1, fall back to
   Postgres + Neo4j on a laptop and drop the Spacetime track (decision 0022).
 

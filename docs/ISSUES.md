@@ -15,4 +15,7 @@
 | 11 | Demo script, rehearsals, backup recording, submission text | demo | both | Shift-framed script incl. live beat and handoff; five rehearsals; recorded backup; submission paragraphs for NVIDIA, NMC², Spacetime. |
 | 12 | Live web view | web | Gary | Timeline left, force graph right, subscribed to event/entity/edge/episode; new rows animate in. Neo4j Browser is no longer available, so this is required, not optional. |
 | 13 | Nemotron VL bake-off | backend | Gary | DONE 2026-11-07: Nemotron 3.5 Super VL (thinking off) matched gpt-4o on text reading and change detection at 4.7 s vs 7.3 s. Nemotron is primary perception; gpt-4o fallback. |
-| 14 | Module secrets config | backend | Gary | Admin reducer to set Azure, NVIDIA, and ingest_token in a private config table; never in the repo. |
+| 14 | Module secrets config | backend | Gary | Keys live in the module's publish-time env (NVIDIA_API_KEY, INGEST_TOKEN, SLACK_WEBHOOK_URL); set with `spacetime publish --env-only`; never in the repo. |
+| 15 | Wearer attribution and shifts | backend | Gary | `wearer` table keyed by device_id with name, role, shift; admin reducer upsert_wearer; event carries wearer; timeline, handoff, and MCP answers include who. |
+| 16 | Asset registry and matching | backend | Gary | `asset` table seeded from demo/assets.csv via upsert_asset; perceive matches text_in_scene against asset patterns and links INVOLVES to the canonical asset entity; "what happened to PDU-A today" works across wearers. |
+| 17 | Alert rule and channel posting | backend | Gary | In perceive: warning patterns in text_in_scene or OK→FAULT changes insert an alert row and post to Slack via SLACK_WEBHOOK_URL; handoff posts to the same channel; ack_alert reducer; web view shows alerts. |

@@ -1,5 +1,11 @@
 # Working Memory for the Physical World — Design
 
+> **Framing (decision 0026):** enterprise operational memory, not a personal assistant.
+> Enterprise AI retrieves over documents, tickets, and chat; nothing captures what happens
+> on the floor, at the bench, or in the field. This system turns that into an evidence-backed
+> event graph that people and agents can query. NMC² (data center shifts) is one application
+> shown in the demo, not the product boundary.
+
 Living design document. Edit in place; add a line to the changelog at the bottom. Where this
 file and a newer `#log` `[DECISION]` disagree, the newer `#log` post wins until the sweeper
 folds it in (see `CLAUDE.md`). Individual decisions with their reasons live in
@@ -7,19 +13,23 @@ folds it in (see `CLAUDE.md`). Individual decisions with their reasons live in
 
 ## 1. What this is
 
-A memory of the physical world for people whose work happens away from a screen. The wearer
-photographs discrete moments with Meta Ray-Ban glasses. Each photo becomes an event in a
-time-anchored graph. The system interprets the graph into a timeline and a shift handoff,
-and exposes everything to any agent through an MCP server. Every answer cites the photo it
-came from.
+An organization's memory of physical work. Operators photograph discrete moments with Meta
+Ray-Ban glasses as they work. Each photo becomes an event in a shared, time-anchored graph
+attributed to a wearer and a shift and resolved against the organization's assets. The
+system interprets the graph into timelines, shift handoffs, and alerts, and exposes it to
+people and to the agents the organization already runs, through MCP. Every answer cites the
+photo, time, and wearer it came from.
 
-**Pitch (NMC² framing):** data center operators do physical rounds that no system records.
-A missed warning, an unclear handoff, or the wrong information at the wrong time becomes an
-outage. This gives the next shift a queryable memory of the last one: what was touched,
-what changed, what looked wrong, with the photo for each claim.
+**Pitch:** the missing modality in enterprise knowledge. Retrieval today covers documents,
+tickets, and chat. The floor, the bench, and the field are undocumented until someone
+writes it up after the fact, and that knowledge leaves with the shift.
 
-**General framing:** MCP for real life. Personal agents can reach your files and calendar;
-this gives them what you actually saw and did.
+**Shown application (NMC²):** data center operators do physical rounds that no system
+records. A missed warning, an unclear handoff, or the wrong information at the wrong time
+becomes an outage. The next shift, or a supervisor who was never on the floor, gets a
+queryable memory: what was touched, what changed, what looked wrong, with the photo for
+each claim, and an alert the moment a photo shows a fault. Labs, field service, facilities,
+and manufacturing are the same system with different photos.
 
 **Scope for the hackathon:** image-only, physical-only, Spacetime-hosted.
 - Image-only: no audio, no continuous stream, no on-phone triggers. One photo per event.
@@ -37,12 +47,15 @@ Spacetime (majority of backend on Spacetime).
 | A. Recall | Episodic timeline, semantic search, notes attached to photos | MVP |
 | B. Object and state tracking | Find an object, state history, what changed since a time | MVP |
 | D. Live context | `get_current_context`: what the latest photo shows | MVP |
-| F. Handoff | `summarize_handoff(since)`: shift summary with evidence | MVP (NMC² demo beat) |
+| F. Handoff | `summarize_handoff(since)`: shift summary with evidence, posted to a channel | MVP (NMC² demo beat) |
+| E'. Alerts | Rule in `perceive`: fault/alarm text or OK→FAULT change raises an `alert` row and a channel post | MVP (enterprise beat) |
+| Attribution | Every event carries `wearer` and `shift`; queries and handoffs filter by them | MVP |
+| Assets | `asset` registry seeded from CSV; text read in the scene is matched to canonical asset IDs | MVP |
 | Timeline | Generated episodes of the shift with evidence per segment | MVP (the demo artifact) |
 | C. Cross-modal provenance | Physical event ↔ screen artifact | Deferred (no screen capture) |
 | E. Consistency and diagnosis | Mismatch alerts, causal "why" | Deferred (needs C) |
 | F. Procedure | Protocol compliance, checklist verification | Stretch |
-| G. Excluded | Multi-wearer shared memory, identifying bystanders | Never this weekend |
+| G. Excluded | Identifying people in photos, SSO, multi-tenancy, admin console | Never this weekend |
 
 ## 3. Architecture
 
@@ -127,7 +140,10 @@ and because the web UI and MCP server share the language and generated bindings.
 |---|---|---|
 | `event` | `event_id` (pk), `client_t`, `server_t`, `source`, `status`, `summary`, `scene`, `activity`, `people_count`, `confidence`, `thumb` (bytes, ~320 px), `embedding` (f32[]), `note`, `label` | Subscribed by UI and MCP. Public. |
 | `photo` | `event_id` (pk), `jpeg` (bytes, 1600 px) | Not subscribed; fetched on demand by `event_id`. Public read. |
-| `entity` | `entity_id` (pk), `canonical_name`, `aliases`, `kind` (object, place, person_count) | |
+| `entity` | `entity_id` (pk), `canonical_name`, `aliases`, `kind` (object, place, asset) | Assets are entities with `kind: asset`, seeded from the registry. |
+| `asset` | `asset_id` (pk), `name`, `type`, `location`, `patterns` (strings/regex matched against `text_in_scene`) | Seeded by an admin reducer from `demo/assets.csv`. |
+| `wearer` | `device_id` (pk), `name`, `role`, `shift` | Attribution; set by an admin reducer. |
+| `alert` | `alert_id` (pk), `event_id`, `kind`, `text`, `t_micros`, `acked` | Written by `perceive`; posted to Slack via webhook. |
 | `edge` | `edge_id` (pk), `from_id`, `to_id`, `type` (NEXT, INVOLVES, CHANGES, EVIDENCED_BY, SIMILAR_TO), `props` (JSON string: role, attr, from, to, score) | The graph. |
 | `episode` | `episode_id` (pk), `t_start`, `t_end`, `title`, `summary`, `event_ids` | Timeline output. |
 | `handoff` | `handoff_id` (pk), `since`, `generated_t`, `text`, `event_ids` | Cached shift summaries. |
@@ -160,7 +176,12 @@ Reserved for later, unused: `screen_event`, edge types `RELATED_TO` and `BOUND_T
   Nemotron with OpenAI-style tool calling.
 - `handoff(since: string)`: Nemotron summary of events since a time, grouped by place and
   entity, with citations; cached in `handoff`.
-- Reducers `set_label`, `set_note`, `mark_duplicate`: small state edits from the UI or app.
+- Reducers `set_label`, `set_note`, `mark_duplicate`, `ack_alert`: small state edits from the
+  UI or app. Admin reducers `upsert_asset`, `upsert_wearer` (owner only) seed the registry.
+- Alert rule inside `perceive` (after the model call): if `text_in_scene` matches a warning
+  pattern (FAULT, ALARM, DO NOT, OVERTEMP, …) or a `changes_since_previous` entry goes to a
+  fault-like state, insert an `alert` row and `ctx.http.fetch` a Slack incoming webhook
+  (`SLACK_WEBHOOK_URL` in the module env). `handoff` posts the same way at shift end.
 
 **Why this satisfies "majority of backend on Spacetime":** ingestion, storage, perception
 orchestration, graph building, timeline, the agent loop, and the handoff all run inside the
@@ -204,9 +225,10 @@ Event -SIMILAR_TO{score}-> Event         // embeddings
 (Entity -BOUND_TO-> DigitalArtifact, Event -RELATED_TO-> Event: reserved, unused)
 ```
 
-Entity resolution for MVP: normalize the VLM's object names, merge exact and alias matches,
-prefer a user `label` when present. Places come from `location_guess` plus clustering of
-consecutive events. No visual re-identification.
+Entity resolution for MVP, in priority order: (1) a `label` typed by the wearer; (2) a match
+between `text_in_scene` and an `asset.patterns` entry, which links the event to the canonical
+asset; (3) the VLM's object names, normalized and alias-merged. Places come from
+`location_guess` plus clustering of consecutive events. No visual re-identification.
 
 ## 8. Timeline and handoff
 
@@ -251,17 +273,24 @@ in. This is the Spacetime "multiplayer by default" beat and the NMC² wall displ
 
 ## 10. Demo
 
-Framed as one operator's shift on a data center floor (the hackathon venue stands in).
+Framed as a data center floor across a shift change (the hackathon venue stands in). Two
+wearers if the second pair of glasses is available.
 
-1. The wearer photographs the shift from the first hour: arriving, racks, panels, cable work,
-   a conversation, a snack run. Shutter button, glasses used normally.
-2. Show the live timeline and graph of the shift so far.
-3. From Claude connected to our MCP server: "what did I do between 2 and 3," "where did I
-   leave the label printer," "what changed on the table since lunch," "what am I looking at
-   now," and then `summarize_handoff` for the next shift.
-4. **Live beat:** take a photo on stage; the row appears in the web view within seconds;
-   ask about it immediately.
-5. Every answer shows its photo.
+1. Operators photograph their shift from the first hour: racks, panels, cable work, a
+   conversation, a snack run. Shutter button, glasses used normally. One photographed event
+   is a deliberate asset change (a label moved, a cable re-routed).
+2. Show the live timeline and graph for the floor, attributed by wearer.
+3. **Alert beat:** a photo of a panel showing a fault state fires an alert in the web view
+   and in Slack within seconds of the shutter press.
+4. **Handoff beat:** the shift ends; `summarize_handoff` posts the handoff to the channel,
+   grouped by asset, each line citing a photo.
+5. **Supervisor beat:** from Claude connected to our MCP server, someone who was not on the
+   floor asks "what happened to PDU-A today," "who was last at rack R12," "what changed
+   since the morning shift." Every answer shows its photo, time, and wearer.
+6. **Live beat:** take a photo on stage; it appears in the view within seconds; ask about it.
+
+The pitch names the general product once (enterprise memory for physical work) and spends
+the rest of the time on this application.
 
 Record a backup walkthrough in case venue connectivity fails.
 
@@ -298,10 +327,13 @@ web view (3–9, 12). Both: demo (11).
 
 ## 13. Privacy defaults
 
-Capture is deliberate (one photo per event), not passive. Faces are blurred on the phone
-before upload. People are counted, never identified. No audio this weekend. Tables holding
-photos are public-read for the hackathon; lock down with Spacetime row-level security if
-time allows.
+Governance language for the pitch, all true of the build: capture is deliberate (one photo
+per event), not passive; faces are blurred on the device before upload; people are counted,
+never identified; no audio; every claim is traceable to a photo, a time, and a wearer;
+retention is a configuration choice; the module runs on Maincloud for the demo and on a
+self-hosted SpacetimeDB for a customer who needs data to stay in the building. Not built
+this weekend: role-based access (Spacetime row-level security would be the mechanism), SSO,
+multi-tenancy.
 
 ## 14. Risks
 
@@ -326,6 +358,9 @@ nodes; learned bindings; multi-shift consolidation; row-level security per weare
 
 ## Changelog
 
+- 2026-11-07 v4.2: enterprise operational-memory framing; wearer attribution, asset
+  registry, alert rule, channel posting; demo rewritten around alert, handoff, supervisor
+  beats. Decision 0026.
 - 2026-11-07 v4.1: Nemotron 3.5 Super VL is the primary perception model after a bake-off;
   gpt-4o is the fallback. Exact model IDs recorded. Decision 0025.
 - 2026-11-07 v4: Spacetime module replaces Postgres, Neo4j, API server and LangGraph;
