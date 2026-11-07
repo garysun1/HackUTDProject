@@ -124,15 +124,16 @@ final class DiagnosticsStoreTests: XCTestCase {
     XCTAssertEqual(DiagnosticsCSV.header, lines[0])
     XCTAssertEqual(DiagnosticsCSV.columns.count, 21)
 
-    // The quoted error carries a bare newline, so the one row spans two physical lines; the file ends in CRLF.
-    XCTAssertEqual(lines.count, 4, "header, two physical lines of the row, then the empty tail")
+    // Records are CRLF-separated; the bare newline inside the quoted error stays inside the field
+    // (RFC 4180), so splitting on CRLF gives header, one row, then the empty tail.
+    XCTAssertEqual(lines.count, 3, "header, the row, then the empty tail")
     let expectedRow = [
       "evt-1", "sdk_capture", "2023-11-14T22:13:20.500Z", "", "2023-11-14T22:13:21.750Z", "1250", "412000",
       "jpeg", "full", "high", "", "", "", "", "", "", "", "background", "", "",
       "\"timeout after 30 s, \"\"no bytes\"\"\nretrying\"",
     ].joined(separator: ",")
-    XCTAssertEqual(lines[1] + "\n" + lines[2], expectedRow)
-    XCTAssertEqual(lines[3], "")
+    XCTAssertEqual(lines[1], expectedRow)
+    XCTAssertEqual(lines[2], "")
   }
 
   func testExportJSONIncludesSummaryAndRows() throws {

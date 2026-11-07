@@ -15,6 +15,9 @@ struct ShiftMemoryApp: App {
   @State private var model: AppModel
 
   init() {
+    #if DEBUG
+    DebugMock.enableIfRequested()
+    #endif
     do {
       try Wearables.configure()
     } catch {
