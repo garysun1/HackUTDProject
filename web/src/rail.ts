@@ -45,7 +45,7 @@ function handoffSkeleton(): string {
   const evs = visibleEvents(); if (!evs.length) return '<p class="muted">Nothing in this window yet.</p>';
   const first = evs[evs.length - 1], last = evs[0];
   const wearers = [...new Set(evs.map(e => e.deviceId))];
-  let html = `<p class="lead">${fmtTime(first.tMicros)}–${fmtTime(last.tMicros)} · ${evs.length} events · ${wearers.map(w => `<span style="color:${wearerColor(w)}">${esc(wearerName(w))}</span>`).join(', ')}</p>`;
+  let html = `<p class="lead">${fmtTime(first.tMicros)}–${fmtTime(last.tMicros)} · ${evs.length} events · ${wearers.map(w => `<span class="who"><i style="background:${wearerColor(w)}"></i>${esc(wearerName(w))}</span>`).join(', ')}</p>`;
   const alerts = allAlerts();
   if (alerts.length) html += `<h3>Needs attention</h3><ul>${alerts.map(a => `<li><span>${esc(a.text)}</span>${cite(a.eventId)}</li>`).join('')}</ul>`;
   const changes: { asset: string; line: string; id: string }[] = [];

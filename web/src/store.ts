@@ -46,11 +46,12 @@ export function notify() {
 }
 
 // ---------- derived ----------
-export const WEARER_COLORS = ['#3987e5', '#d95926', '#199e70', '#c98500', '#d55181', '#9085e9'];
+const cssVar = (n: string) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+export const WEARER_COLORS = ['--w1', '--w2', '--w3', '--w4', '--w5', '--w6'];
 const wearerIndex = new Map<string, number>();
 export function wearerColor(deviceId: string): string {
   if (!wearerIndex.has(deviceId)) wearerIndex.set(deviceId, wearerIndex.size);
-  return WEARER_COLORS[wearerIndex.get(deviceId)! % WEARER_COLORS.length];
+  return cssVar(WEARER_COLORS[wearerIndex.get(deviceId)! % WEARER_COLORS.length]) || '#2a78d6';
 }
 export function wearerName(deviceId: string): string {
   const w = state.wearers.get(deviceId); if (w?.name) return w.name;

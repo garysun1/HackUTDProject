@@ -12,7 +12,7 @@ type Tile = { x0: number; y0: number; w: number; h: number; id: string };
 let marks: Mark[] = []; let tiles: Tile[] = [];
 let hover: string | null = null;
 const tip = document.createElement('div');
-tip.style.cssText = 'position:fixed;pointer-events:none;background:#141f2c;border:1px solid #223042;color:#e8edf3;font:12px/1.4 "Inter Tight",sans-serif;padding:6px 8px;border-radius:6px;max-width:280px;display:none;z-index:9;box-shadow:0 6px 18px rgba(0,0,0,.45)';
+tip.style.cssText = 'position:fixed;pointer-events:none;background:var(--ground);border:1px solid var(--line-strong);color:var(--ink);font:12px/1.4 var(--font);padding:6px 8px;border-radius:6px;max-width:280px;display:none;z-index:9;box-shadow:var(--shadow)';
 document.body.appendChild(tip);
 
 canvas.addEventListener('mousemove', e => {
@@ -20,7 +20,7 @@ canvas.addEventListener('mousemove', e => {
   const m = marks.find(m => Math.hypot(m.x - x, m.y - y) <= Math.max(m.r + 7, 12));
   const t = !m && tiles.find(t => x >= t.x0 && x <= t.x0 + t.w && y >= t.y0 && y <= t.y0 + t.h);
   hover = m?.id ?? null; canvas.style.cursor = m || t ? 'pointer' : 'default';
-  if (m) { const ev = state.events.get(m.id)!; tip.innerHTML = `<div style="color:#74839a;font-family:'JetBrains Mono',monospace;font-size:11px">${fmtTime(ev.tMicros)}</div>${ev.summary || 'processing…'}`; tip.style.display = 'block'; tip.style.left = `${e.clientX + 12}px`; tip.style.top = `${e.clientY + 12}px`; } else tip.style.display = 'none';
+  if (m) { const ev = state.events.get(m.id)!; tip.innerHTML = `<div style="color:var(--ink-3);font-family:var(--mono);font-size:11px">${fmtTime(ev.tMicros)}</div>${ev.summary || 'processing…'}`; tip.style.display = 'block'; tip.style.left = `${e.clientX + 12}px`; tip.style.top = `${e.clientY + 12}px`; } else tip.style.display = 'none';
   renderFloor();
 });
 canvas.addEventListener('mouseleave', () => { hover = null; tip.style.display = 'none'; renderFloor(); });
@@ -32,8 +32,15 @@ canvas.addEventListener('click', e => {
 });
 addEventListener('resize', renderFloor);
 
-// Strokes chosen to clear 3:1 on the ground for a projector; see web/DESIGN.md.
-const C = { ink: '#e8edf3', ink2: '#aab6c5', ink3: '#8a97ab', line: '#3a4b63', soft: '#2a3a4f', place: '#2bb383', entity: '#a197f0', warn: '#fab219', crit: '#e04e4e', panel: '#0f1620', path: 'rgba(170,182,197,0.55)' };
+// Colors come from the stylesheet tokens so the canvas follows the theme; see web/DESIGN.md.
+function cssVar(name: string): string { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+let C = { ink: '', ink2: '', ink3: '', line: '', soft: '', place: '', entity: '', warn: '', crit: '', panel: '', ground: '', path: '', zoneA: '', zoneB: '' };
+function readTokens() {
+  const dark = matchMedia('(prefers-color-scheme: dark)').matches && document.documentElement.dataset.theme !== 'light' || document.documentElement.dataset.theme === 'dark';
+  C = { ink: cssVar('--ink'), ink2: cssVar('--ink-2'), ink3: cssVar('--ink-3'), line: cssVar('--line-strong'), soft: cssVar('--line'), place: cssVar('--place'), entity: cssVar('--entity'), warn: cssVar('--warning-ink'), crit: cssVar('--critical'), panel: cssVar('--panel'), ground: cssVar('--ground'),
+    path: dark ? 'rgba(200,200,195,0.5)' : 'rgba(60,60,56,0.42)', zoneA: dark ? 'rgba(255,255,255,0.035)' : 'rgba(20,20,18,0.035)', zoneB: dark ? 'rgba(255,255,255,0.015)' : 'rgba(20,20,18,0.015)' };
+}
+readTokens(); matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { readTokens(); renderFloor(); });
 const ROW = 44, GAP_MAX = 56;
 
 export function renderFloor() {
@@ -71,14 +78,14 @@ export function renderFloor() {
   const yOf = (id: string) => axisTop + 10 + (yRank.get(id)! - (axisTop + 10)) * scale;
 
   // zones
-  ctx.font = '600 12px "Inter Tight", sans-serif'; ctx.textBaseline = 'middle';
+  ctx.font = '600 12px Inter, sans-serif'; ctx.textBaseline = 'middle';
   zoneOrder.forEach((z, i) => {
     const x0 = pad + i * zoneW;
-    ctx.fillStyle = i % 2 ? 'rgba(255,255,255,0.025)' : 'rgba(255,255,255,0.05)'; ctx.fillRect(x0, top - 30, zoneW, H - top + 30);
+    ctx.fillStyle = i % 2 ? C.zoneB : C.zoneA; ctx.fillRect(x0, top - 30, zoneW, H - top + 30);
     ctx.strokeStyle = C.soft; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x0, top - 30); ctx.lineTo(x0, H); ctx.stroke();
     const none = z === '_none';
     const name = none ? (zoneOrder.length === 1 ? 'Places not identified yet' : 'No place identified') : (state.entities.get(z)?.canonicalName ?? z);
-    ctx.fillStyle = none ? C.ink3 : C.place; ctx.textAlign = 'left'; ctx.font = none ? '500 12px "Inter Tight", sans-serif' : '600 12px "Inter Tight", sans-serif';
+    ctx.fillStyle = none ? C.ink3 : C.place; ctx.textAlign = 'left'; ctx.font = none ? '500 12px Inter, sans-serif' : '600 12px Inter, sans-serif';
     ctx.fillText(none ? name : name.toUpperCase(), x0 + 10, top - 14);
   });
 
@@ -93,7 +100,7 @@ export function renderFloor() {
       ctx.font = '500 12px "JetBrains Mono", monospace'; const tw = Math.max(72, ctx.measureText(label).width + 18);
       const hasAlert = evs.some(e => alertsFor(e).some(al => al.assetId === a.entityId && !al.acked));
       const active = state.assetFilter === a.entityId;
-      ctx.fillStyle = active ? '#1a2a3d' : C.panel; ctx.strokeStyle = hasAlert ? C.crit : active ? C.ink2 : C.line; ctx.lineWidth = hasAlert || active ? 1.5 : 1;
+      ctx.fillStyle = active ? C.soft : C.panel; ctx.strokeStyle = hasAlert ? C.crit : active ? C.ink2 : C.line; ctx.lineWidth = hasAlert || active ? 1.5 : 1;
       roundRect(x - tw / 2, top + 2, tw, 26, 5); ctx.fill(); ctx.stroke();
       ctx.fillStyle = hasAlert ? C.crit : C.entity; ctx.textAlign = 'center'; ctx.fillText(label, x, top + 15);
       tiles.push({ x0: x - tw / 2, y0: top + 2, w: tw, h: 26, id: a.entityId });
@@ -131,8 +138,8 @@ export function renderFloor() {
   for (const e of evs) {
     const p = pos.get(e.eventId)!; const alerts = alertsFor(e); const sel = state.selected === e.eventId || hover === e.eventId;
     const r = sel ? 8 : 6;
-    if (alerts.length) { ctx.fillStyle = 'rgba(208,59,59,0.22)'; ctx.beginPath(); ctx.arc(p.x, p.y, r + 7 + (state.fresh.has(e.eventId) ? 4 : 0), 0, 7); ctx.fill(); }
-    ctx.fillStyle = alerts.some(a => !a.acked) ? C.crit : wearerColor(e.deviceId); ctx.strokeStyle = '#0c1017'; ctx.lineWidth = 2;
+    if (alerts.length) { ctx.fillStyle = 'rgba(208,59,59,0.18)'; ctx.beginPath(); ctx.arc(p.x, p.y, r + 7 + (state.fresh.has(e.eventId) ? 4 : 0), 0, 7); ctx.fill(); }
+    ctx.fillStyle = alerts.some(a => !a.acked) ? C.crit : wearerColor(e.deviceId); ctx.strokeStyle = C.ground; ctx.lineWidth = 2;
     ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, 7); ctx.fill(); ctx.stroke();
     if (sel) { ctx.strokeStyle = C.ink; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(p.x, p.y, r + 4, 0, 7); ctx.stroke(); }
     marks.push({ x: p.x, y: p.y, r, id: e.eventId });

@@ -12,12 +12,12 @@ over a table and instead draws the entity graph as a floor schematic: places as 
 assets as fixed tiles, events as time-ordered marks attached to the asset they touched.
 Everything else (timeline, alerts, handoff, ask) is a lens on that same graph.
 
-OWN-WORLD: Night-shift control room. Ground `#0c1017`, tinted ink rail `#111a24`, hairline
-`#223042`. Type: Inter Tight for UI, JetBrains Mono for IDs, times, and readings. Series
-colors from the validated dark categorical palette (blue `#3987e5` wearer 1, orange
-`#d95926` wearer 2, aqua `#199e70` places, violet `#9085e9` entities). Status fixed:
-critical `#d03b3b`, warning `#fab219`, good `#0ca30c`, each with an icon and a label.
-Density high; 13px body in panels, 15px in the detail drawer.
+OWN-WORLD: Enterprise workspace in the Notion / Pylon register. White surfaces on a warm
+`#f7f7f5` page, hairlines `#e5e5e1`, near-black ink `#1f1f1d`, one accent `#2563eb` for links
+and focus. Inter for UI, JetBrains Mono for IDs, times, and readings. Wearer series from the
+validated light categorical palette; status as tinted pills with ink text. Density high; 14px
+body, 14px semibold heads, 16px drawer title. Dark follows the system preference from the same
+tokens.
 
 STORY: A supervisor who was not on the floor opens the console and understands in ten
 seconds what needs attention, what changed, and who was where, then clicks any line and sees
