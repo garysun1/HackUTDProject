@@ -30,6 +30,12 @@ Tabular numerals on by default.
 Three columns 360 / fluid / 360 at 1440; 36px column heads; 6px list gutters; 8px card
 padding; hairline separators, no card borders unless selected.
 
+## Canvas strokes (floor)
+Hairlines `#2a3a4f`, tile borders `#3a4b63`, the operator's path `rgba(170,182,197,0.55)`,
+place labels `#2bb383`, asset labels `#a197f0`, alert red `#e04e4e`, tick labels `#8a97ab`.
+All clear 3:1 on the ground so a projector keeps them. Event rows are placed by rank with
+time-proportional gaps capped at 56px, then stretched to use at least 60% of the axis.
+
 ## Signature move
 The floor schematic (`src/floor.ts`): places as zones, assets as fixed monospace tiles,
 events as 5px marks on a vertical time axis under the asset they touched, the operator's

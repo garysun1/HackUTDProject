@@ -1,4 +1,4 @@
-import { connect, onChange, state, visibleEvents, wearerColor, wearerName, notify, DB } from './store';
+import { connect, onChange, state, visibleEvents, wearerColor, wearerName, notify, DB, fmtTime } from './store';
 import { renderTimeline } from './timeline';
 import { renderFloor } from './floor';
 import { renderRail } from './rail';
@@ -12,7 +12,14 @@ windowSel.addEventListener('change', () => { state.windowMin = Number(windowSel.
 
 function renderChips() {
   const ids = [...new Set([...state.events.values()].map(e => e.deviceId))];
-  wearersEl.innerHTML = ids.map(id => `<button class="chip" type="button" data-id="${id}" aria-pressed="${!state.hiddenWearers.has(id)}"><i style="background:${wearerColor(id)}"></i>${wearerName(id)}</button>`).join('');
+  const focused = (document.activeElement as HTMLElement | null)?.dataset?.id;
+  for (const id of ids) {
+    let b = wearersEl.querySelector(`[data-id="${CSS.escape(id)}"]`) as HTMLButtonElement | null;
+    if (!b) { b = document.createElement('button'); b.className = 'chip'; b.type = 'button'; b.dataset.id = id; wearersEl.appendChild(b); }
+    b.setAttribute('aria-pressed', String(!state.hiddenWearers.has(id)));
+    b.innerHTML = `<i style="background:${wearerColor(id)}"></i>${wearerName(id)}`;
+  }
+  if (focused) (wearersEl.querySelector(`[data-id="${CSS.escape(focused)}"]`) as HTMLElement | null)?.focus();
 }
 wearersEl.addEventListener('click', e => { const b = (e.target as HTMLElement).closest('.chip') as HTMLElement | null; if (!b) return; const id = b.dataset.id!; if (state.hiddenWearers.has(id)) state.hiddenWearers.delete(id); else state.hiddenWearers.add(id); notify(); });
 
@@ -20,4 +27,24 @@ onChange(() => { renderChips(); renderTimeline(); renderFloor(); renderRail(); }
 document.addEventListener('select', () => notify());
 setInterval(() => { if (visibleEvents().length) renderFloor(); }, 15000); // the "now" edge of the time axis advances
 
-connect((s, msg) => { conn.dataset.state = s; connText.textContent = s === 'live' ? 'live' : msg || s; });
+const stale = document.getElementById('stale')!;
+connect((s, msg) => {
+  conn.dataset.state = s; document.body.dataset.conn = s;
+  connText.textContent = s === 'live' ? 'live' : msg || s;
+  if (s !== 'live') { const last = [...state.events.values()].sort((a, b) => (a.tMicros < b.tMicros ? 1 : -1))[0]; stale.textContent = `${s === 'error' ? 'Connection error' : 'Reconnecting'} · showing data as of ${last ? fmtTime(last.tMicros) : 'page load'}`; }
+});
+// honest empty states: say why the list is empty and offer the way out
+const tlEmpty = document.getElementById('timeline-empty')!; const flEmpty = document.getElementById('floor-empty')!;
+function emptyCopy() {
+  const total = state.events.size; const shown = visibleEvents().length;
+  if (shown || !total) return;
+  const reasons: string[] = [];
+  if (state.hiddenWearers.size) reasons.push(`${state.hiddenWearers.size} wearer${state.hiddenWearers.size > 1 ? 's' : ''} hidden`);
+  if (state.windowMin) reasons.push(`window is ${windowSel.options[windowSel.selectedIndex].text}`);
+  if (state.assetFilter) reasons.push(`showing only ${state.entities.get(state.assetFilter)?.canonicalName ?? 'one asset'}`);
+  const why = reasons.join(', ');
+  tlEmpty.innerHTML = `No events match: ${why}. <a id="clear-filters" role="button" tabindex="0">Show everything</a>`;
+  flEmpty.textContent = `Nothing to draw with the current filters.`;
+  tlEmpty.querySelector('#clear-filters')!.addEventListener('click', () => { state.hiddenWearers.clear(); state.windowMin = 0; state.assetFilter = null; windowSel.value = 'all'; notify(); });
+}
+onChange(emptyCopy);

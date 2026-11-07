@@ -8,7 +8,7 @@ const nodes = new Map<string, HTMLLIElement>();
 export function select(id: string | null) { state.selected = id; notify(); document.dispatchEvent(new CustomEvent('select', { detail: id })); }
 
 function card(e: Ev): HTMLLIElement {
-  const li = document.createElement('li'); li.className = 'ev'; li.tabIndex = 0; li.dataset.id = e.eventId;
+  const li = document.createElement('li'); li.className = 'ev'; li.tabIndex = 0; li.dataset.id = e.eventId; li.setAttribute('role', 'button');
   li.addEventListener('click', () => select(e.eventId));
   li.addEventListener('keydown', ev => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); select(e.eventId); } });
   return li;
@@ -18,9 +18,9 @@ function fill(li: HTMLLIElement, e: Ev) {
   const img = state.photos.get(e.eventId);
   li.innerHTML = `<img alt="" ${img ? `src="${img}"` : ''}><div>
     <div class="meta"><span>${fmtTime(e.tMicros)}</span><span class="who"><i style="background:${wearerColor(e.deviceId)}"></i>${wearerName(e.deviceId)}</span><span class="st ${e.status}">${e.status.replace('_', ' ')}</span></div>
-    <p class="sum ${e.summary ? '' : 'processing'}">${e.summary ? esc(e.summary) : 'reading the photo…'}</p>
+    <p class="sum ${e.summary && e.confidence > 0 ? '' : 'processing'}">${e.summary && e.confidence > 0 ? esc(e.summary) : e.status === 'failed' ? 'could not read this photo' : e.summary ? 'stored, awaiting perception' : 'reading the photo…'}</p>
     <div class="tags">${e.label ? `<span><b>${esc(e.label)}</b></span>` : ''}${place ? `<span>${esc(place.canonicalName)}</span>` : ''}${alerts.length ? `<span style="color:var(--critical)">${alerts.length} alert${alerts.length > 1 ? 's' : ''}</span>` : ''}${e.note ? `<span>“${esc(e.note)}”</span>` : ''}</div></div>`;
-  li.setAttribute('aria-selected', String(state.selected === e.eventId));
+  li.setAttribute('aria-pressed', String(state.selected === e.eventId)); li.dataset.selected = String(state.selected === e.eventId);
   li.classList.toggle('fresh', state.fresh.has(e.eventId));
   if (!img) loadPhoto(e.eventId);
 }

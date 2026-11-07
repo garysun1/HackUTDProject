@@ -33,6 +33,7 @@ export const state = {
   hiddenWearers: new Set<string>(),
   connected: false,
   fresh: new Set<string>(),
+  assetFilter: null as string | null,
 };
 
 type Listener = () => void;
@@ -63,6 +64,7 @@ export function visibleEvents(): Ev[] {
   const cutoff = state.windowMin ? nowMicros() - BigInt(state.windowMin) * 60_000_000n : 0n;
   return [...state.events.values()]
     .filter(e => e.tMicros >= cutoff && !state.hiddenWearers.has(e.deviceId))
+    .filter(e => !state.assetFilter || assetsOf(e.eventId).some(a => a.entityId === state.assetFilter) || edgesFrom(e.eventId, 'CHANGES').some(ed => ed.toId === state.assetFilter))
     .sort((a, b) => (a.tMicros < b.tMicros ? 1 : a.tMicros > b.tMicros ? -1 : 0));
 }
 export function perception(e: Ev): any { try { return e.perceptionJson ? JSON.parse(e.perceptionJson) : null; } catch { return null; } }

@@ -15,26 +15,27 @@
   <div class="brand"><span class="mark" aria-hidden="true"></span><h1>Shift Memory</h1><span class="db" id="db"></span></div>
   <div class="status" id="conn" data-state="connecting"><span class="dot"></span><span id="conn-text">connecting</span></div>
   <div class="filters">
-    <label class="sel">Window <select id="window"><option value="all">whole shift</option><option value="60">last 60 min</option><option value="180">last 3 h</option><option value="480">last 8 h</option></select></label>
+    <label class="sel">Window <select id="window"><option value="all">all time</option><option value="720">this shift (12 h)</option><option value="60">last 60 min</option><option value="180">last 3 h</option><option value="480">last 8 h</option></select></label>
     <div class="chips" id="wearers" aria-label="Wearers"></div>
   </div>
 </header>
 <main class="grid">
+  <div class="stale" id="stale" role="status"></div>
   <section class="col timeline" aria-label="Timeline">
     <div class="colhead"><h2>Timeline</h2><span class="count" id="count">0 events</span></div>
     <ol id="timeline" class="events"></ol>
     <p class="empty" id="timeline-empty">No events yet. The first photo from the floor will appear here.</p>
   </section>
   <section class="col floor" aria-label="Floor schematic">
-    <div class="colhead"><h2>Floor</h2><span class="legend"><i class="k ev"></i>event <i class="k chg"></i>change <i class="k al"></i>alert</span></div>
-    <canvas id="floor"></canvas>
+    <div class="colhead"><h2>Floor</h2><span class="legend"><i class="k k-ev"></i>event <i class="k k-chg"></i>change <i class="k k-al"></i>alert</span></div>
+    <canvas id="floor" role="img" aria-label="Floor schematic: places as zones, assets as tiles, photos as marks on a time axis. The timeline lists the same events."></canvas>
     <p class="empty" id="floor-empty">The schematic draws itself from places and assets as photos arrive.</p>
   </section>
   <aside class="col rail" aria-label="Operations">
     <section class="panel" id="alerts-panel">
-      <div class="colhead"><h2>Needs attention</h2><span class="count" id="alert-count">0</span></div>
+      <div class="colhead"><h2>Needs attention</h2><span class="count" id="alert-count" aria-live="polite"></span></div>
       <ul id="alerts" class="alerts"></ul>
-      <p class="empty" id="alerts-empty">Nothing open.</p>
+      <p class="empty" id="alerts-empty">All clear. Nothing open.</p>
     </section>
     <section class="panel" id="handoff-panel">
       <div class="colhead"><h2>Handoff</h2><button id="gen-handoff" class="btn" type="button">Generate</button></div>
@@ -42,12 +43,12 @@
     </section>
     <section class="panel" id="ask-panel">
       <div class="colhead"><h2>Ask the floor</h2></div>
-      <form id="ask-form" class="ask"><input id="ask-input" type="text" placeholder="What happened to PDU-A today?" autocomplete="off" /><button class="btn" type="submit">Ask</button></form>
+      <form id="ask-form" class="ask"><label class="sr" for="ask-input">Question for the floor</label><input id="ask-input" type="text" placeholder="What happened to PDU-A today?" autocomplete="off" /><button class="btn" type="submit">Ask</button></form>
       <div id="answer" class="answer"></div>
     </section>
-    <section class="drawer" id="drawer" hidden>
+    <section class="drawer" id="drawer" hidden role="dialog" aria-labelledby="drawer-title">
       <div class="colhead"><h2 id="drawer-title">Event</h2><button class="btn ghost" id="drawer-close" type="button" aria-label="Close">Close</button></div>
-      <img id="drawer-img" alt="" />
+      <img id="drawer-img" alt="Photo taken by the wearer at this event" />
       <dl id="drawer-fields" class="fields"></dl>
     </section>
   </aside>

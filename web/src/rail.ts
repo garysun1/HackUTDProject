@@ -20,7 +20,8 @@ hasProcedure('handoff').then(v => { haveHandoff = v; renderRail(); });
 
 const ICON = { critical: '<svg viewBox="0 0 16 16" fill="none" stroke="#d03b3b" stroke-width="1.6"><path d="M8 1.5 15 14H1z"/><path d="M8 6v4M8 12v.5"/></svg>', warning: '<svg viewBox="0 0 16 16" fill="none" stroke="#fab219" stroke-width="1.6"><circle cx="8" cy="8" r="6.5"/><path d="M8 4.5v4M8 11v.5"/></svg>' };
 
-function cite(id: string) { const e = state.events.get(id); return `<span class="cite" data-id="${id}" title="Open photo">${e ? fmtTime(e.tMicros) : id.slice(0, 6)} ▸</span>`; }
+const GLYPH = '<svg viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 1.5 6.5 5 3 8.5"/></svg>';
+function cite(id: string) { const e = state.events.get(id); const who = e ? wearerName(e.deviceId) : ''; return `<button type="button" class="cite" data-id="${id}" aria-label="Open photo from ${e ? fmtTime(e.tMicros) : id}">${e ? fmtTime(e.tMicros) : id.slice(0, 6)}${who ? ` ${esc(who)}` : ''}${GLYPH}</button>`; }
 handoffEl.addEventListener('click', e => { const t = (e.target as HTMLElement).closest('.cite') as HTMLElement | null; if (t?.dataset.id) select(t.dataset.id); });
 answerEl.addEventListener('click', e => { const t = (e.target as HTMLElement).closest('.cite') as HTMLElement | null; if (t?.dataset.id) select(t.dataset.id); });
 
@@ -62,23 +63,23 @@ function handoffSkeleton(): string {
 let narrative: string | null = null;
 function renderHandoff() {
   const latest = state.handoffs[state.handoffs.length - 1];
-  handoffEl.innerHTML = (narrative ? `<p class="lead">${esc(narrative)}</p>` : latest ? `<p class="lead">${esc(latest.text)}</p>` : '') + handoffSkeleton() + (haveHandoff ? '' : '<p class="muted" style="margin-top:8px">Facts from the graph. The written narrative arrives when the handoff procedure ships (issue 8).</p>');
+  handoffEl.innerHTML = (narrative ? `<p class="lead">${esc(narrative)}</p>` : latest ? `<p class="lead">${esc(latest.text)}</p>` : '') + handoffSkeleton() + (haveHandoff ? '' : '<p class="muted" style="margin-top:8px">Facts from the graph, one photo per line. The written summary is not enabled yet.</p>');
   genBtn.disabled = !haveHandoff;
   genBtn.title = haveHandoff ? 'Write the narrative with Nemotron' : 'Narrative generation not deployed yet';
 }
 genBtn.addEventListener('click', async () => {
   genBtn.disabled = true; genBtn.textContent = 'Writing…';
   try { const since = visibleEvents().at(-1)?.tMicros ?? nowMicros(); const res = await callProcedure<any>('handoff', [since.toString()]); narrative = typeof res === 'string' ? res : (res?.text ?? JSON.stringify(res)); }
-  catch (e) { narrative = `Could not generate: ${(e as Error).message}`; }
+  catch (e) { console.error(e); narrative = 'The summary could not be written right now. The facts below are still current.'; }
   finally { genBtn.textContent = 'Generate'; renderRail(); }
 });
 
 askForm.addEventListener('submit', async e => {
   e.preventDefault(); const q = askInput.value.trim(); if (!q) return;
   answerEl.innerHTML = '<p class="muted">Thinking…</p>';
-  if (!haveAsk) { answerEl.innerHTML = `<p class="muted">The <code>ask</code> procedure is not deployed yet (issue 7). Meanwhile, the handoff above answers “what changed” and “who was where” from the graph.</p>`; return; }
+  if (!haveAsk) { answerEl.innerHTML = `<p class="muted">Questions are not enabled on this floor yet. The handoff above already answers “what changed” and “who was where”.</p>`; return; }
   try { const res = await callProcedure<any>('ask', [q]); const answer = typeof res === 'string' ? res : res?.answer ?? JSON.stringify(res); const cites: string[] = Array.isArray(res?.citations) ? res.citations : []; answerEl.innerHTML = `<p>${esc(String(answer))}</p>${cites.length ? `<p>${cites.map(cite).join(' ')}</p>` : ''}`; }
-  catch (err) { answerEl.innerHTML = `<p class="muted">${esc((err as Error).message)}</p>`; }
+  catch (err) { console.error(err); answerEl.innerHTML = `<p class="muted">No answer right now. Try again in a moment, or read the handoff.</p>`; }
 });
 
 async function renderDrawer() {
@@ -88,7 +89,7 @@ async function renderDrawer() {
   const url = state.photos.get(id) ?? await loadPhoto(id); if (url) drawerImg.src = url; else drawerImg.removeAttribute('src');
   const p = perception(e); const place = placeOf(id); const assets = assetsOf(id);
   const rows: [string, string][] = [
-    ['Summary', esc(e.summary || 'processing…')],
+    ['Summary', e.summary && e.confidence > 0 ? esc(e.summary) : `<span class="muted">${e.status === 'failed' ? 'This photo could not be read.' : e.summary ? 'Stored. Perception has not run on this photo yet.' : 'Reading the photo…'}</span>`],
     ['Status', `<span class="st ${e.status}">${e.status.replace('_', ' ')}</span>`],
     ['Place', place ? esc(place.canonicalName) : '—'],
     ['Assets', assets.length ? assets.map(a => esc(a.canonicalName)).join(', ') : '—'],
@@ -100,10 +101,12 @@ async function renderDrawer() {
   if (e.note) rows.push(['Note', `“${esc(e.note)}”`]);
   if (p?.text_in_scene?.length) rows.push(['Text read', `<ul>${p.text_in_scene.map((t: string) => `<li class="mono">${esc(String(t))}</li>`).join('')}</ul>`]);
   if (p?.changes_since_previous?.length) rows.push(['Changes', `<ul>${p.changes_since_previous.map((c: any) => `<li>${esc(String(c.entity))}: ${esc(String(c.from))} → ${esc(String(c.to))}</li>`).join('')}</ul>`]);
-  rows.push(['Source', esc(e.source)], ['Captured', `<span class="mono">${esc(e.clientT)}</span>`], ['Event', `<span class="mono">${e.eventId}</span>`]);
-  drawerFields.innerHTML = rows.map(([k, v]) => `<dt>${k}</dt><dd class="${/mono/.test(v) ? '' : ''}">${v}</dd>`).join('');
+  const SOURCE: Record<string, string> = { shutter_button: 'glasses shutter', sdk_capture: 'app capture', camera_roll: 'camera roll import', manual_upload: 'manual upload' };
+  const prov = `<details><summary>Provenance</summary><dl><dt>Source</dt><dd>${esc(SOURCE[e.source] ?? e.source)}</dd><dt>Captured</dt><dd class="mono">${esc(e.clientT.replace('T', ' ').slice(0, 19))}</dd><dt>Event</dt><dd class="mono">${e.eventId}</dd></dl></details>`;
+  drawerFields.innerHTML = rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('') + prov;
 }
 document.getElementById('drawer-close')!.addEventListener('click', () => select(null));
+document.addEventListener('select', () => { if (state.selected) { (drawer.parentElement as HTMLElement).scrollTop = 0; setTimeout(() => (document.getElementById('drawer-close') as HTMLElement)?.focus(), 50); } });
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && !drawer.hidden) select(null); });
 
 export function renderRail() { renderAlerts(); renderHandoff(); renderDrawer(); }
