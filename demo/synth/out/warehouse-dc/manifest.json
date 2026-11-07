@@ -1,0 +1,96 @@
+{
+  "shots": {
+    "01-dock-door": {
+      "file": "01-dock-door.jpg",
+      "provider": "azure/flux-2-pro",
+      "seed": 12427,
+      "prompt": "Unedited first-person snapshot from a head-mounted wearable camera at eye level, deep focus with everything sharp, no bokeh, inside a large distribution center warehouse, slightly off-level framing, high-bay LED lighting, light sensor noise, realistic, no people or faces in frame. An open warehouse loading dock door with a trailer backed in and pallets of boxes; a large yellow sign above the door reads \"DOCK 14\". Off-center casual framing, not a composed hero shot. Flat practical lighting, deep focus with the background nearly as sharp as the foreground, no cinematic depth of field, no dramatic lighting, no text overlays or watermarks.",
+      "check": {
+        "pass": true,
+        "missing": [],
+        "faces": 0,
+        "looks_real": true,
+        "read": [
+          "DOCK 14",
+          "1",
+          "111",
+          "US EDD MOON",
+          "VILNIENVEIN",
+          "NO M3 PEDUT",
+          "IN YOH MOON",
+          "VIMWIVILITAN",
+          "YKSCY EHINA"
+        ]
+      }
+    },
+    "02-charger": {
+      "file": "02-charger.jpg",
+      "provider": "azure/flux-2-pro",
+      "seed": 61922,
+      "prompt": "Unedited first-person snapshot from a head-mounted wearable camera at eye level, deep focus with everything sharp, no bokeh, inside a large distribution center warehouse, slightly off-level framing, high-bay LED lighting, light sensor noise, realistic, no people or faces in frame. An industrial forklift battery charger on a wall with a cable plugged into a forklift; a large label reads \"CHG-05\" and its display shows \"78%\". Off-center casual framing, not a composed hero shot. Flat practical lighting, deep focus with the background nearly as sharp as the foreground, no cinematic depth of field, no dramatic lighting, no text overlays or watermarks.",
+      "check": {
+        "pass": true,
+        "missing": [],
+        "faces": 0,
+        "looks_real": true,
+        "read": [
+          "78%",
+          "CHG-05",
+          "Critico",
+          "CIA"
+        ]
+      }
+    },
+    "03-racking-ok": {
+      "file": "03-racking-ok.jpg",
+      "provider": "azure/flux-2-pro",
+      "seed": 58214,
+      "prompt": "Unedited first-person snapshot from a head-mounted wearable camera at eye level, deep focus with everything sharp, no bokeh, inside a large distribution center warehouse, slightly off-level framing, high-bay LED lighting, light sensor noise, realistic, no people or faces in frame. Orange and blue steel pallet racking loaded with shrink-wrapped pallets; a large aisle sign reads \"AISLE 22\"; the uprights and beams are straight and intact. Off-center casual framing, not a composed hero shot. Flat practical lighting, deep focus with the background nearly as sharp as the foreground, no cinematic depth of field, no dramatic lighting, no text overlays or watermarks.",
+      "check": {
+        "pass": true,
+        "missing": [],
+        "faces": 0,
+        "looks_real": true,
+        "read": [
+          "AISLE",
+          "22"
+        ]
+      }
+    },
+    "05-freezer": {
+      "file": "05-freezer.jpg",
+      "provider": "azure/flux-2-pro",
+      "seed": 1858,
+      "prompt": "Unedited first-person snapshot from a head-mounted wearable camera at eye level, deep focus with everything sharp, no bokeh, inside a large distribution center warehouse, slightly off-level framing, high-bay LED lighting, light sensor noise, realistic, no people or faces in frame. Insulated walk-in freezer door with frost around the seal; a label reads \"FZ-1\" and a digital display beside it shows \"-18C\". Off-center casual framing, not a composed hero shot. Flat practical lighting, deep focus with the background nearly as sharp as the foreground, no cinematic depth of field, no dramatic lighting, no text overlays or watermarks.",
+      "check": {
+        "pass": true,
+        "missing": [],
+        "faces": 0,
+        "looks_real": true,
+        "read": [
+          "FZ-1",
+          "18°C"
+        ]
+      }
+    },
+    "04-racking-damaged": {
+      "file": "04-racking-damaged.jpg",
+      "provider": "azure/flux-2-pro",
+      "seed": 93209,
+      "prompt": "Unedited first-person snapshot from a head-mounted wearable camera at eye level, deep focus with everything sharp, no bokeh, inside a large distribution center warehouse, slightly off-level framing, high-bay LED lighting, light sensor noise, realistic, no people or faces in frame. Looking down at the base of a blue steel pallet racking upright in aisle 22 that is badly bent and buckled inward from a forklift impact, with scraped paint and a dented base plate; loaded pallets above; a large white aisle sign reading \"AISLE 22\" is visible in the top of the frame. Off-center casual framing, not a composed hero shot. Flat practical lighting, deep focus with the background nearly as sharp as the foreground, no cinematic depth of field, no dramatic lighting, no text overlays or watermarks.",
+      "check": {
+        "pass": true,
+        "missing": [],
+        "faces": 0,
+        "looks_real": true,
+        "read": [
+          "AISLE 22",
+          "222"
+        ]
+      }
+    }
+  },
+  "scenario": "warehouse-dc",
+  "title": "Distribution center safety walk",
+  "synthetic": true
+}

@@ -1,0 +1,115 @@
+{
+  "shots": {
+    "01-site-sign": {
+      "file": "01-site-sign.jpg",
+      "provider": "azure/flux-2-pro",
+      "seed": 17894,
+      "prompt": "Unedited first-person snapshot from a head-mounted wearable camera at eye level, deep focus with everything sharp, no bokeh, outdoors at an electrical utility substation, slightly off-level framing, overcast daylight, gravel ground, chain-link fence, light sensor noise, realistic, no people or faces in frame. A white sign mounted on a chain-link fence gate reads \"NORTHLAKE SUBSTATION\" in large red letters, with high-voltage equipment behind the fence. Off-center casual framing, not a composed hero shot. Flat practical lighting, deep focus with the background nearly as sharp as the foreground, no cinematic depth of field, no dramatic lighting, no text overlays or watermarks.",
+      "check": {
+        "pass": true,
+        "missing": [],
+        "faces": 0,
+        "looks_real": true,
+        "read": [
+          "NORTHLAKE",
+          "SUBSTATION",
+          "WARNING",
+          "HOUSEDEUR",
+          "MILKISMONERY",
+          "DANGER",
+          "HIGH VOLTAGE",
+          "KEEP OUT"
+        ]
+      }
+    },
+    "02-transformer": {
+      "file": "02-transformer.jpg",
+      "provider": "azure/flux-2-pro",
+      "seed": 78174,
+      "prompt": "Unedited first-person snapshot from a head-mounted wearable camera at eye level, deep focus with everything sharp, no bokeh, outdoors at an electrical utility substation, slightly off-level framing, overcast daylight, gravel ground, chain-link fence, light sensor noise, realistic, no people or faces in frame. Side of a large green oil-filled power transformer with cooling fins and an analog oil temperature gauge; a big white stenciled marking on the tank reads \"T2\". Off-center casual framing, not a composed hero shot. Flat practical lighting, deep focus with the background nearly as sharp as the foreground, no cinematic depth of field, no dramatic lighting, no text overlays or watermarks.",
+      "check": {
+        "pass": true,
+        "missing": [],
+        "faces": 0,
+        "looks_real": true,
+        "read": [
+          "T2",
+          "TEMP",
+          "100",
+          "80",
+          "60",
+          "40",
+          "20",
+          "0",
+          "300",
+          "200",
+          "100",
+          "DANGER",
+          "HIGH VOLTAGE",
+          "KEEP OUT",
+          "AUTHORIZED PERSONNEL ONLY",
+          "NO TRESPASSING",
+          "WARNING",
+          "HIGH VOLTAGE",
+          "DANGER",
+          "KEEP OUT",
+          "AUTHORIZED PERSONNEL ONLY",
+          "NO TRESPASSING",
+          "WARNING",
+          "HIGH VOLTAGE",
+          "DANGER",
+          "KEEP OUT",
+          "AUTHORIZED PERSONNEL ONLY",
+          "NO TRESPASSING",
+          "WARNING",
+          "HIGH VOLTAGE",
+          "DANGER",
+          "KEEP OUT",
+          "AUTHORIZED PERSONNEL ONLY",
+          "NO TRESPASSING",
+          "WARNING",
+          "HIGH VOLTAGE"
+        ]
+      }
+    },
+    "03-breaker-closed": {
+      "file": "03-breaker-closed.jpg",
+      "provider": "azure/flux-2-pro",
+      "seed": 10703,
+      "prompt": "Unedited first-person snapshot from a head-mounted wearable camera at eye level, deep focus with everything sharp, no bokeh, outdoors at an electrical utility substation, slightly off-level framing, overcast daylight, gravel ground, chain-link fence, light sensor noise, realistic, no people or faces in frame. Open door of an outdoor gray circuit breaker control cabinet; a white printed sticker label on the door reads \"CB-12\" in large bold black letters; a mechanical position indicator flag shows \"CLOSED\" in red and a counter. Off-center casual framing, not a composed hero shot. Flat practical lighting, deep focus with the background nearly as sharp as the foreground, no cinematic depth of field, no dramatic lighting, no text overlays or watermarks.",
+      "check": {
+        "pass": true,
+        "missing": [],
+        "faces": 0,
+        "looks_real": true,
+        "read": [
+          "CB-12",
+          "CLOSED",
+          "CERTIFIED"
+        ]
+      }
+    },
+    "04-breaker-tripped": {
+      "file": "04-breaker-tripped.jpg",
+      "provider": "azure/flux-2-pro",
+      "seed": 10703,
+      "edited_from": "03-breaker-closed",
+      "prompt": "EDIT of previous shot: change the position indicator flag so it reads \"TRIPPED\" and light the yellow alarm lamp; change nothing else.",
+      "check": {
+        "pass": true,
+        "missing": [],
+        "faces": 0,
+        "looks_real": true,
+        "read": [
+          "CB-12",
+          "TRIPPED",
+          "CERTIFIED",
+          "CB-12"
+        ]
+      }
+    }
+  },
+  "scenario": "utility-substation",
+  "title": "Utility field service: substation inspection",
+  "synthetic": true
+}

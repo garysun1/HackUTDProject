@@ -1,0 +1,148 @@
+{
+  "shots": {
+    "01-zone-valve": {
+      "file": "01-zone-valve.jpg",
+      "provider": "azure/flux-2-pro",
+      "seed": 26780,
+      "prompt": "Unedited first-person snapshot from a head-mounted wearable camera at eye level, deep focus with everything sharp, no bokeh, in a hospital back-of-house corridor or equipment room, slightly off-level framing, bright clinical fluorescent lighting, light sensor noise, realistic, no people, no patients, no faces in frame. A wall-mounted medical gas zone valve box with a clear window, green oxygen valve handle and a pressure gauge; a printed label above it reads \"ZONE VALVE 4 WEST\". Off-center casual framing, not a composed hero shot. Flat practical lighting, deep focus with the background nearly as sharp as the foreground, no cinematic depth of field, no dramatic lighting, no text overlays or watermarks.",
+      "check": {
+        "pass": true,
+        "missing": [],
+        "faces": 0,
+        "looks_real": true,
+        "read": [
+          "ZONE VALVE 4 WEST",
+          "CONEB",
+          "OXYGEN VALVE",
+          "0",
+          "10",
+          "20",
+          "30",
+          "40",
+          "50",
+          "60",
+          "70",
+          "80",
+          "90",
+          "100",
+          "PSI",
+          "MAX 100",
+          "MIN 0",
+          "AR-1",
+          "N5-Port"
+        ]
+      }
+    },
+    "02-infusion-pumps": {
+      "file": "02-infusion-pumps.jpg",
+      "provider": "azure/flux-2-pro",
+      "seed": 72436,
+      "prompt": "Unedited first-person snapshot from a head-mounted wearable camera at eye level, deep focus with everything sharp, no bokeh, in a hospital back-of-house corridor or equipment room, slightly off-level framing, bright clinical fluorescent lighting, light sensor noise, realistic, no people, no patients, no faces in frame. Three infusion pumps on a metal shelf in a biomedical workshop; a white asset tag sticker on the front pump reads \"BME-10442\" in large black text. Off-center casual framing, not a composed hero shot. Flat practical lighting, deep focus with the background nearly as sharp as the foreground, no cinematic depth of field, no dramatic lighting, no text overlays or watermarks.",
+      "check": {
+        "pass": true,
+        "missing": [],
+        "faces": 0,
+        "looks_real": true,
+        "read": [
+          "BME-10442",
+          "Sorrento",
+          "OK",
+          "ESC",
+          "545",
+          "611",
+          "6000",
+          "1",
+          "2",
+          "3",
+          "4",
+          "5",
+          "6",
+          "7",
+          "8",
+          "9",
+          "0",
+          "Sorrento"
+        ]
+      }
+    },
+    "03-blood-fridge-ok": {
+      "file": "03-blood-fridge-ok.jpg",
+      "provider": "azure/flux-2-pro",
+      "seed": 6867,
+      "prompt": "Unedited first-person snapshot from a head-mounted wearable camera at eye level, deep focus with everything sharp, no bokeh, in a hospital back-of-house corridor or equipment room, slightly off-level framing, bright clinical fluorescent lighting, light sensor noise, realistic, no people, no patients, no faces in frame. Front of a glass-door blood bank refrigerator full of labeled blood bags; a label on the door reads \"BBR-2\"; its digital temperature display shows \"4.1C\" in green. Off-center casual framing, not a composed hero shot. Flat practical lighting, deep focus with the background nearly as sharp as the foreground, no cinematic depth of field, no dramatic lighting, no text overlays or watermarks.",
+      "check": {
+        "pass": true,
+        "missing": [],
+        "faces": 0,
+        "looks_real": true,
+        "read": [
+          "4.1°C",
+          "BBR-2",
+          "SUPPLIES",
+          "BBR-2",
+          "BBR-2",
+          "BBR-2",
+          "JH1",
+          "O B+",
+          "B-",
+          "AB+",
+          "A+",
+          "H+",
+          "HG",
+          "EXIT",
+          "EXIT"
+        ]
+      }
+    },
+    "04-blood-fridge-alarm": {
+      "file": "04-blood-fridge-alarm.jpg",
+      "provider": "azure/flux-2-pro",
+      "seed": 6868,
+      "edited_from": "03-blood-fridge-ok",
+      "prompt": "EDIT of previous shot: change only the digital temperature display so it flashes red \"ALARM 8.9C HIGH TEMP\".",
+      "check": {
+        "pass": true,
+        "missing": [],
+        "faces": 0,
+        "looks_real": true,
+        "read": [
+          "ALARM 8.9C HIGH TEMP",
+          "BBR-2",
+          "SUPPLIES",
+          "BBR-2",
+          "BBR-2",
+          "BBR-2",
+          "JH1",
+          "O B+",
+          "B",
+          "AB+",
+          "A+",
+          "I+",
+          "OG",
+          "HG",
+          "EXIT",
+          "EXIT"
+        ]
+      }
+    },
+    "05-transfer-switch": {
+      "file": "05-transfer-switch.jpg",
+      "provider": "azure/flux-2-pro",
+      "seed": 31005,
+      "prompt": "Unedited first-person snapshot from a head-mounted wearable camera at eye level, deep focus with everything sharp, no bokeh, in a hospital back-of-house corridor or equipment room, slightly off-level framing, bright clinical fluorescent lighting, light sensor noise, realistic, no people, no patients, no faces in frame. Gray electrical automatic transfer switch cabinet in a generator room with indicator lights; a large engraved nameplate reads \"ATS-1\" and a lit green indicator reads \"NORMAL SOURCE\". Off-center casual framing, not a composed hero shot. Flat practical lighting, deep focus with the background nearly as sharp as the foreground, no cinematic depth of field, no dramatic lighting, no text overlays or watermarks.",
+      "check": {
+        "pass": true,
+        "missing": [],
+        "faces": 0,
+        "looks_real": true,
+        "read": [
+          "ATS-1",
+          "NORMAL SOURCE"
+        ]
+      }
+    }
+  },
+  "scenario": "hospital-biomed",
+  "title": "Hospital facilities and biomedical engineering rounds",
+  "synthetic": true
+}

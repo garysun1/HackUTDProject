@@ -4,28 +4,102 @@
   "summary": "Clinical engineering rounds in back-of-house areas only (no patients): a medical gas zone valve, infusion pumps due for maintenance, a blood bank refrigerator that goes into high-temperature alarm, and the emergency power transfer switch.",
   "shift_start": "2026-11-07T07:00:00-06:00",
   "style": "Unedited first-person snapshot from a head-mounted wearable camera at eye level, deep focus with everything sharp, no bokeh, in a hospital back-of-house corridor or equipment room, slightly off-level framing, bright clinical fluorescent lighting, light sensor noise, realistic, no people, no patients, no faces in frame.",
-  "wearers": [ { "key": "aisha", "name": "Aisha (biomed)", "role": "Clinical engineer", "shift": "Day" } ],
+  "wearers": [
+    {
+      "key": "aisha",
+      "name": "Aisha (biomed)",
+      "role": "Clinical engineer",
+      "shift": "Day"
+    }
+  ],
   "assets": [
-    { "asset_id": "ZV-4W", "name": "Medical gas zone valve 4 West", "type": "med-gas", "location": "4 West corridor", "patterns": ["4 WEST"] },
-    { "asset_id": "BME-10442", "name": "Infusion pump BME-10442", "type": "infusion-pump", "location": "Biomed shop", "patterns": ["10442"] },
-    { "asset_id": "BBR-2", "name": "Blood bank refrigerator 2", "type": "refrigerator", "location": "Lab / blood bank", "patterns": ["BBR 2"] },
-    { "asset_id": "ATS-1", "name": "Automatic transfer switch 1", "type": "ats", "location": "Generator room", "patterns": ["ATS 1"] }
+    {
+      "asset_id": "ZV-4W",
+      "name": "Medical gas zone valve 4 West",
+      "type": "med-gas",
+      "location": "4 West corridor",
+      "patterns": [
+        "4 WEST"
+      ]
+    },
+    {
+      "asset_id": "BME-10442",
+      "name": "Infusion pump BME-10442",
+      "type": "infusion-pump",
+      "location": "Biomed shop",
+      "patterns": [
+        "10442"
+      ]
+    },
+    {
+      "asset_id": "BBR-2",
+      "name": "Blood bank refrigerator 2",
+      "type": "refrigerator",
+      "location": "Lab / blood bank",
+      "patterns": [
+        "BBR 2"
+      ]
+    },
+    {
+      "asset_id": "ATS-1",
+      "name": "Automatic transfer switch 1",
+      "type": "ats",
+      "location": "Generator room",
+      "patterns": [
+        "ATS 1"
+      ]
+    }
   ],
   "shots": [
-    { "id": "01-zone-valve", "t": 0, "wearer": "aisha",
+    {
+      "id": "01-zone-valve",
+      "t": 0,
+      "wearer": "aisha",
       "prompt": "A wall-mounted medical gas zone valve box with a clear window, green oxygen valve handle and a pressure gauge; a printed label above it reads \"ZONE VALVE 4 WEST\".",
-      "read": ["4 WEST"] },
-    { "id": "02-infusion-pumps", "t": 14, "wearer": "aisha",
+      "read": [
+        "4 WEST"
+      ]
+    },
+    {
+      "id": "02-infusion-pumps",
+      "t": 14,
+      "wearer": "aisha",
       "prompt": "Three infusion pumps on a metal shelf in a biomedical workshop; a white asset tag sticker on the front pump reads \"BME-10442\" in large black text.",
-      "read": ["BME-10442"] },
-    { "id": "03-blood-fridge-ok", "t": 27, "wearer": "aisha", "pair": "bbr",
+      "read": [
+        "BME-10442"
+      ]
+    },
+    {
+      "id": "03-blood-fridge-ok",
+      "t": 27,
+      "wearer": "aisha",
+      "pair": "bbr",
       "prompt": "Front of a glass-door blood bank refrigerator full of labeled blood bags; a label on the door reads \"BBR-2\"; its digital temperature display shows \"4.1C\" in green.",
-      "read": ["BBR-2"] },
-    { "id": "04-blood-fridge-alarm", "t": 51, "wearer": "aisha", "pair": "bbr",
+      "read": [
+        "BBR-2"
+      ]
+    },
+    {
+      "id": "04-blood-fridge-alarm",
+      "t": 51,
+      "wearer": "aisha",
+      "pair": "bbr",
       "prompt": "Front of a glass-door blood bank refrigerator full of labeled blood bags; a label on the door reads \"BBR-2\"; its digital display flashes red \"ALARM 8.9C HIGH TEMP\".",
-      "read": ["BBR-2", "ALARM"], "expect": "alert" },
-    { "id": "05-transfer-switch", "t": 63, "wearer": "aisha",
+      "read": [
+        "BBR-2",
+        "ALARM"
+      ],
+      "expect": "alert",
+      "edit": "change only the digital temperature display so it flashes red \"ALARM 8.9C HIGH TEMP\"."
+    },
+    {
+      "id": "05-transfer-switch",
+      "t": 63,
+      "wearer": "aisha",
       "prompt": "Gray electrical automatic transfer switch cabinet in a generator room with indicator lights; a large engraved nameplate reads \"ATS-1\" and a lit green indicator reads \"NORMAL SOURCE\".",
-      "read": ["ATS-1"] }
+      "read": [
+        "ATS-1"
+      ]
+    }
   ]
 }
