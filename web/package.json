@@ -1,0 +1,19 @@
+{
+  "name": "wm-console",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "bindings": "cd .. && spacetime generate --lang typescript --module-path module/spacetimedb --out-dir web/src/module_bindings --yes"
+  },
+  "dependencies": {
+    "spacetimedb": "2.14.*"
+  },
+  "devDependencies": {
+    "typescript": "~5.6.2",
+    "vite": "^6.0.0"
+  }
+}
