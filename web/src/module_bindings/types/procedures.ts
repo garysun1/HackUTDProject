@@ -8,9 +8,12 @@ import { type Infer as __Infer } from "spacetimedb";
 // Import all procedure arg schemas
 import * as IngestPhotoProcedure from "../ingest_photo_procedure";
 import * as PingProcedure from "../ping_procedure";
+import * as SlackTestProcedure from "../slack_test_procedure";
 
 export type IngestPhotoArgs = __Infer<typeof IngestPhotoProcedure.params>;
 export type IngestPhotoResult = __Infer<typeof IngestPhotoProcedure.returnType>;
 export type PingArgs = __Infer<typeof PingProcedure.params>;
 export type PingResult = __Infer<typeof PingProcedure.returnType>;
+export type SlackTestArgs = __Infer<typeof SlackTestProcedure.params>;
+export type SlackTestResult = __Infer<typeof SlackTestProcedure.returnType>;
 

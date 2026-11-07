@@ -1,4 +1,4 @@
-import { state, visibleEvents, allAlerts, edgesFrom, props, placeOf, assetsOf, fmtTime, wearerName, wearerColor, loadPhoto, perception, callProcedure, hasProcedure, nowMicros, type Ev } from './store';
+import { state, visibleEvents, allAlerts, ackAlert, edgesFrom, props, placeOf, assetsOf, fmtTime, wearerName, wearerColor, loadPhoto, perception, callProcedure, hasProcedure, nowMicros, type Ev } from './store';
 import { select, esc } from './timeline';
 
 const alertsEl = document.getElementById('alerts') as HTMLUListElement;
@@ -13,7 +13,7 @@ const drawer = document.getElementById('drawer') as HTMLElement;
 const drawerImg = document.getElementById('drawer-img') as HTMLImageElement;
 const drawerTitle = document.getElementById('drawer-title') as HTMLElement;
 const drawerFields = document.getElementById('drawer-fields') as HTMLElement;
-const acked = new Set<string>();
+const acking = new Set<string>();
 let haveAsk = false, haveHandoff = false;
 hasProcedure('ask').then(v => { haveAsk = v; renderRail(); });
 hasProcedure('handoff').then(v => { haveHandoff = v; renderRail(); });
@@ -25,13 +25,16 @@ handoffEl.addEventListener('click', e => { const t = (e.target as HTMLElement).c
 answerEl.addEventListener('click', e => { const t = (e.target as HTMLElement).closest('.cite') as HTMLElement | null; if (t?.dataset.id) select(t.dataset.id); });
 
 function renderAlerts() {
-  const alerts = allAlerts().filter(a => !acked.has(a.id)).sort((a, b) => (a.tMicros < b.tMicros ? 1 : -1));
-  alertCount.textContent = String(alerts.length); alertsEmpty.hidden = alerts.length > 0; alertsEl.innerHTML = '';
+  const alerts = allAlerts();
+  alertCount.textContent = alerts.length ? String(alerts.length) : ''; alertsEmpty.hidden = alerts.length > 0; alertsEl.innerHTML = '';
   for (const a of alerts) {
-    const li = document.createElement('li'); li.className = 'alert'; li.setAttribute('role', 'button'); li.tabIndex = 0;
-    const asset = a.assetId ? state.entities.get(a.assetId)?.canonicalName : undefined;
-    li.innerHTML = `${ICON[a.kind]}<div><div class="txt">${esc(a.text)}</div><div class="t">${fmtTime(a.tMicros)}${asset ? ` · ${esc(asset)}` : ''} · ${a.kind}</div></div><button class="btn ghost" type="button" data-ack="${esc(a.id)}">Ack</button>`;
-    li.addEventListener('click', ev => { const b = (ev.target as HTMLElement).closest('[data-ack]') as HTMLElement | null; if (b) { acked.add(b.dataset.ack!); renderRail(); } else select(a.eventId); });
+    const li = document.createElement('li'); li.className = 'alert';
+    const asset = a.assetName || (a.assetId ? state.entities.get(a.assetId)?.canonicalName : undefined);
+    const who = a.wearerName || wearerName(a.deviceId);
+    const busy = acking.has(a.id);
+    li.innerHTML = `<button class="alert-open" type="button" data-open="${esc(a.eventId)}" aria-label="Open photo for ${esc(a.text)}">${ICON[a.kind]}<span><span class="txt">${esc(a.text)}</span><span class="t">${fmtTime(a.tMicros)}${asset ? ` · ${esc(asset)}` : ''} · ${esc(who)} · ${esc(a.rawKind.replace('_', ' '))}</span></span></button><button class="btn ghost" type="button" data-ack="${esc(a.id)}" ${busy ? 'disabled' : ''}>${busy ? '…' : 'Acknowledge'}</button>`;
+    li.querySelector('[data-open]')!.addEventListener('click', () => select(a.eventId));
+    li.querySelector('[data-ack]')!.addEventListener('click', async () => { acking.add(a.id); renderRail(); try { await ackAlert(a.alertId); } catch (e) { console.error(e); } finally { acking.delete(a.id); renderRail(); } });
     alertsEl.appendChild(li);
   }
 }

@@ -10,6 +10,31 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
+export const Alert = __t.object("Alert", {
+  alertId: __t.u64(),
+  eventId: __t.string(),
+  tMicros: __t.u64(),
+  kind: __t.string(),
+  text: __t.string(),
+  entityId: __t.string(),
+  entityName: __t.string(),
+  deviceId: __t.string(),
+  wearerName: __t.string(),
+  acked: __t.bool(),
+  ackedMicros: __t.option(__t.u64()),
+  slackStatus: __t.string(),
+});
+export type Alert = __Infer<typeof Alert>;
+
+export const Asset = __t.object("Asset", {
+  assetId: __t.string(),
+  name: __t.string(),
+  assetType: __t.string(),
+  location: __t.string(),
+  patterns: __t.array(__t.string()),
+});
+export type Asset = __Infer<typeof Asset>;
+
 export const Edge = __t.object("Edge", {
   edgeId: __t.u64(),
   fromId: __t.string(),
@@ -98,4 +123,17 @@ export const Pong = __t.object("Pong", {
   tMicros: __t.string(),
 });
 export type Pong = __Infer<typeof Pong>;
+
+export const SlackTestResult = __t.object("SlackTestResult", {
+  status: __t.string(),
+});
+export type SlackTestResult = __Infer<typeof SlackTestResult>;
+
+export const Wearer = __t.object("Wearer", {
+  deviceId: __t.string(),
+  name: __t.string(),
+  role: __t.string(),
+  shift: __t.string(),
+});
+export type Wearer = __Infer<typeof Wearer>;
 

@@ -34,25 +34,62 @@ import {
 } from "spacetimedb";
 
 // Import all reducer arg schemas
+import AckAlertReducer from "./ack_alert_reducer";
+import DeleteAssetReducer from "./delete_asset_reducer";
+import ReperceiveReducer from "./reperceive_reducer";
 import SetLabelReducer from "./set_label_reducer";
 import SetNoteReducer from "./set_note_reducer";
+import UpsertAssetReducer from "./upsert_asset_reducer";
+import UpsertWearerReducer from "./upsert_wearer_reducer";
 
 // Import all procedure arg schemas
 import * as IngestPhotoProcedure from "./ingest_photo_procedure";
 import * as PingProcedure from "./ping_procedure";
+import * as SlackTestProcedure from "./slack_test_procedure";
 
 // Import all table schema definitions
+import AlertRow from "./alert_table";
+import AssetRow from "./asset_table";
 import EdgeRow from "./edge_table";
 import EntityRow from "./entity_table";
 import EpisodeRow from "./episode_table";
 import EventRow from "./event_table";
 import HandoffRow from "./handoff_table";
 import PhotoRow from "./photo_table";
+import WearerRow from "./wearer_table";
 
 /** Type-only namespace exports for generated type groups. */
 
 /** The schema information for all tables in this module. This is defined the same was as the tables would have been defined in the server. */
 const tablesSchema = __schema({
+  alert: __table({
+    name: 'alert',
+    indexes: [
+      { accessor: 'alertId', name: 'alert_alert_id_idx_btree', algorithm: 'btree', columns: [
+        'alertId',
+      ] },
+      { accessor: 'eventId', name: 'alert_event_id_idx_btree', algorithm: 'btree', columns: [
+        'eventId',
+      ] },
+      { accessor: 'tMicros', name: 'alert_t_micros_idx_btree', algorithm: 'btree', columns: [
+        'tMicros',
+      ] },
+    ],
+    constraints: [
+      { name: 'alert_alert_id_key', constraint: 'unique', columns: ['alertId'] },
+    ],
+  }, AlertRow),
+  asset: __table({
+    name: 'asset',
+    indexes: [
+      { accessor: 'assetId', name: 'asset_asset_id_idx_btree', algorithm: 'btree', columns: [
+        'assetId',
+      ] },
+    ],
+    constraints: [
+      { name: 'asset_asset_id_key', constraint: 'unique', columns: ['assetId'] },
+    ],
+  }, AssetRow),
   edge: __table({
     name: 'edge',
     indexes: [
@@ -134,18 +171,35 @@ const tablesSchema = __schema({
       { name: 'photo_event_id_key', constraint: 'unique', columns: ['eventId'] },
     ],
   }, PhotoRow),
+  wearer: __table({
+    name: 'wearer',
+    indexes: [
+      { accessor: 'deviceId', name: 'wearer_device_id_idx_btree', algorithm: 'btree', columns: [
+        'deviceId',
+      ] },
+    ],
+    constraints: [
+      { name: 'wearer_device_id_key', constraint: 'unique', columns: ['deviceId'] },
+    ],
+  }, WearerRow),
 });
 
 /** The schema information for all reducers in this module. This is defined the same way as the reducers would have been defined in the server, except the body of the reducer is omitted in code generation. */
 const reducersSchema = __reducers(
+  __reducerSchema("ack_alert", AckAlertReducer),
+  __reducerSchema("delete_asset", DeleteAssetReducer),
+  __reducerSchema("reperceive", ReperceiveReducer),
   __reducerSchema("set_label", SetLabelReducer),
   __reducerSchema("set_note", SetNoteReducer),
+  __reducerSchema("upsert_asset", UpsertAssetReducer),
+  __reducerSchema("upsert_wearer", UpsertWearerReducer),
 );
 
 /** The schema information for all procedures in this module. This is defined the same way as the procedures would have been defined in the server. */
 const proceduresSchema = __procedures(
   __procedureSchema("ingest_photo", IngestPhotoProcedure.params, IngestPhotoProcedure.returnType),
   __procedureSchema("ping", PingProcedure.params, PingProcedure.returnType),
+  __procedureSchema("slack_test", SlackTestProcedure.params, SlackTestProcedure.returnType),
 );
 
 /** The remote SpacetimeDB module schema, both runtime and type information. */

@@ -14,7 +14,9 @@ export type Ent = { entityId: string; canonicalName: string; kind: string; alias
 export type Edge = { edgeId: bigint; fromId: string; toId: string; kind: string; props: string };
 export type Episode = { episodeId: bigint; tStartMicros: bigint; tEndMicros: bigint; title: string; summary: string; eventIds: string[] };
 export type Handoff = { handoffId: bigint; sinceMicros: bigint; generatedMicros: bigint; text: string; eventIds: string[] };
-export type Alert = { id: string; eventId: string; kind: 'critical' | 'warning'; text: string; tMicros: bigint; assetId?: string };
+export type Alert = { id: string; alertId: bigint; eventId: string; kind: 'critical' | 'warning'; rawKind: string; text: string; tMicros: bigint; assetId?: string; assetName?: string; deviceId: string; wearerName: string; acked: boolean; slackStatus: string };
+export type Wearer = { deviceId: string; name: string; role: string; shift: string };
+export type Asset = { assetId: string; name: string; assetType: string; location: string; patterns: string[] };
 
 export const state = {
   events: new Map<string, Ev>(),
@@ -22,6 +24,9 @@ export const state = {
   edges: [] as Edge[],
   episodes: new Map<string, Episode>(),
   handoffs: [] as Handoff[],
+  alerts: new Map<string, Alert>(),
+  wearers: new Map<string, Wearer>(),
+  assets: new Map<string, Asset>(),
   photos: new Map<string, string>(), // eventId -> data URL
   selected: null as string | null,
   windowMin: 0 as number, // 0 = all
@@ -46,7 +51,10 @@ export function wearerColor(deviceId: string): string {
   if (!wearerIndex.has(deviceId)) wearerIndex.set(deviceId, wearerIndex.size);
   return WEARER_COLORS[wearerIndex.get(deviceId)! % WEARER_COLORS.length];
 }
-export function wearerName(deviceId: string): string { return deviceId.length > 12 ? deviceId.slice(0, 8) : deviceId; }
+export function wearerName(deviceId: string): string {
+  const w = state.wearers.get(deviceId); if (w?.name) return w.name;
+  return deviceId.replace(/[-_]?(iphone|phone|device)$/i, '') || deviceId;
+}
 export function nowMicros(): bigint { return BigInt(Date.now()) * 1000n; }
 export function fmtTime(micros: bigint): string {
   return new Date(Number(micros / 1000n)).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -67,15 +75,14 @@ export function placeOf(eventId: string): Ent | undefined {
 export function assetsOf(eventId: string): Ent[] {
   return edgesFrom(eventId, 'INVOLVES').filter(x => props(x).role !== 'setting').map(x => state.entities.get(x.toId)).filter((x): x is Ent => !!x);
 }
-const WARN = /\b(FAULT|ALARM|ERROR|OVERTEMP|OVER ?CURRENT|CRITICAL|DO NOT|WARNING|TRIPPED|LEAK)\b/i;
-export function alertsFor(e: Ev): Alert[] {
-  const out: Alert[] = []; const p = perception(e); if (!p) return out;
-  const assets = assetsOf(e.eventId); const assetId = assets[0]?.entityId;
-  for (const t of (p.text_in_scene ?? [])) if (typeof t === 'string' && WARN.test(t)) out.push({ id: `${e.eventId}:${t}`, eventId: e.eventId, kind: /FAULT|ALARM|CRITICAL|TRIPPED|LEAK/i.test(t) ? 'critical' : 'warning', text: t, tMicros: e.tMicros, assetId });
-  for (const c of (p.changes_since_previous ?? [])) { const to = String(c?.to ?? ''); if (WARN.test(to)) out.push({ id: `${e.eventId}:${c.entity}:${to}`, eventId: e.eventId, kind: 'critical', text: `${c.entity}: ${c.from} → ${to}`, tMicros: e.tMicros, assetId }); }
-  return out;
+// Alerts are rows written by the module's rule in `perceive`; the browser derives nothing.
+export function alertsFor(e: Ev): Alert[] { return [...state.alerts.values()].filter(a => a.eventId === e.eventId); }
+export function openAlerts(): Alert[] {
+  const vis = new Set(visibleEvents().map(e => e.eventId));
+  return [...state.alerts.values()].filter(a => !a.acked && vis.has(a.eventId)).sort((a, b) => (a.tMicros < b.tMicros ? 1 : -1));
 }
-export function allAlerts(): Alert[] { return visibleEvents().flatMap(alertsFor); }
+export function allAlerts(): Alert[] { return openAlerts(); }
+export async function ackAlert(alertId: bigint) { await callProcedure('ack_alert', [Number(alertId)]); }
 
 // ---------- photos (lazy, via SQL endpoint) ----------
 const photoCol = 'jpeg_b_64';
@@ -118,9 +125,17 @@ export function connect(onState: (s: 'connecting' | 'live' | 'error', msg?: stri
       conn.db.episode.onInsert((_c, r) => { state.episodes.set(String(r.episodeId), { ...r, episodeId: BigInt(r.episodeId), tStartMicros: BigInt(r.tStartMicros), tEndMicros: BigInt(r.tEndMicros), eventIds: [...r.eventIds] }); notify(); });
       conn.db.episode.onUpdate((_c, _o, r) => { state.episodes.set(String(r.episodeId), { ...r, episodeId: BigInt(r.episodeId), tStartMicros: BigInt(r.tStartMicros), tEndMicros: BigInt(r.tEndMicros), eventIds: [...r.eventIds] }); notify(); });
       conn.db.handoff.onInsert((_c, r) => { state.handoffs.push({ ...r, handoffId: BigInt(r.handoffId), sinceMicros: BigInt(r.sinceMicros), generatedMicros: BigInt(r.generatedMicros), eventIds: [...r.eventIds] }); notify(); });
+      const toAlert = (r: any): Alert => ({ id: String(r.alertId), alertId: BigInt(r.alertId), eventId: r.eventId, rawKind: r.kind, kind: r.kind === 'anomaly' ? 'warning' : 'critical', text: r.text, tMicros: BigInt(r.tMicros), assetId: r.entityId || undefined, assetName: r.entityName || undefined, deviceId: r.deviceId, wearerName: r.wearerName, acked: !!r.acked, slackStatus: r.slackStatus });
+      conn.db.alert.onInsert((_c, r) => { const a = toAlert(r); state.alerts.set(a.id, a); state.fresh.add(a.eventId); setTimeout(() => { state.fresh.delete(a.eventId); notify(); }, 1200); notify(); });
+      conn.db.alert.onUpdate((_c, _o, r) => { const a = toAlert(r); state.alerts.set(a.id, a); notify(); });
+      conn.db.alert.onDelete((_c, r) => { state.alerts.delete(String(r.alertId)); notify(); });
+      conn.db.wearer.onInsert((_c, r) => { state.wearers.set(r.deviceId, { ...r }); notify(); });
+      conn.db.wearer.onUpdate((_c, _o, r) => { state.wearers.set(r.deviceId, { ...r }); notify(); });
+      conn.db.asset.onInsert((_c, r) => { state.assets.set(r.assetId, { ...r, patterns: [...r.patterns] }); notify(); });
+      conn.db.asset.onUpdate((_c, _o, r) => { state.assets.set(r.assetId, { ...r, patterns: [...r.patterns] }); notify(); });
       conn.subscriptionBuilder()
         .onApplied(() => notify())
-        .subscribe(['SELECT * FROM event', 'SELECT * FROM entity', 'SELECT * FROM edge', 'SELECT * FROM episode', 'SELECT * FROM handoff']);
+        .subscribe(['SELECT * FROM event', 'SELECT * FROM entity', 'SELECT * FROM edge', 'SELECT * FROM episode', 'SELECT * FROM handoff', 'SELECT * FROM alert', 'SELECT * FROM wearer', 'SELECT * FROM asset']);
     })
     .onConnectError((_ctx, err) => { state.connected = false; onState('error', String(err?.message ?? err)); })
     .onDisconnect(() => { state.connected = false; onState('connecting', 'reconnecting'); })
