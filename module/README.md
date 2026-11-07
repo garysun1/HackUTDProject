@@ -30,12 +30,19 @@ cd module && node --experimental-strip-types --test test/rules.test.ts
 ## Secrets and config (#14)
 
 Secrets are the database's environment variables, declared in the schema and never in the repo.
-Set them from a logged-in laptop (`spacetime login` first):
+From a logged-in laptop (`spacetime login` first), in `module/`: publish the code first so the
+new variables are declared, then set their values with `--env-only` (the form used for #3):
+
+```bash
+spacetime publish wm-physical --server maincloud
+```
 
 ```bash
 NVIDIA_API_KEY=... AZURE_AI_KEY=... SLACK_WEBHOOK_URL=https://hooks.slack.com/services/... ADMIN_TOKEN=... \
   spacetime publish wm-physical --env-only --server maincloud
 ```
+
+Verify with `spacetime describe wm-physical env --server maincloud` (lists the declared env).
 
 | Variable | Required | Use |
 |---|---|---|
