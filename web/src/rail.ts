@@ -1,10 +1,15 @@
-import { state, visibleEvents, allAlerts, ackAlert, edgesFrom, props, placeOf, assetsOf, displayName, fmtTime, wearerName, wearerColor, loadPhoto, perception, callProcedure, hasProcedure, nowMicros, type Ev } from './store';
+import { state, visibleEvents, allAlerts, ackAlert, edgesFrom, props, placeOf, assetsOf, displayName, fmtTime, wearerName, wearerColor, loadPhoto, perception, callProcedure, hasProcedure, nowMicros, notify, type Ev, type Asset } from './store';
 import { select, esc } from './timeline';
 
 const alertsEl = document.getElementById('alerts') as HTMLUListElement;
 const alertsEmpty = document.getElementById('alerts-empty') as HTMLElement;
 const alertCount = document.getElementById('alert-count') as HTMLElement;
 const handoffEl = document.getElementById('handoff') as HTMLElement;
+const kpisEl = document.getElementById('kpis') as HTMLElement;
+const coverageEl = document.getElementById('coverage') as HTMLElement; const coverageCount = document.getElementById('coverage-count') as HTMLElement;
+const changesEl = document.getElementById('changes') as HTMLElement; const changesCount = document.getElementById('changes-count') as HTMLElement;
+const notesEl = document.getElementById('notes') as HTMLElement;
+const askPanel = document.getElementById('ask-panel') as HTMLElement;
 const genBtn = document.getElementById('gen-handoff') as HTMLButtonElement;
 const askForm = document.getElementById('ask-form') as HTMLFormElement;
 const askInput = document.getElementById('ask-input') as HTMLInputElement;
@@ -22,8 +27,75 @@ const ICON = { critical: '<svg viewBox="0 0 16 16" fill="none" stroke="#d03b3b" 
 
 const GLYPH = '<svg viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 1.5 6.5 5 3 8.5"/></svg>';
 function cite(id: string) { const e = state.events.get(id); const who = e ? wearerName(e.deviceId) : ''; return `<button type="button" class="cite" data-id="${id}" aria-label="Open photo from ${e ? fmtTime(e.tMicros) : id}">${e ? fmtTime(e.tMicros) : id.slice(0, 6)}${who ? ` ${esc(who)}` : ''}${GLYPH}</button>`; }
-handoffEl.addEventListener('click', e => { const t = (e.target as HTMLElement).closest('.cite') as HTMLElement | null; if (t?.dataset.id) select(t.dataset.id); });
-answerEl.addEventListener('click', e => { const t = (e.target as HTMLElement).closest('.cite') as HTMLElement | null; if (t?.dataset.id) select(t.dataset.id); });
+for (const el of [handoffEl, answerEl, coverageEl, changesEl, notesEl, kpisEl]) el.addEventListener('click', e => {
+  const c = (e.target as HTMLElement).closest('.cite') as HTMLElement | null; if (c?.dataset.id) { select(c.dataset.id); return; }
+  const f = (e.target as HTMLElement).closest('[data-asset]') as HTMLElement | null; if (f) { state.assetFilter = state.assetFilter === f.dataset.asset ? null : f.dataset.asset!; notify(); }
+});
+
+// Age of a moment, for operators: "4 min", "2 h 10 min", "3 d".
+function ago(micros: bigint): string {
+  const m = Math.max(0, Math.round(Number((nowMicros() - micros) / 60_000_000n)));
+  if (m < 1) return 'just now'; if (m < 60) return `${m} min`;
+  const h = Math.floor(m / 60); if (h < 24) return m % 60 ? `${h} h ${m % 60} min` : `${h} h`;
+  return `${Math.floor(h / 24)} d`;
+}
+function whenSeen(micros: bigint): string {
+  const d = new Date(Number(micros / 1000n)); const sameDay = d.toDateString() === new Date().toDateString();
+  return sameDay ? fmtTime(micros) : `${d.toLocaleDateString([], { month: 'short', day: 'numeric' })} ${fmtTime(micros)}`;
+}
+const entityIdOf = (assetId: string) => assetId.toLowerCase().replace(/-/g, '_');
+
+// Registry coverage: which assets the shift has and has not laid eyes on in this window.
+function coverage() {
+  const evs = visibleEvents(); const lastInWindow = new Map<string, Ev>();
+  for (const e of evs) for (const a of assetsOf(e.eventId)) if (!lastInWindow.has(a.entityId)) lastInWindow.set(a.entityId, e); // evs are newest first
+  const seen: { asset: Asset; ev: Ev }[] = [], missed: { asset: Asset; last?: bigint }[] = [];
+  for (const asset of state.assets.values()) {
+    const id = entityIdOf(asset.assetId); const ev = lastInWindow.get(id);
+    if (ev) seen.push({ asset, ev }); else missed.push({ asset, last: state.entities.get(id)?.lastSeenMicros });
+  }
+  missed.sort((a, b) => Number((a.last ?? 0n) - (b.last ?? 0n)));
+  return { seen, missed, total: state.assets.size };
+}
+function changes() {
+  const out: { asset: string; line: string; id: string; t: bigint }[] = [];
+  for (const e of visibleEvents()) for (const ed of edgesFrom(e.eventId, 'CHANGES')) { const p = props(ed); const ent = state.entities.get(ed.toId); const asset = ent ? displayName(ent) : ed.toId; out.push({ asset, line: `<b>${esc(asset)}</b>${p.attr ? ` ${esc(String(p.attr))}` : ''}: ${esc(String(p.from ?? '—'))} → ${esc(String(p.to ?? '—'))}`, id: e.eventId, t: e.tMicros }); }
+  return out;
+}
+
+function renderKpis() {
+  const evs = visibleEvents(); const alerts = allAlerts(); const cov = coverage(); const chg = changes();
+  const oldest = alerts.length ? alerts.reduce((m, a) => (a.tMicros < m ? a.tMicros : m), alerts[0].tMicros) : null;
+  const last = evs[0]; const lastAge = last ? Number((nowMicros() - last.tMicros) / 60_000_000n) : null;
+  const pct = cov.total ? Math.round((cov.seen.length / cov.total) * 100) : 0;
+  const tile = (label: string, value: string, sub: string, tone = '', extra = '') => `<div class="kpi ${tone}"><span class="kl">${label}</span><span class="kv">${value}</span>${extra}<span class="ks">${sub}</span></div>`;
+  kpisEl.innerHTML =
+    tile('Open alerts', String(alerts.length), alerts.length ? `oldest ${ago(oldest!)}` : 'all clear', alerts.length ? 'crit' : 'good') +
+    tile('Assets inspected', cov.total ? `${cov.seen.length}<span class="kof"> of ${cov.total}</span>` : '—', cov.total ? (cov.missed.length ? `${cov.missed.length} not seen` : 'full coverage') : 'no registry loaded', cov.total && cov.missed.length ? 'warn' : '', cov.total ? `<span class="meter" role="img" aria-label="${pct}% of registry assets seen"><i style="width:${pct}%"></i></span>` : '') +
+    tile('State changes', String(chg.length), chg.length ? `latest ${ago(chg[0].t)} ago` : 'none recorded') +
+    tile('Last capture', last ? ago(last.tMicros) : '—', last ? `${esc(wearerName(last.deviceId))}${placeOf(last.eventId) ? ` · ${esc(placeOf(last.eventId)!.canonicalName)}` : ''}` : 'no photos in window', lastAge != null && lastAge > 60 ? 'warn' : '');
+}
+function renderCoverage() {
+  const cov = coverage();
+  coverageCount.textContent = cov.total ? `${cov.missed.length} of ${cov.total}` : '';
+  if (!cov.total) { coverageEl.innerHTML = '<p class="muted">No asset registry loaded. Seed it with module/scripts/seed.mjs.</p>'; return; }
+  let html = cov.missed.length
+    ? `<ul>${cov.missed.map(m => `<li><span><b>${esc(m.asset.assetId)}</b> <span class="muted">${esc(m.asset.name)}${m.asset.location ? ` · ${esc(m.asset.location)}` : ''}</span></span><span class="when ${m.last ? '' : 'never'}">${m.last ? `last ${whenSeen(m.last)}` : 'never seen'}</span></li>`).join('')}</ul>`
+    : '<p class="good">Every registry asset was photographed in this window.</p>';
+  if (cov.seen.length) html += `<p class="seen">Seen: ${cov.seen.map(s => `<button type="button" class="asset-chip" data-asset="${entityIdOf(s.asset.assetId)}" aria-pressed="${state.assetFilter === entityIdOf(s.asset.assetId)}" title="Last ${fmtTime(s.ev.tMicros)} by ${esc(wearerName(s.ev.deviceId))}">${esc(s.asset.assetId)}</button>`).join(' ')}</p>`;
+  coverageEl.innerHTML = html;
+}
+function renderChanges() {
+  const chg = changes(); changesCount.textContent = chg.length ? String(chg.length) : '';
+  changesEl.innerHTML = chg.length ? `<ul>${chg.map(c => `<li><span>${c.line}</span>${cite(c.id)}</li>`).join('')}</ul>` : '<p class="muted">No state changes recorded in this window.</p>';
+}
+function renderNotes() {
+  const evs = visibleEvents().filter(e => e.note || e.label);
+  const low = visibleEvents().filter(e => e.status === 'in_graph' && e.confidence > 0 && e.confidence < 0.5);
+  let html = evs.length ? `<ul>${evs.map(e => `<li><span>${e.label ? `<b>${esc(e.label)}</b> ` : ''}${e.note ? `“${esc(e.note)}”` : ''}</span>${cite(e.eventId)}</li>`).join('')}</ul>` : '<p class="muted">No notes left in this window.</p>';
+  if (low.length) html += `<h3>Uncertain reads</h3><ul>${low.map(e => `<li><span>${esc(e.summary)}</span>${cite(e.eventId)}</li>`).join('')}</ul>`;
+  notesEl.innerHTML = html;
+}
 
 function renderAlerts() {
   const alerts = allAlerts();
@@ -34,39 +106,24 @@ function renderAlerts() {
     const asset = assetEnt ? displayName(assetEnt) : a.assetName;
     const who = a.wearerName || wearerName(a.deviceId);
     const busy = acking.has(a.id);
-    li.innerHTML = `<button class="alert-open" type="button" data-open="${esc(a.eventId)}" aria-label="Open photo for ${esc(a.text)}">${ICON[a.kind]}<span><span class="txt">${esc(a.text)}</span><span class="t">${fmtTime(a.tMicros)}${asset ? ` · ${esc(asset)}` : ''} · ${esc(who)} · ${esc(a.rawKind.replace('_', ' '))}</span></span></button><button class="btn ghost" type="button" data-ack="${esc(a.id)}" ${busy ? 'disabled' : ''}>${busy ? '…' : 'Acknowledge'}</button>`;
+    li.innerHTML = `<button class="alert-open" type="button" data-open="${esc(a.eventId)}" aria-label="Open photo for ${esc(a.text)}">${ICON[a.kind]}<span><span class="txt">${asset ? `${esc(asset)} · ` : ''}${esc(a.text)}</span><span class="t">open ${ago(a.tMicros)} · ${fmtTime(a.tMicros)} · ${esc(who)} · ${esc(a.rawKind.replace('_', ' '))}</span></span></button><button class="btn ghost" type="button" data-ack="${esc(a.id)}" ${busy ? 'disabled' : ''}>${busy ? '…' : 'Acknowledge'}</button>`;
     li.querySelector('[data-open]')!.addEventListener('click', () => select(a.eventId));
     li.querySelector('[data-ack]')!.addEventListener('click', async () => { acking.add(a.id); renderRail(); try { await ackAlert(a.alertId); } catch (e) { console.error(e); } finally { acking.delete(a.id); renderRail(); } });
     alertsEl.appendChild(li);
   }
 }
 
-// Handoff skeleton: graph-derived facts; the module's `handoff` procedure adds the narrative.
-function handoffSkeleton(): string {
-  const evs = visibleEvents(); if (!evs.length) return '<p class="muted">Nothing in this window yet.</p>';
-  const first = evs[evs.length - 1], last = evs[0];
-  const wearers = [...new Set(evs.map(e => e.deviceId))];
-  let html = `<p class="lead">${fmtTime(first.tMicros)}–${fmtTime(last.tMicros)} · ${evs.length} events · ${wearers.map(w => `<span class="who"><i style="background:${wearerColor(w)}"></i>${esc(wearerName(w))}</span>`).join(', ')}</p>`;
-  const alerts = allAlerts();
-  if (alerts.length) html += `<h3>Needs attention</h3><ul>${alerts.map(a => `<li><span>${esc(a.text)}</span>${cite(a.eventId)}</li>`).join('')}</ul>`;
-  const changes: { asset: string; line: string; id: string }[] = [];
-  for (const e of evs) for (const ed of edgesFrom(e.eventId, 'CHANGES')) { const p = props(ed); const ent = state.entities.get(ed.toId); const asset = ent ? displayName(ent) : ed.toId; changes.push({ asset, line: `${asset}${p.attr ? ` ${esc(String(p.attr))}` : ''}: ${esc(String(p.from ?? ''))} → ${esc(String(p.to ?? ''))}`, id: e.eventId }); }
-  if (changes.length) html += `<h3>What changed</h3><ul>${changes.map(c => `<li><span>${c.line}</span>${cite(c.id)}</li>`).join('')}</ul>`;
-  const byPlace = new Map<string, Ev[]>();
-  for (const e of evs) { const p = placeOf(e.eventId)?.canonicalName ?? 'unplaced'; (byPlace.get(p) ?? byPlace.set(p, []).get(p)!).push(e); }
-  html += `<h3>Where people were</h3><ul>${[...byPlace.entries()].map(([p, es]) => { const t0 = es[es.length - 1].tMicros, t1 = es[0].tMicros; return `<li><span>${esc(p)} · ${es.length} photo${es.length > 1 ? 's' : ''} · ${fmtTime(t0)}${t1 !== t0 ? `–${fmtTime(t1)}` : ''}</span>${cite(es[0].eventId)}</li>`; }).join('')}</ul>`;
-  const notes = evs.filter(e => e.note || e.label);
-  if (notes.length) html += `<h3>Notes left by the shift</h3><ul>${notes.map(e => `<li><span>${e.label ? `<b>${esc(e.label)}</b> ` : ''}${e.note ? `“${esc(e.note)}”` : ''}</span>${cite(e.eventId)}</li>`).join('')}</ul>`;
-  const low = evs.filter(e => e.status === 'in_graph' && e.confidence > 0 && e.confidence < 0.5);
-  if (low.length) html += `<h3>Uncertain</h3><ul>${low.map(e => `<li><span>${esc(e.summary)}</span>${cite(e.eventId)}</li>`).join('')}</ul>`;
-  return html;
-}
+// Handoff: the written narrative from the module's `handoff` procedure. The panels above are the facts.
 let narrative: string | null = null;
 function renderHandoff() {
-  const latest = state.handoffs[state.handoffs.length - 1];
-  handoffEl.innerHTML = (narrative ? `<p class="lead">${esc(narrative)}</p>` : latest ? `<p class="lead">${esc(latest.text)}</p>` : '') + handoffSkeleton() + (haveHandoff ? '' : '<p class="muted" style="margin-top:8px">Facts from the graph, one photo per line. The written summary is not enabled yet.</p>');
-  genBtn.disabled = !haveHandoff;
+  const evs = visibleEvents(); const latest = state.handoffs[state.handoffs.length - 1];
+  const wearers = [...new Set(evs.map(e => e.deviceId))];
+  const scope = evs.length ? `<p class="lead">${fmtTime(evs[evs.length - 1].tMicros)}–${fmtTime(evs[0].tMicros)} · ${evs.length} photos · ${wearers.map(w => `<span class="who"><i style="background:${wearerColor(w)}"></i>${esc(wearerName(w))}</span>`).join(', ')}</p>` : '<p class="muted">Nothing in this window yet.</p>';
+  const text = narrative ?? latest?.text ?? null;
+  handoffEl.innerHTML = scope + (text ? `<p class="narrative">${esc(text)}</p>` : `<p class="muted">${haveHandoff ? 'Generate writes the handoff from the facts above, every line cited.' : 'The written handoff is not enabled on this floor yet. The panels above are the handoff.'}</p>`);
+  genBtn.disabled = !haveHandoff; genBtn.classList.toggle('primary', haveHandoff);
   genBtn.title = haveHandoff ? 'Write the narrative with Nemotron' : 'Narrative generation not deployed yet';
+  askPanel.hidden = !haveAsk;
 }
 genBtn.addEventListener('click', async () => {
   genBtn.disabled = true; genBtn.textContent = 'Writing…';
@@ -111,4 +168,4 @@ document.getElementById('drawer-close')!.addEventListener('click', () => select(
 document.addEventListener('select', () => { if (state.selected) { (drawer.parentElement as HTMLElement).scrollTop = 0; setTimeout(() => (document.getElementById('drawer-close') as HTMLElement)?.focus(), 50); } });
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && !drawer.hidden) select(null); });
 
-export function renderRail() { renderAlerts(); renderHandoff(); renderDrawer(); }
+export function renderRail() { renderKpis(); renderAlerts(); renderCoverage(); renderChanges(); renderNotes(); renderHandoff(); renderDrawer(); }

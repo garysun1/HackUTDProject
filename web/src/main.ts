@@ -17,7 +17,9 @@ function renderChips() {
     let b = wearersEl.querySelector(`[data-id="${CSS.escape(id)}"]`) as HTMLButtonElement | null;
     if (!b) { b = document.createElement('button'); b.className = 'chip'; b.type = 'button'; b.dataset.id = id; wearersEl.appendChild(b); }
     b.setAttribute('aria-pressed', String(!state.hiddenWearers.has(id)));
-    b.innerHTML = `<i style="background:${wearerColor(id)}"></i>${wearerName(id)}`;
+    const cutoff = state.windowMin ? BigInt(Date.now() - state.windowMin * 60_000) * 1000n : 0n;
+    const n = [...state.events.values()].filter(e => e.deviceId === id && e.tMicros >= cutoff).length;
+    b.innerHTML = `<i style="background:${wearerColor(id)}"></i>${wearerName(id)}<span class="n">${n}</span>`;
   }
   if (focused) (wearersEl.querySelector(`[data-id="${CSS.escape(focused)}"]`) as HTMLElement | null)?.focus();
 }
@@ -37,7 +39,7 @@ tlToggle.addEventListener('click', () => setTimeline(grid.dataset.tl === 'collap
 grid.addEventListener('transitionend', e => { if (e.propertyName === 'grid-template-columns') renderFloor(); });
 try { if (localStorage.getItem('wm.timeline') === 'collapsed') setTimeline(false); } catch { /* ignore */ }
 document.addEventListener('select', () => notify());
-setInterval(() => { if (visibleEvents().length) renderFloor(); }, 15000); // the "now" edge of the time axis advances
+setInterval(() => { if (visibleEvents().length) { renderFloor(); renderRail(); } }, 15000); // "now" advances: time axis and ages
 
 const stale = document.getElementById('stale')!;
 connect((s, msg) => {

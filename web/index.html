@@ -31,17 +31,30 @@
     <canvas id="floor" role="img" aria-label="Floor schematic: places as zones, assets as tiles, photos as marks on a time axis. The timeline lists the same events."></canvas>
     <p class="empty" id="floor-empty">The schematic draws itself from places and assets as photos arrive.</p>
   </section>
-  <aside class="col rail" aria-label="Operations">
+  <aside class="col rail" aria-label="Shift status">
+    <section class="panel kpis" id="kpis" aria-label="Shift at a glance"></section>
     <section class="panel" id="alerts-panel">
       <div class="colhead"><h2>Needs attention</h2><span class="count" id="alert-count" aria-live="polite"></span></div>
       <ul id="alerts" class="alerts"></ul>
       <p class="empty" id="alerts-empty">All clear. Nothing open.</p>
     </section>
+    <section class="panel" id="coverage-panel">
+      <div class="colhead"><h2>Not inspected</h2><span class="count" id="coverage-count"></span></div>
+      <div id="coverage" class="handoff"></div>
+    </section>
+    <section class="panel" id="changes-panel">
+      <div class="colhead"><h2>What changed</h2><span class="count" id="changes-count"></span></div>
+      <div id="changes" class="handoff"></div>
+    </section>
+    <section class="panel" id="notes-panel">
+      <div class="colhead"><h2>Notes left by the shift</h2></div>
+      <div id="notes" class="handoff"></div>
+    </section>
     <section class="panel" id="handoff-panel">
-      <div class="colhead"><h2>Handoff</h2><button id="gen-handoff" class="btn primary" type="button">Generate</button></div>
+      <div class="colhead"><h2>Handoff</h2><button id="gen-handoff" class="btn" type="button">Generate</button></div>
       <div id="handoff" class="handoff"></div>
     </section>
-    <section class="panel" id="ask-panel">
+    <section class="panel" id="ask-panel" hidden>
       <div class="colhead"><h2>Ask the floor</h2></div>
       <form id="ask-form" class="ask"><label class="sr" for="ask-input">Question for the floor</label><input id="ask-input" type="text" placeholder="What happened to PDU-A today?" autocomplete="off" /><button class="btn" type="submit">Ask</button></form>
       <div id="answer" class="answer"></div>

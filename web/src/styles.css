@@ -75,6 +75,7 @@ select { background: var(--ground); border: 1px solid var(--line-strong); border
 .chip { border: 1px solid var(--line-strong); background: var(--ground); border-radius: 999px; padding: 3px 10px 3px 8px; min-height: 26px; font-size: 13px; display: inline-flex; align-items: center; gap: 7px; cursor: pointer; white-space: nowrap; color: var(--ink); }
 .chip:hover { background: var(--hover); }
 .chip i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.chip .n { font-size: 11px; color: var(--ink-3); font-variant-numeric: tabular-nums; margin-left: -2px; }
 .chip[aria-pressed="false"] { color: var(--ink-3); border-style: dashed; background: transparent; } .chip[aria-pressed="false"] i { opacity: .3; }
 
 /* layout */
@@ -156,6 +157,23 @@ body[data-conn="connecting"] .col, body[data-conn="error"] .col { opacity: .7; }
 .alert svg { width: 16px; height: 16px; margin-top: 2px; }
 .alert .t { display: block; font-size: 12px; color: var(--ink-3); margin-top: 2px; }
 .alert .txt { display: block; font-size: 14px; line-height: 1.35; font-weight: 500; }
+/* KPI row: four stat tiles, label / value / sub. Status tone only on the value. */
+.kpis { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--line-soft); }
+.kpi { background: var(--rail); padding: 12px 14px 10px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.kpi .kl { font-size: 12px; color: var(--ink-3); }
+.kpi .kv { font: 600 22px/1.15 var(--font); font-variant-numeric: tabular-nums; color: var(--ink); letter-spacing: -.01em; }
+.kpi .kof { font-size: 14px; font-weight: 500; color: var(--ink-3); }
+.kpi .ks { font-size: 12px; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kpi.crit .kv { color: var(--critical-ink); } .kpi.warn .kv { color: var(--warning-ink); } .kpi.good .ks { color: var(--good-ink); }
+.kpi .meter { display: block; height: 4px; border-radius: 2px; background: color-mix(in srgb, var(--accent) 18%, transparent); margin: 6px 0 4px; overflow: hidden; }
+.kpi .meter i { display: block; height: 100%; border-radius: 2px; background: var(--accent); }
+.handoff .when { font-size: 12px; color: var(--ink-3); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.handoff .when.never { color: var(--warning-ink); font-weight: 500; }
+.handoff .seen { margin: 10px 0 0; font-size: 12px; color: var(--ink-3); display: flex; flex-wrap: wrap; gap: 4px 6px; align-items: center; }
+.asset-chip { font: 500 12px var(--mono); color: var(--entity); background: var(--ground); border: 1px solid var(--line-strong); border-radius: 4px; padding: 1px 6px; cursor: pointer; min-height: 22px; }
+.asset-chip:hover { background: var(--hover); } .asset-chip[aria-pressed="true"] { background: var(--ink); color: var(--ground); border-color: var(--ink); }
+.handoff .good { color: var(--good-ink); margin: 4px 0; font-size: 13px; }
+.handoff .narrative { margin: 8px 0 2px; line-height: 1.5; white-space: pre-wrap; }
 .handoff { padding: 10px 14px 12px; font-size: 14px; }
 .handoff h3 { margin: 14px 0 4px; font-size: 12px; font-weight: 600; color: var(--ink-3); text-transform: uppercase; letter-spacing: .04em; }
 .handoff ul { margin: 0; padding-left: 0; list-style: none; }
@@ -163,7 +181,7 @@ body[data-conn="connecting"] .col, body[data-conn="error"] .col { opacity: .7; }
 .handoff li:last-child { border-bottom: 0; }
 .handoff .lead { color: var(--ink-2); margin: 4px 0 2px; font-size: 13px; }
 .handoff .lead .who { display: inline-flex; align-items: center; gap: 5px; color: var(--ink); } .handoff .lead .who i { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
-.handoff .muted { color: var(--ink-3); font-size: 13px; }
+.handoff .muted { color: var(--ink-3); font-size: 13px; margin: 2px 0; }
 .tags .muted { color: var(--ink-3); }
 .cite { font-size: 12px; color: var(--link); white-space: nowrap; cursor: pointer; background: none; border: 0; padding: 4px 2px; min-height: 24px; font-variant-numeric: tabular-nums; }
 .cite:hover { text-decoration: underline; text-underline-offset: 3px; }
