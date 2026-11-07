@@ -129,13 +129,15 @@ final class IngestClient: IngestClientProtocol, Sendable {
 
   // MARK: - Error mapping
 
-  /// The module raises `SenderError('<code>')` for validation failures and SpacetimeDB answers
-  /// with a 4xx carrying the code in the body. A rejected token or payload is permanent; every
-  /// other status is classified by `IngestError.isRetryable`.
+  /// The module raises `SenderError('<code>')` for validation failures. Observed on Maincloud: the
+  /// HTTP `/call` endpoint answers **500** with the body
+  /// `The module instance encountered a fatal error: invalid_token`, so the code in the body, not the
+  /// status, decides. A rejected token or payload is permanent; anything else goes through
+  /// `IngestError.isRetryable`.
   private static func failure(status: Int, body: Data) -> IngestError {
     let text = excerpt(body)
-    if text.contains("invalid_token") { return .invalidToken }
-    if text.contains("missing_") || text.contains("invalid_event_json") || text.contains("missing_photo") {
+    if text.contains("invalid_token") || text.contains("unauthorized") { return .invalidToken }
+    if text.contains("missing_") || text.contains("invalid_event_json") || text.contains("not_found") {
       return .badRequest(text)
     }
     return .http(status: status, body: text)
