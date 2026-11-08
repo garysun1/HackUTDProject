@@ -68,7 +68,7 @@ export function snapshot(clock: number): Snapshot {
   const all = shifts().filter(s => !state.hiddenWearers.has(s.deviceId));
   const active = all.filter(s => shiftLive(s, clock));
   const past = all.filter(s => shiftEnd(s) < clock);
-  const latestIdle = active.length ? null : (past.length ? past[past.length - 1] : null);
+  const latestIdle = active.length ? null : (past.length ? past.reduce((a, b) => (shiftEnd(b) > shiftEnd(a) ? b : a)) : null);
   const alerts = [...state.alerts.values()].filter(a => !state.hiddenWearers.has(a.deviceId));
   const open = alerts.filter(a => openAt(a, clock)).sort((a, b) => raisedAt(b) - raisedAt(a));
   const resolvedRecently = alerts.filter(a => raisedAt(a) <= clock && resolvedAt(a) <= clock).sort((a, b) => resolvedAt(b) - resolvedAt(a)).slice(0, 3);
@@ -124,7 +124,7 @@ export function renderBrain(el: HTMLElement, ctx: BrainCtx): Snapshot {
   }
   const evHtml = (e: Ev) => {
     const open = alertsFor(e).some(a => openAt(a, ctx.clock));
-    const chg = edgesFrom(e.eventId, 'CHANGES').map(x => props(x)).map(p => p.text || p.summary || (p.entity ? `${p.entity}: ${p.from} → ${p.to}` : 'changed'));
+    const chg = edgesFrom(e.eventId, 'CHANGES').map(x => props(x)).map(p => `${p.attr && !/^(status|state|description)$/i.test(String(p.attr)) ? String(p.attr).replace(/_/g, ' ') + ': ' : ''}${p.from ?? ''} → ${p.to ?? ''}`);
     const url = state.photos.get(e.eventId); if (!url) loadPhoto(e.eventId);
     const isAck = !!e.note && /^briefing ack/i.test(e.note);
     const place = placeOf(e.eventId)?.canonicalName || e.locationGuess;
