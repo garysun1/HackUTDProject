@@ -146,7 +146,8 @@ function frame(now: number) {
         const trail: number[] = []; let last = s.smooth[0];
         for (const q of s.smooth) { if (q.tMs > clock) break; last = q; const [tx, tz] = scene.proj.toXZ(q.lon, q.lat); trail.push(tx, (q.floor ?? 0) * scene.floorH + 0.6, tz); }
         const [x, z] = scene.proj.toXZ(last.lon, last.lat); const y = (last.floor ?? 0) * scene.floorH + 1.1;
-        scene.setWearer(dev, { color: wearerColor(dev), name: wearerName(dev), sub: `ended ${fmtTime(shiftEnd(s))}`, pos: [x, y, z], trail });
+        const where = locate(last.lat, last.lon);
+        scene.setWearer(dev, { color: wearerColor(dev), name: wearerName(dev), sub: `${where ? where + ' · ' : ''}ended ${fmtTime(shiftEnd(s))}`, pos: [x, y, z], trail });
       } else scene.hideWearer(dev);
     }
   }
