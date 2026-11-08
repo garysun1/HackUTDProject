@@ -18,9 +18,13 @@ Pipeline (`src/`):
 
 Run: `node demo/weekend/src/build.mjs` from the repo root, then `cd web && npm run build`.
 
-The track between photos is reconstructed from photo times and positions and says so in the
-workspace subtitle; photo positions are the phone's fixes where the module has them and the
-Photos-library GPS otherwise.
+The track is the phone's real fixes wherever the capture app was tracking (Saturday 20:13 to
+Sunday 04:45); photos taken inside that coverage are pinned on the real track at their capture time.
+Everything else is reconstructed: the walk between photo positions is routed over the campus path
+network, and `extraWaypoints` in the manifest is an invented but plausible itinerary (breakfast and
+lunch at the Student Union, air breaks on the lawn, snack runs to the atrium, the level-4 team room)
+so the day reads the way it was lived. Shared photos arrived without EXIF, so their times were set by
+hand against the Photos library's timestamps and GPS. The workspace subtitle and decision 0033 say so.
 
 ## The demo beat (for `demo/DEMO_SCRIPT.md`, issue #29)
 

@@ -1623,13 +1623,169 @@
  ],
  "extraWaypoints": [
   {
-   "t": "2026-11-08T06:32:00-06:00",
+   "t": "2026-11-07T07:52:00-06:00",
+   "lat": 32.98615,
+   "lon": -96.7529,
+   "floor": 0,
+   "dwellMin": 3,
+   "label": "parked in Parking Structure 4"
+  },
+  {
+   "t": "2026-11-07T09:02:00-06:00",
+   "lat": 32.98678,
+   "lon": -96.74943,
+   "floor": 0,
+   "dwellMin": 30,
+   "label": "breakfast at the Student Union"
+  },
+  {
+   "t": "2026-11-07T09:48:00-06:00",
+   "lat": 32.98605,
+   "lon": -96.7515,
+   "floor": 0,
+   "dwellMin": 22,
+   "label": "atrium, looking for a table"
+  },
+  {
+   "t": "2026-11-07T10:22:00-06:00",
+   "lat": 32.9866,
+   "lon": -96.7515,
+   "floor": 0,
+   "dwellMin": 9,
+   "label": "north lawn, phone call"
+  },
+  {
+   "t": "2026-11-07T10:40:00-06:00",
+   "lat": 32.9859,
+   "lon": -96.75197,
+   "floor": 0,
+   "dwellMin": 12,
+   "label": "west entrance"
+  },
+  {
+   "t": "2026-11-07T12:32:00-06:00",
+   "lat": 32.98678,
+   "lon": -96.74943,
+   "floor": 0,
+   "dwellMin": 30,
+   "label": "lunch at the Student Union"
+  },
+  {
+   "t": "2026-11-07T13:12:00-06:00",
+   "lat": 32.98605,
+   "lon": -96.7515,
+   "floor": 0,
+   "dwellMin": 6,
+   "label": "back through the atrium"
+  },
+  {
+   "t": "2026-11-07T15:36:00-06:00",
    "lat": 32.98591,
    "lon": -96.75195,
    "floor": 3,
-   "dwellMin": 720,
-   "wander": 40,
-   "label": "team room, level 4, west side, through the morning"
+   "dwellMin": 34,
+   "label": "team room after the workshop",
+   "wander": 30
+  },
+  {
+   "t": "2026-11-07T16:20:00-06:00",
+   "lat": 32.98605,
+   "lon": -96.7515,
+   "floor": 0,
+   "dwellMin": 8,
+   "label": "snack run"
+  },
+  {
+   "t": "2026-11-07T16:36:00-06:00",
+   "lat": 32.98591,
+   "lon": -96.75195,
+   "floor": 3,
+   "dwellMin": 26,
+   "label": "team room"
+  },
+  {
+   "t": "2026-11-07T17:10:00-06:00",
+   "lat": 32.9866,
+   "lon": -96.7515,
+   "floor": 0,
+   "dwellMin": 12,
+   "label": "air break on the lawn"
+  },
+  {
+   "t": "2026-11-07T17:30:00-06:00",
+   "lat": 32.98591,
+   "lon": -96.75195,
+   "floor": 3,
+   "dwellMin": 32,
+   "label": "team room until the workshop",
+   "wander": 25
+  },
+  {
+   "t": "2026-11-08T06:40:00-06:00",
+   "lat": 32.98605,
+   "lon": -96.7515,
+   "floor": 0,
+   "dwellMin": 12,
+   "label": "coffee in the atrium"
+  },
+  {
+   "t": "2026-11-08T07:00:00-06:00",
+   "lat": 32.98591,
+   "lon": -96.75195,
+   "floor": 3,
+   "dwellMin": 60,
+   "label": "team room",
+   "wander": 30
+  },
+  {
+   "t": "2026-11-08T08:10:00-06:00",
+   "lat": 32.98678,
+   "lon": -96.74943,
+   "floor": 0,
+   "dwellMin": 25,
+   "label": "breakfast at the Student Union"
+  },
+  {
+   "t": "2026-11-08T08:46:00-06:00",
+   "lat": 32.98591,
+   "lon": -96.75195,
+   "floor": 3,
+   "dwellMin": 48,
+   "label": "team room",
+   "wander": 30
+  },
+  {
+   "t": "2026-11-08T09:42:00-06:00",
+   "lat": 32.98605,
+   "lon": -96.7515,
+   "floor": 0,
+   "dwellMin": 14,
+   "label": "mentor table in the atrium"
+  },
+  {
+   "t": "2026-11-08T10:02:00-06:00",
+   "lat": 32.98591,
+   "lon": -96.75195,
+   "floor": 3,
+   "dwellMin": 44,
+   "label": "team room"
+  },
+  {
+   "t": "2026-11-08T10:52:00-06:00",
+   "lat": 32.9866,
+   "lon": -96.7515,
+   "floor": 0,
+   "dwellMin": 9,
+   "label": "air break"
+  },
+  {
+   "t": "2026-11-08T11:06:00-06:00",
+   "lat": 32.98591,
+   "lon": -96.75195,
+   "floor": 3,
+   "dwellMin": 420,
+   "label": "team room through submission and judging",
+   "wander": 40
   }
  ],
  "badgeAfter": "2026-11-08T08:00:00-06:00"
