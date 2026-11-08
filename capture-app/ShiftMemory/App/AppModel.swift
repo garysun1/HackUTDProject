@@ -42,6 +42,10 @@ final class AppModel {
   let location: LocationTracker
   /// Barometric floor during a shift (#19); feeds `LocationFix.floor` through `location`.
   let altimeter: AltimeterFloorTracker
+  /// Pedometer floors and motion activity during a shift, cross-checked by the altimeter's fusion.
+  let motion: ShiftMotion
+  /// One CSV row per second during a shift for tuning floor detection (calibration.csv).
+  let calibration: CalibrationLogger
   let trackStore: TrackStore
   let trackUploader: TrackUploader
   /// Recent fixes (last 10 min) so a photo is placed where it was taken, not where the wearer stood
@@ -129,8 +133,11 @@ final class AppModel {
     briefingCheck = BriefingCheck(nvidia: nvidia, speaker: speaker, narrator: narrator, log: { DebugLog.write("Briefing", $0) })
     floor = FloorStore(repository: FloorRepository(client: client), log: { DebugLog.write("Floor", $0) })
     location = LocationTracker(log: { DebugLog.write("Location", $0) })
-    altimeter = AltimeterFloorTracker(log: { DebugLog.write("Floor", $0) },
-                                      config: FloorQuantizer.Config(floorHeightM: config.floorHeightM))
+    var fusionConfig = FloorFusion.Config()
+    fusionConfig.quantizer = FloorQuantizer.Config(floorHeightM: config.floorHeightM)
+    altimeter = AltimeterFloorTracker(log: { DebugLog.write("Floor", $0) }, config: fusionConfig)
+    motion = ShiftMotion(log: { DebugLog.write("Motion", $0) })
+    calibration = CalibrationLogger(log: { DebugLog.write("Calibration", $0) })
     let trackStore = TrackStore(directory: support.appending(path: "Track"))
     self.trackStore = trackStore
     trackUploader = TrackUploader(
@@ -182,9 +189,27 @@ final class AppModel {
     coordinator.shiftIdAt = { [weak self] date in self?.shiftId(at: date) }
     coordinator.locationAllowed = { [weak self] in self?.config.locationEnabled ?? false }
     location.barometricFloor = { [weak self] in self?.altimeter.floor }
+    altimeter.pedometerFloors = { [weak self] in self?.motion.pedometerFloors }
+    altimeter.isStationary = { [weak self] in self?.motion.isStationary }
+    altimeter.latestFix = { [weak self] in self?.location.latest }
     config.onFloorHeightChanged = { [weak self] height in
-      self?.altimeter.setConfig(FloorQuantizer.Config(floorHeightM: height))
+      guard let self else { return }
+      var c = self.altimeter.config
+      c.quantizer = FloorQuantizer.Config(floorHeightM: height, hysteresis: c.quantizer.hysteresis)
+      self.altimeter.setConfig(c)
     }
+    calibration.sample = { [weak self] in
+      guard let self else { return CalibrationLogger.Row() }
+      return CalibrationLogger.Row(
+        shiftId: self.config.activeShiftId.map { String($0.prefix(8)) } ?? "",
+        relativeAltitudeM: self.altimeter.relativeAltitudeM, pressureKPa: self.altimeter.pressureKPa,
+        floorsAscended: self.motion.floorsAscended, floorsDescended: self.motion.floorsDescended,
+        activity: self.motion.activity, activityConfidence: self.motion.activityConfidence,
+        fix: self.location.latest, floor: self.altimeter.floor,
+        baselineOffsetM: self.altimeter.isTracking ? self.altimeter.baselineOffsetM : nil,
+        decision: self.altimeter.lastDecision)
+    }
+    coordinator.onTypedNote = { [weak self] note in self?.calibration.note(note) }
     location.onTrackPoint = { [weak self] fix in
       guard let self else { return }
       self.enforceShiftLimit()
@@ -459,7 +484,7 @@ final class AppModel {
   /// Location mode follows the shift: tracking while one is open (also in the background), else
   /// foreground fixes only, so photos taken outside a shift are still placed. Off when disabled.
   func startLocation() {
-    guard config.locationEnabled else { location.stop(); altimeter.stop(); return }
+    guard config.locationEnabled else { location.stop(); stopShiftSensors(); return }
     if location.authorization == .notDetermined { location.requestAuthorization() }
     if config.activeShiftId != nil {
       if location.mode != .shift {
@@ -470,13 +495,21 @@ final class AppModel {
           DebugLog.write("Floor", "resuming a shift started \(Int(Date().timeIntervalSince(started) / 60)) min ago: floor 0 is the current floor, not the shift's first")
         }
         altimeter.startShift()
+        motion.start(from: Date())
+        calibration.start()
       }
     } else if location.mode == .shift {
       location.stopShift()
-      altimeter.stop()
+      stopShiftSensors()
     } else if location.mode == .off {
       location.startForeground()
     }
+  }
+
+  private func stopShiftSensors() {
+    altimeter.stop()
+    motion.stop()
+    calibration.stop()
   }
 
   /// Closes the open shift once it is older than `maxShiftDuration` (checked on every track point,

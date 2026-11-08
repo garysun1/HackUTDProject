@@ -1,3 +1,53 @@
+# Floor calibration build (Claude, 2026-11-08 ~01:30 CST) — branch `capture/floor-detection`
+
+On top of the barometric floor below. Edward walks a calibration route through ECSW; this build records the data to
+tune the step size and cross-checks every floor change. No module / web / schema change; `floor` stays an Int32
+relative to the shift start.
+
+- **`Application Support/calibration.csv`** (`Location/CalibrationLogger.swift`): one row per second while a shift is
+  live. Columns: `t, shift_id, rel_alt_m, pressure_kpa, floors_up, floors_down, activity, activity_conf, lat, lon,
+  h_acc_m, alt_m, v_acc_m, fix_age_s, bssid, ssid, floor, baseline_m, decision, note`. `floors_up/down` are CMPedometer
+  floors since Start shift; `activity` is CMMotionActivity; `bssid/ssid` from `NEHotspotNetwork.fetchCurrent` (blank
+  when iOS does not give them); `floor` is what the fusion outputs; `note` is the text typed on a photo, in the row
+  after the capture (the ground truth: "CAL L1 east stairs"). Pull it with
+  ```sh
+  xcrun devicectl device copy from --device 00008150-00020DD43E40C01C --domain-type appDataContainer \
+    --domain-identifier com.edwardkim.hackutd.shiftmemory --source "Library/Application Support/calibration.csv" --destination ./calibration.csv
+  ```
+- **Fusion** (`Location/FloorFusion.swift`, in front of `FloorQuantizer`; 17 tests in `FloorFusionTests`):
+  (a) a barometer step changes the floor only if the pedometer floor count changed in the last 60 s — **except
+  within 20 m of an elevator**, where the pedometer never counts (`Config.pedometerRequiredNearElevator = true` turns
+  the exception off); (b) the last GPS fix must be within 20 m of a stair or elevator in `Location/FloorSites.swift`
+  (`FloorSites.bySite["ecsw"]`, 3 stairs + 3 elevators from OSM; add a building there), or there must be no fix;
+  (c) while stationary (CMMotionActivity, ≥ medium confidence) and away from any site, drift under half a floor moves
+  the altitude baseline (`baseline_m`) instead of the floor. Every accept / reject / re-zero is logged to `debug.log`
+  as `[Floor] floor 0 -> 1 at 3.2 m relative; accepted: east stairs north at 6 m, pedometer floors changed 4 s ago`
+  (a persisting rejection is logged once). `Location/ShiftMotion.swift` runs the pedometer and activity updates.
+- Settings → Location shows floor, drift-corrected altitude, pedometer floors, activity and the last decision.
+
+**Device build:** `xcodebuild … -destination 'generic/platform=iOS' -derivedDataPath /tmp/sm-floor-dev
+-allowProvisioningUpdates build` succeeded (signed, team GBYFS3GAPJ) at `/tmp/sm-floor-dev/Build/Products/Debug-iphoneos/ShiftMemory.app`,
+but the iPhone was **not connected** (devicectl: unavailable), so it is **not installed**. With the phone on a USB-C
+data cable:
+```sh
+xcrun devicectl device install app --device 00008150-00020DD43E40C01C /tmp/sm-floor-dev/Build/Products/Debug-iphoneos/ShiftMemory.app
+xcrun devicectl device process launch --terminate-existing --device 00008150-00020DD43E40C01C com.edwardkim.hackutd.shiftmemory
+```
+(or rebuild with the device commands in the 18:00 section). First Start shift asks for Motion & Fitness: allow it.
+
+**Edward's calibration walk** (Settings → Location → Floor height left at 4.00 m; type each note in the Capture
+note field before taking the photo): Start shift on the ground floor in the Axxess Atrium, stand still 30 s, photo
+with note `CAL L0 atrium`; walk the ground-floor loop west to the Wood Shop and back; take the east stairs up one
+floor, 30 s still, photo `CAL L1 east stairs`; up again, photo `CAL L2`; up again, photo `CAL L3`; elevator down to
+the ground floor, photo `CAL L0 elevator`; End shift. Then pull `calibration.csv` and `debug.log`. The walk
+determines: the real metres per floor at ECSW (`rel_alt_m` at each `CAL L*` note; expected ~5.65), whether the
+pedometer counts each flight within 60 s of the barometer step (rule a), whether GPS indoors stays within 20 m of
+the stairs or drops out (rule b: a fix 40 m off would block every change — if so widen `siteRadiusM` or ignore fixes
+with `h_acc_m` > 30), how much the baseline drifts over the 30 s stills (rule c), and whether the elevator ride is
+accepted. Set `FloorQuantizer.Config.defaultFloorHeightM` from the result.
+
+---
+
 # Barometric floor (Claude, 2026-11-08 ~00:45 CST) — branch `capture/floor-detection`, on top of `capture/1-photo-button`
 
 Issue #19 follow-up for the 3D site view (PR #25): `CLFloor` is nil at ECSW, so every track point and photo sat on

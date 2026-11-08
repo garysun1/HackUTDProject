@@ -26,6 +26,8 @@ final class CaptureCoordinator {
   var takeSpokenNote: (() async -> String?)?
   /// Called after a glasses photo has been handed to the upload queue (end-of-shift handoff uses it).
   var onGlassesPhotoQueued: ((CaptureEvent) -> Void)?
+  /// The note the wearer typed for a photo, the moment the photo is taken (calibration ground truth).
+  var onTypedNote: ((String) -> Void)?
   /// The phone's best fix for the moment a photo was taken (contract v3.1), or nil.
   var locationAt: ((Date) -> LocationFix?)?
   /// The shift that was open at a given instant (attached to glasses photos), or nil.
@@ -73,6 +75,7 @@ final class CaptureCoordinator {
     config.pendingLabel = ""
     config.pendingNote = ""
     config.pendingNotePrefix = ""
+    if !typed.isEmpty { onTypedNote?(typed) }
 
     // The wearer talks while the photo crosses from the glasses; hold the upload until they finish
     // so perception (which reads the note) gets the context. The narrator caps the wait.
@@ -142,6 +145,7 @@ final class CaptureCoordinator {
       note: Self.composeNote(prefix: config.pendingNotePrefix, typed: config.pendingNote, spoken: nil),
       location: nil, locationAgeMs: nil, shiftId: nil
     )
+    if !config.pendingNote.isEmpty { onTypedNote?(config.pendingNote) }
     config.pendingLabel = ""
     config.pendingNote = ""
     config.pendingNotePrefix = ""

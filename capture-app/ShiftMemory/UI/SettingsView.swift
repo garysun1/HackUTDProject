@@ -201,6 +201,12 @@ struct LocationSection: View {
         }
         LabeledContent("Mode", value: modeText(loc.mode))
         LabeledContent("Floor", value: floorText(model.altimeter))
+        if model.altimeter.isTracking {
+          LabeledContent("Pedometer floors", value: "↑\(model.motion.floorsAscended ?? 0) ↓\(model.motion.floorsDescended ?? 0) · \(model.motion.activity ?? "–")")
+          if let d = model.altimeter.lastDecision {
+            Text(d).font(.footnote).foregroundStyle(Theme.ink2)
+          }
+        }
         Stepper(value: Binding(get: { model.config.floorHeightM }, set: { model.config.floorHeightM = $0 }),
                 in: FloorQuantizer.Config.floorHeightRange, step: 0.25) {
           LabeledContent("Floor height", value: String(format: "%.2f m", model.config.floorHeightM))
@@ -247,7 +253,7 @@ struct LocationSection: View {
     case .unknown, .available: break
     }
     guard a.isTracking, let floor = a.floor else { return "set at shift start" }
-    let alt = a.relativeAltitudeM.map { String(format: " · %+.1f m", $0) } ?? ""
+    let alt = a.relativeAltitudeM.map { String(format: " · %+.1f m", $0 - a.baselineOffsetM) } ?? ""
     return (floor >= 0 ? "+\(floor)" : "\(floor)") + alt
   }
 
