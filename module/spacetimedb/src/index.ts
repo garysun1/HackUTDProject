@@ -950,6 +950,30 @@ export const ackAlert = spacetimedb.reducer({ alertId: t.u64() }, (ctx, { alertI
 });
 
 // ---------- admin reducers (token from env: ADMIN_TOKEN, else INGEST_TOKEN) ----------
+// Remove one event and everything hanging off it (photo, location, edges, alerts, pending jobs).
+// Entities stay: they may be shared with other events. For clearing test photos before a demo.
+export const deleteEvent = spacetimedb.reducer(
+  { adminToken: t.string(), eventId: t.string() },
+  (ctx, { adminToken, eventId }) => {
+    if (adminToken !== (ctx.env.ADMIN_TOKEN ?? ctx.env.INGEST_TOKEN)) throw new SenderError('unauthorized');
+    if (!ctx.db.event.eventId.find(eventId)) throw new SenderError('not_found');
+    for (const e of [...ctx.db.edge.fromId.filter(eventId)]) ctx.db.edge.edgeId.delete(e.edgeId);
+    for (const e of [...ctx.db.edge.toId.filter(eventId)]) ctx.db.edge.edgeId.delete(e.edgeId);
+    for (const a of [...ctx.db.alert.eventId.filter(eventId)]) ctx.db.alert.alertId.delete(a.alertId);
+    for (const j of [...ctx.db.perceiveJob.iter()]) if (j.eventId === eventId) ctx.db.perceiveJob.scheduledId.delete(j.scheduledId);
+    if (ctx.db.photo.eventId.find(eventId)) ctx.db.photo.eventId.delete(eventId);
+    if (ctx.db.eventLocation.eventId.find(eventId)) ctx.db.eventLocation.eventId.delete(eventId);
+    ctx.db.event.eventId.delete(eventId);
+  }
+);
+// Remove a wearer's track for one shift ('' = every shift of that device).
+export const deleteTrack = spacetimedb.reducer(
+  { adminToken: t.string(), deviceId: t.string(), shiftId: t.string() },
+  (ctx, { adminToken, deviceId, shiftId }) => {
+    if (adminToken !== (ctx.env.ADMIN_TOKEN ?? ctx.env.INGEST_TOKEN)) throw new SenderError('unauthorized');
+    for (const p of [...ctx.db.trackPoint.iter()]) if (p.deviceId === deviceId && (!shiftId || p.shiftId === shiftId)) ctx.db.trackPoint.pointId.delete(p.pointId);
+  }
+);
 export const setConfig = spacetimedb.reducer(
   { adminToken: t.string(), key: t.string(), value: t.string() },
   (ctx, { adminToken, key, value }) => {

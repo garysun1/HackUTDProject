@@ -36,6 +36,8 @@ import {
 // Import all reducer arg schemas
 import AckAlertReducer from "./ack_alert_reducer";
 import DeleteAssetReducer from "./delete_asset_reducer";
+import DeleteEventReducer from "./delete_event_reducer";
+import DeleteTrackReducer from "./delete_track_reducer";
 import ReperceiveReducer from "./reperceive_reducer";
 import SetConfigReducer from "./set_config_reducer";
 import SetLabelReducer from "./set_label_reducer";
@@ -239,6 +241,8 @@ const tablesSchema = __schema({
 const reducersSchema = __reducers(
   __reducerSchema("ack_alert", AckAlertReducer),
   __reducerSchema("delete_asset", DeleteAssetReducer),
+  __reducerSchema("delete_event", DeleteEventReducer),
+  __reducerSchema("delete_track", DeleteTrackReducer),
   __reducerSchema("reperceive", ReperceiveReducer),
   __reducerSchema("set_config", SetConfigReducer),
   __reducerSchema("set_label", SetLabelReducer),
