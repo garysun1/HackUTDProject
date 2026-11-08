@@ -41,18 +41,34 @@ rows appear only after you foreground the app, their `bytesAt` is the unlock tim
 
 | Photo | Pressed at | Row? | appStateAtArrival | Reached | Notes |
 |---|---|---|---|---|---|
-| 1 | | | | | |
-| 2 | | | | | |
-| 3 | | | | | |
-| 4 | | | | | |
-| 5 | | | | | |
+| 0 (app in front) | 18:50:48 CST | yes `b640d072` | active | in_graph 18:51:43 | bytes 18:51:37 (48.0 s, full/high, 1.03 MB HEIC) |
+| 1 | 18:51:45 | yes `62cb95ad` | background | in_graph 18:52:33 | bytes 18:52:28 (41.7 s); phone locked since 18:51:41 |
+| 2 | 18:52:35 | yes `c464866e` | background | in_graph 18:53:22 | bytes 18:53:17 (40.9 s) |
+| 3 | 18:53:18 | yes `67619eb8` | background | in_graph 18:54:02 | bytes 18:53:57 (38.1 s) |
+| 4 | 18:53:53 | **no** | — | — | pressed while photo 3 was still transferring; one capture in flight, press dropped (now queued instead, commit after `9266b9f`) |
+| 5 | 18:53:57 | yes `fd70df44` | active | in_graph 18:54:51 | pressed locked; transfer ran in the background, bytes landed 18:54:44, 32 s after unlock |
+
+Run on 2026-11-07, iPhone 17 (iOS 26) + Ray-Ban Meta "016N", DAT 1.0.1, Settings full/high, Keep
+session in background ON, camera-roll import OFF. Session start 89 ms, Photo child started 1804 ms
+after `addCamera`. Source of truth: `debug.log` in the app container (`[Glasses] input: capture
+shortPress`, `photo arrived … appState=…`) and the Diagnostics rows; perception summaries came
+back from Maincloud on every photo.
+
+**How shutter photos actually reach the app.** On this unit a shutter press under a live session
+delivers nothing on `photoDataPublisher` by itself (session `started`, Photo `started`, zero bytes
+over a full minute of pressing). The camera-capture guide says otherwise; Meta's own DAT 1.0.1
+sample (BirdSpotter) instead attaches the experimental `Inputs` capability and gets the press as
+`InputEvent.capture(.shortPress, source: .captureButton)`, then calls `capturePhoto` itself. The
+app does the same since `9266b9f`, and that is the path measured above. Consequence: a shutter
+photo costs the same ~40 s full/high transfer as an app capture, so medium/medium is the sensible
+default for a day of button photos (measurement 2 gives the numbers).
 
 **Decision rule.** Photos arrive while backgrounded (`background` or `inactive`, bytes within
 seconds of the press) → the shutter path is the bulk path and camera-roll import stays **off**.
 Photos arrive only after foregrounding, or not at all → turn camera-roll import **on** in Settings
 and post it in `#log` right away, because it changes how everyone captures demo data.
 
-Result: arrived while backgrounded ____ of 5. Camera-roll import: off / on.
+Result: arrived while backgrounded **4 of 5** (3 with bytes landing while locked, 1 whose transfer started locked and landed after unlock; the 5th press hit the one-capture-in-flight limit and is the reason presses are now queued). Camera-roll import: **off**. Decision rule → the shutter path is the bulk path.
 
 ## 2. Capture-to-bytes latency (10 min)
 
@@ -84,8 +100,8 @@ a HEIC decode shows up as extra time before upload.
 
 | Source | format(s) seen | pipelineMs median | Notes |
 |---|---|---|---|
-| shutter_button | | | |
-| sdk_capture | | | |
+| shutter_button | heic | ~400 (5 photos) | 0.87–1.03 MB HEIC at full/high → 1600 px JPEG ≈ 450 KB |
+| sdk_capture | heic | 329 / 410 (2 photos) | same container; the glasses deliver HEIC regardless of who asked |
 
 ## 4. Startup failure rate (10 min)
 

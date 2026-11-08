@@ -1,8 +1,47 @@
-# Handoff: Shift Memory capture app — current state (2026-11-07 ~18:00 CST)
+# Handoff: Shift Memory capture app — current state (2026-11-07 ~19:00 CST)
 
-> Latest section first. The original 17:00 handoff that the previous agent wrote follows below and is
-> still accurate for rules/decisions; everything in its "remaining work" list has since been done
-> except the hardware steps, which are the blocker described here.
+> Latest section first. The 18:00 section below it is history (its blocker is fixed); the original
+> 17:00 handoff at the bottom is still the source for rules and decisions.
+
+## Where things stand (Claude, Edward's agent, 18:20–19:00 CST)
+Branch `capture/1-photo-button`, PR #18. Commits since 18:20: `d53e495` `f6a4cde` `5ca1d48` `9266b9f` `c10dde4`
+(+ the docs commit carrying this file). Verified on Edward's iPhone 17 (iOS 26) + Ray-Ban Meta "016N",
+DAT 1.0.1, with Gary's ingest token in the Keychain (device id in Settings → Identity is `edward-iphone`,
+which already matches a row in Gary's `wearer` table):
+
+- **#1 is done on hardware.** App Capture `d1044a8d` and five shutter photos (`b640d072` `62cb95ad` `c464866e`
+  `67619eb8` `fd70df44`) went glasses → phone → `ingest_photo` → `accepted` → `in_graph` with Nemotron summaries,
+  4–6 s from upload to `in_graph`. Session start ~90 ms, Photo child up in 1.7–2.5 s via the ignition stream.
+- **Shutter photos do not arrive on `photoDataPublisher` by themselves** on this unit (contrary to the camera
+  guide): session up, Photo `.started`, a minute of pressing, zero bytes. Fixed in `9266b9f` the way Meta's
+  BirdSpotter sample does it: attach the experimental **`MWDATInputs`** capability after Photo starts, receive
+  `InputEvent.capture(.shortPress, source: .captureButton)`, call `capturePhoto` ourselves, tag it
+  `shutter_button`. Double-press debounce (known SDK issue), Inputs re-attached when it goes `inactive`.
+  Unsolicited photos on the publisher are still accepted and tagged shutter.
+- **#10 measurement 1 (backgrounded shutter): 4 of 5** presses with the phone locked produced a photo that reached
+  `in_graph` (the 5th hit the one-capture-in-flight limit; presses are now queued, `c10dde4`). Table filled in
+  `MEASUREMENTS.md`. **Camera-roll import stays OFF**; the shutter path is the bulk path.
+- Bugs fixed on the way: `UploadQueue.load()` used `URL.path()` (percent-encoded "Application%20Support"), so
+  nothing persisted was ever reloaded after a relaunch (`5ca1d48`); token edits now kick the queue; camera/Photo
+  revival after a live stop or pause (BirdSpotter port); diagnostics rows get `acceptedAt`/`inGraphAt`.
+- **Shutter chime** (`c10dde4`, Edward's request): a synthesized C6→E6 bell plays on the phone the instant the
+  press event arrives (and on the Capture tap), with a haptic. `.playback` session + `audio` background mode so it
+  plays locked/silent. Settings → Capture → Shutter sound. **Not yet installed on the phone** (Edward asked for a
+  pause on installs); the build is green. Edward should listen to the chime and say if he wants it tuned.
+- **Logging:** NSLog and `Logger` output from this process reach `idevicesyslog` redacted (`<private>`) or not at
+  all on this phone. Everything now also goes to `Application Support/debug.log`; pull it (and the Diagnostics /
+  Events / UploadQueue folders) with
+  `xcrun devicectl device copy from --device 00008150-00020DD43E40C01C --domain-type appDataContainer --domain-identifier com.edwardkim.hackutd.shiftmemory --source "Library/Application Support/debug.log" --destination ./debug.log`.
+  No AirDrop/CSV step needed for #10.
+- Not done: #10 measurements 2 (latency at medium/medium), 4 (10 cold starts), 5 (battery day). Full/high
+  shutter transfers take 38–48 s over Bluetooth; medium/medium is the sensible default for a day of button
+  photos. Slack `[DONE]` for #1 and the measurement-1 post are being sent now; PR #18 to be marked ready.
+- Known orphan: event `556129ee` (first real photo, 18:11) was mis-tagged `shutter_button` before `f6a4cde` and
+  is on the server as `in_graph` but is not in the app's event list (the store never saw it).
+
+---
+
+# Previous state (2026-11-07 ~18:00 CST) — blocker below is FIXED (`d53e495`)
 
 ## Where things stand (Devin, Edward's agent, 15:00–18:00 CST)
 All code for #1/#2/#10 and the #11 drafts is on branch `capture/1-photo-button`, pushed, draft
