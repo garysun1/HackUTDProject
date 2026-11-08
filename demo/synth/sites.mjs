@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Generated 3D sites for the sample workspaces (decision 0032): one building per site, laid out
-// in metres here and written in the same SiteData shape as the real ECSW scene (OpenStreetMap),
+// in metres here (the Northstar data center too, after Edward's aerial of a real two-hall campus) and written in the same SiteData shape as the real ECSW scene (OpenStreetMap),
 // so the console draws them the same way. Fictional companies; each building sits on open land
 // in the satellite imagery near its city so it does not cover a real building.
 //
@@ -129,11 +129,58 @@ const SITES = [
     ],
     spines: [{ level: 0, pts: [[-71, -24], [-14, -24], [39, -24], [65, -24]] }, { level: 0, pts: [[-14, -24], [-14, 37], [-70, 37]] }, { level: 0, pts: [[-14, 37], [39, 37], [39, -24]] }],
   },
+  {
+    // Northstar Data Center: a two-hall greenfield campus (after Edward's aerial of a real one): long single-storey halls with rows of
+    // rooftop cooling units, the generator/chiller yard between them, a utility building with the incoming transformers, a retention
+    // pond, parking along the front of the second hall, a fence round the lot. Hall A is the working building; Hall B is opaque.
+    id: 'nmc2', name: 'Northstar Data Center', center: [-96.706169, 32.97888], levels: 1, height: 9,
+    flipY: true, // laid out with Hall A to the north; mirrored so the working hall is in front of the opaque Hall B from the default (south) camera
+    outer: rect([-70, 4, 70, 36]),
+    rooms: [
+      ['Lobby', [-70, 4, -60, 20]], ['NOC', [-70, 20, -60, 36]],
+      ['Core corridor', [-60, 4, 66, 9]],
+      ['UPS room', [-60, 9, -46, 23]], ['Battery room', [-60, 23, -46, 36]],
+      ['Data hall A', [-44, 9, -4, 30]], ['Data hall B', [-2, 9, 38, 30]], ['Data hall C', [40, 9, 66, 30]],
+      ['Mechanical gallery', [-44, 30, 66, 36]], ['Loading dock', [66, 4, 70, 36]],
+    ],
+    neighbors: [['Hall B (fit-out)', 'industrial', 9, [-62, -48, 70, -14]], ['Utility building', 'industrial', 6, [-100, 12, -78, 26]]],
+    paths: [
+      [[-110, -62], [84, -62], [84, 46], [-110, 46], [-110, -62]], [[84, -8], [130, -8]], [[-110, -62], [-110, -90]],
+      [[-62, -52], [70, -52]], [[-76, 0], [-70, 0]],
+    ],
+    details: [
+      { kind: 'columns', rect: [-70, 4, 70, 36], bayM: 10, height: 9 },
+      // rooftop cooling units, two rows the length of each hall
+      ...Array.from({ length: 18 }, (_, i) => ({ kind: 'cooler', rect: [-62 + i * 7, 10, -59 + i * 7, 13], height: 1.8, lift: 9 })),
+      ...Array.from({ length: 18 }, (_, i) => ({ kind: 'cooler', rect: [-62 + i * 7, 27, -59 + i * 7, 30], height: 1.8, lift: 9 })),
+      ...Array.from({ length: 17 }, (_, i) => ({ kind: 'cooler', rect: [-56 + i * 7, -42, -53 + i * 7, -39], height: 1.8, lift: 9 })),
+      ...Array.from({ length: 17 }, (_, i) => ({ kind: 'cooler', rect: [-56 + i * 7, -23, -53 + i * 7, -20], height: 1.8, lift: 9 })),
+      { kind: 'box', rect: [-30, 14, -18, 26], height: 1.2, lift: 9 }, { kind: 'box', rect: [10, 14, 22, 26], height: 1.2, lift: 9 }, { kind: 'mast', at: [68, 34], height: 6, lift: 9 },
+      // generator / chiller yard between the halls, with the day tanks
+      ...Array.from({ length: 9 }, (_, i) => ({ kind: 'generator', rect: [-58 + i * 13, -9, -51 + i * 13, -4], height: 3.2, name: i === 0 ? 'Gen 1' : undefined })),
+      ...Array.from({ length: 7 }, (_, i) => ({ kind: 'cooler', rect: [-56 + i * 17, -1, -47 + i * 17, 2], height: 2.6, name: i === 0 ? 'Chiller 1' : undefined })),
+      { kind: 'tank', rect: [62, -9, 67, -4], height: 5, name: 'Diesel' }, { kind: 'tank', rect: [62, -2, 67, 3], height: 5, name: 'Diesel' },
+      { kind: 'fence', pts: [[-62, -12], [70, -12], [70, 2], [-62, 2], [-62, -12]], height: 2.4 },
+      // utility building, incoming transformers and the switchyard fence
+      { kind: 'transformer', rect: [-98, 0, -91, 7], height: 4.2, name: 'Utility 1' }, { kind: 'transformer', rect: [-88, 0, -81, 7], height: 4.2, name: 'Utility 2' },
+      { kind: 'fence', pts: [[-102, -3], [-78, -3], [-78, 10], [-102, 10], [-102, -3]], height: 2.4 }, { kind: 'mast', at: [-104, 30], height: 16 },
+      { kind: 'pond', pts: [[-108, -30], [-76, -34], [-70, -12], [-74, 20], [-104, 26], [-114, 0], [-108, -30]] },
+      // front of house: entrance canopies, visitor and staff parking, the loading dock
+      { kind: 'canopy', rect: [-76, 8, -70, 16], height: 4 }, { kind: 'canopy', rect: [-22, -54, -8, -48], height: 4 },
+      { kind: 'parking', rect: [-62, -60, 70, -52], a: [-60, -56], b: [68, -56], n: 36 },
+      { kind: 'parking', rect: [-62, 40, -20, 46], a: [-60, 43], b: [-22, 43], n: 12 },
+      { kind: 'dock_doors', a: [70, 10], b: [70, 20], n: 2, height: 3.4 }, { kind: 'truck', a: [72, 14], b: [84, 14] },
+      { kind: 'guard', rect: [84, -14, 88, -10], height: 3, name: 'Gate' },
+      { kind: 'fence', pts: [[-118, -68], [92, -68], [92, 52], [-118, 52], [-118, -68]] },
+    ],
+    spines: [{ level: 0, pts: [[-65, 6], [66, 6]] }, { level: 0, pts: [[-24, 6], [-24, 33], [60, 33]] }, { level: 0, pts: [[18, 6], [18, 33]] }],
+  },
 ];
 
 function build(s) {
   const [lon0, lat0] = s.center; const k = Math.cos(lat0 * D2R);
-  const ll = ([x, y]) => [+(lon0 + x / (R * k * D2R)).toFixed(7), +(lat0 + y / (R * D2R)).toFixed(7)];
+  const sy = s.flipY ? -1 : 1;
+  const ll = ([x, y]) => [+(lon0 + x / (R * k * D2R)).toFixed(7), +(lat0 + (y * sy) / (R * D2R)).toFixed(7)];
   return {
     source: 'Generated floor plan (demo/synth/sites.mjs); fictional site, not a real building',
     synthetic: true,

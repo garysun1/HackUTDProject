@@ -1,5 +1,5 @@
 // Known sites (decision 0032): the real ECSW building (OpenStreetMap) and the generated sample
-// sites (demo/synth/sites.mjs), plus the Northstar Data Center on a real Richardson building (OSM, demo/synth/osm). The map picks the one the data sits in, by distance, so a
+// sites (demo/synth/sites.mjs; the Northstar data center is a two-hall campus after a real one). The map picks the one the data sits in, by distance, so a
 // workspace needs no configuration: UTD capture lands on ECSW, a replayed sample on its own plant.
 import type { SiteData, Room } from './scene';
 import { haversineM, pointInRing } from './geo';
