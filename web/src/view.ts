@@ -41,10 +41,10 @@ export function replayRange(): [number, number] {
 /** The moment the views draw: the replay clock, or now. */
 export function clock(): number { return view.replay.on ? view.replay.clockMs : Date.now(); }
 
-let raf = 0; let lastTick = 0;
+let raf = 0; let lastTick = 0; let rangeT0 = 0;
 export function startReplay() {
   const [t0] = replayRange();
-  view.replay.on = true; view.replay.playing = true; view.replay.start = performance.now(); view.replay.clockMs = t0; view.replay.progress = 0;
+  view.replay.on = true; view.replay.playing = true; view.replay.start = performance.now(); view.replay.clockMs = t0; view.replay.progress = 0; rangeT0 = t0;
   lastTick = performance.now(); if (!raf) raf = requestAnimationFrame(tick); emitView();
 }
 export function stopReplay() { view.replay.on = false; view.replay.playing = false; view.replay.progress = 1; emitView(); }
@@ -55,15 +55,19 @@ export function togglePlay() {
 export function setSpeed(s: number) { view.replay.speed = s; emitView(); }
 export function scrubReplay(p: number) {
   const [t0, t1] = replayRange(); view.replay.on = true;
-  view.replay.clockMs = t0 + Math.min(1, Math.max(0, p)) * (t1 - t0); view.replay.progress = p; lastTick = performance.now(); emitView();
+  view.replay.clockMs = t0 + Math.min(1, Math.max(0, p)) * (t1 - t0); view.replay.progress = Math.min(1, Math.max(0, p)); rangeT0 = t0; lastTick = performance.now(); emitView();
 }
 /** Jump the replay clock to a moment (a click on an item in the panel or the scrubber marks). */
-export function jumpTo(ms: number) { const [t0, t1] = replayRange(); scrubReplay((ms - t0) / Math.max(1, t1 - t0)); }
+export function jumpTo(ms: number) {
+  const [t0, t1] = replayRange(); view.replay.on = true; view.replay.clockMs = Math.min(ms, Date.now());
+  view.replay.progress = Math.max(0, Math.min(1, (view.replay.clockMs - t0) / Math.max(1, t1 - t0))); rangeT0 = t0; lastTick = performance.now(); emitView();
+}
 function tick(now: number) {
   raf = 0;
   if (!view.replay.on || !view.replay.playing) return;
   const dt = Math.min(0.25, (now - lastTick) / 1000); lastTick = now;
   const [t0, t1] = replayRange();
+  if (t0 !== rangeT0) { view.replay.clockMs += t0 - rangeT0; rangeT0 = t0; } // rows that arrive after Replay was pressed move the start; the clock moves with it
   view.replay.clockMs += dt * 1000 * view.replay.speed; view.replay.progress = (view.replay.clockMs - t0) / Math.max(1, t1 - t0);
   if (view.replay.clockMs >= Date.now()) { stopReplay(); return; }
   emitView();

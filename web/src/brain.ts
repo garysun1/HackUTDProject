@@ -65,15 +65,15 @@ export function walkedM(s: Shift, clock: number): number {
   return d;
 }
 export function snapshot(clock: number): Snapshot {
-  const all = shifts().filter(s => !state.hiddenWearers.has(s.deviceId));
+  const cutoff = state.windowMin ? Date.now() - state.windowMin * 60_000 : 0;
+  const all = shifts().filter(s => !state.hiddenWearers.has(s.deviceId) && s.lastMs >= cutoff);
   const active = all.filter(s => shiftLive(s, clock));
   const past = all.filter(s => shiftEnd(s) < clock);
   const latestIdle = active.length ? null : (past.length ? past.reduce((a, b) => (shiftEnd(b) > shiftEnd(a) ? b : a)) : null);
-  const alerts = [...state.alerts.values()].filter(a => !state.hiddenWearers.has(a.deviceId));
+  const alerts = [...state.alerts.values()].filter(a => !state.hiddenWearers.has(a.deviceId) && raisedAt(a) >= cutoff);
   const open = alerts.filter(a => openAt(a, clock)).sort((a, b) => raisedAt(b) - raisedAt(a));
   const resolvedRecently = alerts.filter(a => raisedAt(a) <= clock && resolvedAt(a) <= clock).sort((a, b) => resolvedAt(b) - resolvedAt(a)).slice(0, 3);
   const workOrders = [...state.issues.values()].filter(i => woOpenAt(i, clock)).sort((a, b) => ms(b.openedMicros) - ms(a.openedMicros));
-  const cutoff = state.windowMin ? Date.now() - state.windowMin * 60_000 : 0;
   const events = [...state.events.values()].filter(e => ms(e.tMicros) <= clock && ms(e.tMicros) >= cutoff && !state.hiddenWearers.has(e.deviceId)).sort((a, b) => ms(b.tMicros) - ms(a.tMicros)).slice(0, 60);
   let handoff: HandoffCard | null = null;
   for (let i = all.length - 1; i >= 0; i--) {
@@ -96,7 +96,7 @@ const fmt = (t: number) => fmtTime(BigInt(Math.round(t)) * 1000n);
 
 export function renderBrain(el: HTMLElement, ctx: BrainCtx): Snapshot {
   const snap = snapshot(ctx.clock); const v = vocab(); const session = v.session.toLowerCase();
-  const sig = [state.events.size, state.alerts.size, state.issues.size, state.track.size, snap.active.map(s => s.key).join(','), snap.open.map(a => a.id).join(','), snap.workOrders.map(w => w.issueId + w.status).join(','), snap.events.length, snap.events[0]?.eventId, snap.handoff?.atMs, snap.handoff?.carried.filter(c => c.done).length, Math.floor(ctx.clock / 20_000), state.selected, state.photos.size, state.hiddenWearers.size, v.session].join('|');
+  const sig = [state.events.size, state.alerts.size, state.issues.size, state.track.size, snap.active.map(s => s.key).join(','), snap.open.map(a => a.id).join(','), snap.workOrders.map(w => w.issueId + w.status).join(','), snap.events.length, snap.events[0]?.eventId, snap.handoff?.atMs, snap.handoff?.carried.filter(c => c.done).length, Math.floor(performance.now() / 2000), state.selected, state.photos.size, state.hiddenWearers.size, v.session].join('|');
   if (sig === lastSig) return snap; lastSig = sig;
   const parts: string[] = [];
   const who = (s: Shift, live: boolean) => {
@@ -135,7 +135,7 @@ export function renderBrain(el: HTMLElement, ctx: BrainCtx): Snapshot {
       (place && !isAck ? `<div class="place">${esc(place)}</div>` : '') + (e.note && !isAck ? `<p class="note">“${esc(e.note)}”</p>` : '') + chg.map(c => `<p class="chg">Changed: ${esc(String(c))}</p>`).join('') + `</div></div>`;
   };
   parts.push(`<section class="sec"><h3>What happened <span class="n">${snap.events.length}</span></h3><div class="feed">${snap.events.length ? snap.events.map(evHtml).join('') : '<div class="s3-empty">No photos yet at this time.</div>'}</div></section>`);
-  el.innerHTML = parts.join('');
+  const top = el.scrollTop; el.innerHTML = parts.join(''); el.scrollTop = top;
   el.querySelectorAll<HTMLElement>('[data-ev]').forEach(n => n.addEventListener('click', () => ctx.onSelect(n.dataset.ev!)));
   el.querySelectorAll<HTMLElement>('[data-jump]').forEach(n => n.addEventListener('click', () => ctx.onJump(Number(n.dataset.jump))));
   return snap;

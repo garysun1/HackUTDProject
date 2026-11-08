@@ -58,7 +58,7 @@ type PinVis = { obj: CSS2DObject; el: HTMLElement; pole: THREE.Mesh; sig: string
 export class SiteScene {
   renderer: THREE.WebGLRenderer; labels: CSS2DRenderer; scene = new THREE.Scene();
   persp: THREE.PerspectiveCamera; ortho: THREE.OrthographicCamera; ctrl3d: OrbitControls; ctrl2d: OrbitControls;
-  mode: '3d' | '2d' = '3d'; follow = false; followPos: THREE.Vector3 | null = null;
+  mode: '3d' | '2d' = '3d'; follow = false; followPos: THREE.Vector3 | null = null; followId: string | null = null;
   proj!: Proj; floorH = 3.6; beamH = 24; site = new THREE.Group(); ground = new THREE.Group(); heat: HeatLayer | null = null;
   wearers = new Map<string, WearerVis>(); pins = new Map<string, PinVis>(); roomLabels: CSS2DObject[] = []; bldLabels: CSS2DObject[] = []; upper: THREE.Object3D[] = [];
   onPinClick: (id: string) => void = () => {}; onPinHover: (id: string | null, x: number, y: number) => void = () => {};
@@ -122,11 +122,15 @@ export class SiteScene {
   private mat<T extends THREE.Material>(m: T, role: string): T { this.materials.push({ m, role }); return m; }
 
   // ---------- site ----------
+  private disposeGroup(g: THREE.Group) {
+    g.traverse(o => { const m = o as THREE.Mesh; if (m.geometry) m.geometry.dispose(); const mat = m.material as THREE.Material | undefined; if (mat && !Array.isArray(mat)) { const t = (mat as any).map as THREE.Texture | undefined; t?.dispose(); mat.dispose(); } if ((o as any).isCSS2DObject) (o as CSS2DObject).element.remove(); });
+    g.clear();
+  }
   buildSite(data: SiteData) {
-    this.site.clear(); this.ground.clear(); this.roomLabels = []; this.bldLabels = []; this.upper = [];
+    this.disposeGroup(this.site); this.disposeGroup(this.ground); this.materials = this.materials.filter(e => e.role === 'pole'); this.roomLabels = []; this.bldLabels = []; this.upper = [];
     for (const w of this.wearers.values()) { this.scene.remove(w.head, w.ring, w.beam, w.light, w.line, w.label); } this.wearers.clear();
     for (const p of this.pins.values()) { this.scene.remove(p.obj, p.pole); } this.pins.clear();
-    if (this.heat) { this.scene.remove(this.heat.mesh); this.heat = null; }
+    if (this.heat) { this.scene.remove(this.heat.mesh); this.heat.tex.dispose(); this.heat.mesh.geometry.dispose(); this.heat = null; }
     const [lon0, lat0] = data.center; this.proj = new Proj(lon0, lat0);
     this.buildGround(lon0, lat0, data.tileRadius ?? 4);
     // campus paths
@@ -240,7 +244,7 @@ export class SiteScene {
       const [x, y, z] = spec.pos; w.head.position.set(x, y, z); w.ring.position.set(x, 0.18, z); w.light.position.set(x, y + 2, z);
       w.beam.scale.y = this.beamH; w.beam.position.set(x, this.beamH / 2, z); w.label.position.set(x, y + 1.6, z);
       (w.labelEl.children[1] as HTMLElement).textContent = spec.name; (w.labelEl.children[2] as HTMLElement).textContent = spec.sub;
-      if (this.follow) this.followPos = new THREE.Vector3(x, y, z);
+      if (this.follow && (this.followId === null || this.followId === id)) this.followPos = new THREE.Vector3(x, y, z);
     }
     // trail with a fade toward the head
     const n = spec.trail.length / 3; w.line.visible = n >= 2;
@@ -251,7 +255,7 @@ export class SiteScene {
       w.geom.setPositions(spec.trail); w.geom.setColors(cols);
     }
   }
-  hideWearer(id: string) { const w = this.wearers.get(id); if (!w) return; for (const o of [w.head, w.ring, w.beam, w.light, w.label, w.line]) o.visible = false; }
+  hideWearer(id: string) { const w = this.wearers.get(id); if (!w) return; for (const o of [w.head, w.ring, w.beam, w.light, w.label, w.line]) o.visible = false; if (id === this.followId) this.followPos = null; }
 
   // ---------- pins ----------
   setPins(list: PinSpec[]) {

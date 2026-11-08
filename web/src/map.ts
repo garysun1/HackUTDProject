@@ -30,7 +30,7 @@ function ensureScene(): SiteScene {
   host.querySelectorAll<HTMLButtonElement>('[data-cam]').forEach(b => b.addEventListener('click', () => { scene!.setView(b.dataset.cam as '3d' | '2d'); host.querySelectorAll('[data-cam]').forEach(x => x.setAttribute('aria-pressed', String(x === b))); }));
   followBtn.addEventListener('click', () => scene!.setFollow(!scene!.follow));
   host.addEventListener('site:follow', (e: any) => followBtn.setAttribute('aria-pressed', String(e.detail.on)));
-  document.addEventListener('keydown', e => { const t = e.target as HTMLElement; if (t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA') return; if (e.key === 'f' && view.mode === 'map') followBtn.click(); });
+  document.addEventListener('keydown', e => { const t = e.target as HTMLElement; if (t.closest('input, select, textarea, button, a, [role="button"], [contenteditable]')) return; if (e.key === 'f' && view.mode === 'map') followBtn.click(); });
   scene.onPinClick = id => select(id);
   scene.onPinHover = (id, x, y) => { if (id) showTip(photoCard(id), x, y, id); else hideTip(); };
   document.addEventListener('select', () => { const id = state.selected; const l = id ? state.locations.get(id) : null; if (l && scene && site) { const [x, z] = scene.proj.toXZ(l.lon, l.lat); scene.focus(x, z); } });
@@ -85,7 +85,7 @@ function advanceHeat(sc: SiteScene, all: Shift[], clock: number) {
 }
 
 // ---------- frame ----------
-let lastDb = ''; const dbg = { frames: 0, lastError: '' as string }; (window as any).__s3 = dbg;
+let lastDb = ''; let lastFilterSig = ''; const dbg = { frames: 0, lastError: '' as string }; (window as any).__s3 = dbg;
 function frame() {
   raf = 0; dbg.frames++;
   try { frameBody(); } catch (e: any) { dbg.lastError = String(e?.stack || e); console.error('[map] frame failed', e); raf = requestAnimationFrame(frame); }
@@ -93,13 +93,15 @@ function frame() {
 function frameBody() {
   if (view.mode !== 'map' || host.hidden) return;
   const sc = ensureScene();
-  if (current().db !== lastDb) { lastDb = current().db; site = null; resetHeat(); }
+  if (current().db !== lastDb) { lastDb = current().db; site = null; resetHeat(); for (const dev of [...sc.wearers.keys()]) sc.hideWearer(dev); sc.setPins([]); brainEl.innerHTML = ''; }
   if (state.track.size || state.locations.size) ensureSite(sc);
-  if (!site) { sc.frame(); raf = requestAnimationFrame(frame); return; }
   const clock = viewClock();
+  if (!site) { const t = performance.now(); if (t - brainAt > 250) { brainAt = t; renderBrain(brainEl, { clock, locate, onSelect: select, onJump: jumpTo }); } sc.frame(); raf = requestAnimationFrame(frame); return; }
+  const filterSig = `${state.windowMin}|${[...state.hiddenWearers].sort().join(',')}`; if (filterSig !== lastFilterSig) { lastFilterSig = filterSig; resetHeat(); }
   const cutoff = state.windowMin ? Date.now() - state.windowMin * 60_000 : 0;
   const all = shifts().filter(s => !state.hiddenWearers.has(s.deviceId) && s.lastMs >= cutoff);
   const byDevice = new Map<string, Shift[]>(); for (const s of all) (byDevice.get(s.deviceId) ?? byDevice.set(s.deviceId, []).get(s.deviceId)!).push(s);
+  sc.followId = (state.selected && state.events.get(state.selected)?.deviceId) || byDevice.keys().next().value || null;
   const drawnDevices = new Set<string>();
   for (const [dev, list] of byDevice) {
     drawnDevices.add(dev); let drawn = false;

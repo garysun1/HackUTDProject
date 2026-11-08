@@ -4,9 +4,10 @@ import { renderTimeline } from './timeline';
 import { renderFloor, floorUserView } from './floor';
 import { renderRail } from './rail';
 import { renderMap, mapUserView } from './map';
-import { renderTools } from './tools';
+import { renderTools, setUserViewSource } from './tools';
 import { view, setMode, onView } from './view';
 
+setUserViewSource(() => (view.mode === 'map' ? mapUserView() : floorUserView()));
 const dbEl = document.getElementById('db')!;
 const conn = document.getElementById('conn')!; const connText = document.getElementById('conn-text')!;
 const windowSel = document.getElementById('window') as HTMLSelectElement;
@@ -62,7 +63,7 @@ onChange(() => {
   if (!view.modeChosen && state.locations.size && view.mode !== 'map') setMode('map', false); // the first positioned photo brings the map up
   renderWorkspace(); // follows the dataset switch
   renderChips(); renderTimeline(); renderRail(); // detail panel first: it changes the canvas width
-  renderTools(view.mode === 'map' ? mapUserView() : floorUserView()); renderMap(); renderFloor();
+  renderTools(); renderMap(); renderFloor();
 });
 
 // Timeline collapse: the floor takes the width. Remembered per browser.
@@ -81,10 +82,10 @@ function foldForMode() {
   else if (view.mode !== 'map' && autoFolded) { autoFolded = false; setTimeline(true, false); }
 }
 onView(() => { if (view.mode !== lastMode) { lastMode = view.mode; foldForMode(); renderWorkspace(); } });
-foldForMode();
-tlToggle.addEventListener('click', () => setTimeline(grid.dataset.tl === 'collapsed'));
+tlToggle.addEventListener('click', () => { autoFolded = false; setTimeline(grid.dataset.tl === 'collapsed'); });
 grid.addEventListener('transitionend', e => { if (e.propertyName === 'grid-template-columns') { renderFloor(); renderMap(); } });
 try { if (localStorage.getItem('wm.timeline') === 'collapsed') setTimeline(false); } catch { /* ignore */ }
+foldForMode(); // after the remembered state, so a preference-collapsed timeline is not mistaken for an auto-fold
 document.addEventListener('select', () => notify());
 setInterval(() => { if (visibleEvents().length) { renderFloor(); renderMap(); renderRail(); } }, 15000); // "now" advances: time axis and ages
 

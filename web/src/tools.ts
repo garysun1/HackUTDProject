@@ -9,6 +9,12 @@ const tools = document.getElementById('floor-tools') as HTMLElement;
 export let fitRequested = 0; // bumped when the user asks to fit; the views compare against their own copy
 let key = '';
 const SPEEDS = [1, 10, 60, 300];
+// Both render paths (store change, view tick) must agree on userView, or the bar is rebuilt under the pointer.
+let userViewFn: () => boolean = () => false;
+export function setUserViewSource(fn: () => boolean) { userViewFn = fn; }
+let scrubbing = false;
+tools.addEventListener('pointerdown', e => { if ((e.target as HTMLElement).matches('[data-scrub]')) scrubbing = true; });
+document.addEventListener('pointerup', () => { if (scrubbing) { scrubbing = false; emitView(); } });
 
 tools.addEventListener('click', e => {
   const t = e.target as HTMLElement;
@@ -21,11 +27,12 @@ tools.addEventListener('click', e => {
 });
 tools.addEventListener('input', e => { const t = e.target as HTMLInputElement; if (t.matches('[data-scrub]')) scrubReplay(Number(t.value) / 1000); });
 document.addEventListener('keydown', e => {
-  const tg = e.target as HTMLElement; if (tg.tagName === 'INPUT' || tg.tagName === 'SELECT' || tg.tagName === 'TEXTAREA') return;
+  const tg = e.target as HTMLElement; if (e.altKey || e.ctrlKey || e.metaKey) return;
+  if (tg.closest('input, select, textarea, button, a, [role="button"], [contenteditable]')) return;
   if (e.key === ' ') { e.preventDefault(); togglePlay(); } else if (e.key === 'l') stopReplay();
 });
 
-export function renderTools(userView: boolean) {
+export function renderTools(userView: boolean = userViewFn()) {
   const traced = state.assetFilter && state.entities.get(state.assetFilter); const tracedName = traced ? displayName(traced) : '';
   const tracedCount = traced ? shownEvents().filter(e => state.edges.some(x => x.fromId === e.eventId && x.toId === traced.entityId)).length : 0;
   const hasMap = state.locations.size > 0 || state.track.size > 0;
@@ -45,7 +52,7 @@ export function renderTools(userView: boolean) {
       `<span class="seg" role="group" aria-label="View"><button type="button" data-mode="map" aria-pressed="${view.mode === 'map'}" ${hasMap ? '' : 'title="No position yet; the site shows once a photo or track arrives"'}>Map</button><button type="button" data-mode="graph" aria-pressed="${view.mode === 'graph'}">${esc(vocab().session)}</button></span>`;
   }
   if (r.on) {
-    const s = tools.querySelector('[data-scrub]') as HTMLInputElement | null; if (s && document.activeElement !== s) { const [t0, t1] = replayRange(); s.value = String(Math.round(((r.clockMs - t0) / Math.max(1, t1 - t0)) * 1000)); }
+    const s = tools.querySelector('[data-scrub]') as HTMLInputElement | null; if (s && !scrubbing) { const [t0, t1] = replayRange(); s.value = String(Math.round(((r.clockMs - t0) / Math.max(1, t1 - t0)) * 1000)); }
     const c = tools.querySelector('[data-clock]') as HTMLElement | null; if (c) c.textContent = fmtTime(BigInt(Math.round(r.clockMs)) * 1000n);
   }
 }
