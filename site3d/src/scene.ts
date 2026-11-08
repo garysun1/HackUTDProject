@@ -43,7 +43,7 @@ export class HeatLayer {
     const px = ((x - this.minX) / (this.maxX - this.minX)) * this.canvas.width;
     const py = ((z - this.minZ) / (this.maxZ - this.minZ)) * this.canvas.height;
     const r = (6 / (this.maxX - this.minX)) * this.canvas.width;
-    const a = Math.min(0.2, Math.max(0.02, w / 160));
+    const a = Math.min(0.12, Math.max(0.01, w / 600)); // 30 s at a spot ≈ 0.05; saturates after ~10 min
     const g = this.ctx.createRadialGradient(px, py, 0, px, py, r);
     g.addColorStop(0, hexA(this.color, a)); g.addColorStop(1, hexA(this.color, 0));
     this.ctx.fillStyle = g; this.ctx.fillRect(px - r, py - r, 2 * r, 2 * r); this.dirty = true;
