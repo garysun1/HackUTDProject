@@ -1,4 +1,4 @@
-# Shift Memory console — design system
+# Reflection console — design system
 
 Rewritten 2026-11-07 after the visual world changed from "night-shift control room" to an
 enterprise workspace register (Notion / Pylon). Mode: Operate. Tokens live in

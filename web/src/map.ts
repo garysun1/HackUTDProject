@@ -1,7 +1,7 @@
 // The map (#21, #26): the 3D site. Opaque neighbours, the main building translucent with its
 // floors, the mapped ground floor, imagery underneath; each wearer a lit dot with a solid trail, dashed across gaps in tracking
 // and a heat layer where they lingered; photo pins where photos were taken, red while an alert is
-// open. Live, or driven by the replay clock. The shift-memory panel sits beside it. Reads the
+// open. Live, or driven by the replay clock. The Reflection panel sits beside it. Reads the
 // console's store (subscriptions, capture time); nothing here is fetched separately.
 import { state, wearerColor, wearerName, fmtTime, fmtTimeS, loadPhoto, alertsFor, type Alert } from './store';
 import { select } from './timeline';
@@ -32,7 +32,7 @@ function ensureScene(): SiteScene {
   if (scene) return scene;
   host.innerHTML = `<canvas class="s3-gl" aria-label="3D view of the site"></canvas><div class="s3-labels" aria-hidden="true"></div>
     <div class="s3-ctl"><span class="seg" role="group" aria-label="Camera"><button type="button" data-cam="3d" aria-pressed="true">3D</button><button type="button" data-cam="2d" aria-pressed="false">Top-down</button></span><button type="button" class="btn ghost" data-follow aria-pressed="false" title="Keep the camera on the wearer (F)">Follow</button></div>
-    <aside class="s3-brain" aria-label="Shift memory"><div class="bh"><h2>Shift memory</h2></div><div class="s3-brain-stats"></div><div class="s3-brain-body"></div><div class="s3-credit">Imagery © Esri · Building © OpenStreetMap contributors</div></aside>
+    <aside class="s3-brain" aria-label="Reflection"><div class="bh"><h2>Reflection</h2></div><div class="s3-brain-stats"></div><div class="s3-brain-body"></div><div class="s3-credit">Imagery © Esri · Building © OpenStreetMap contributors</div></aside>
     <div class="s3-replay" role="group" aria-label="Replay"><button type="button" data-play aria-label="Play">▶</button><select class="speed" data-speed-sel aria-label="Replay speed">${speedOptions(view.replay.speed)}</select><div class="scrub"><input type="range" min="0" max="1000" value="1000" data-scrub aria-label="Time" /><div class="s3-marks"></div></div><span class="clock mono" data-clock>—</span><button type="button" class="exit" data-exit hidden aria-label="Leave the replay" title="Leave the replay">✕</button></div>
     <div class="s3-toast" role="status" aria-live="polite" hidden></div>
     <div class="s3-legend"><span><i class="sw trail"></i>walk</span><span><i class="sw heat"></i>time spent</span><span><i class="sw photo"></i>photo</span><span><i class="sw alert"></i>open issue</span><span><i class="sw done"></i>resolved</span></div>`;

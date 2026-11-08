@@ -45,7 +45,7 @@ auth, single floor.
 
 ## Brand Commitments
 
-Working name "Shift Memory" for the console. Tracks: NVIDIA (Nemotron agent), NMC² (data
+Product name: Reflection (was Shift Memory). Tracks: NVIDIA (Nemotron agent), NMC² (data
 center operations), Spacetime (backend). Projector legibility is binding.
 
 ## Evidence on Hand

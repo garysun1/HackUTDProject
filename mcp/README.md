@@ -1,4 +1,4 @@
-# Shift Memory MCP server
+# Reflection MCP server
 
 Exposes the floor's memory (the `wm-physical` SpacetimeDB module) to any MCP client over
 stdio. Tools return text with one citation per line, `[event:id time wearer]`, and attach the
@@ -34,7 +34,7 @@ Add to `claude_desktop_config.json` (macOS: `~/Library/Application Support/Claud
 ```json
 {
   "mcpServers": {
-    "shift-memory": {
+    "reflection": {
       "command": "node",
       "args": ["/ABSOLUTE/PATH/TO/HackUTDProject/mcp/src/server.mjs"],
       "env": {
