@@ -51,11 +51,23 @@ final class AppConfig {
   /// Optional label and note attached to the next captured photo (contract `label.name`, `note`).
   var pendingLabel: String = ""
   var pendingNote: String = ""
+  /// Prepended to the next photo's note: "Handoff: " for the closing photo, "Re: PDU A (FAULT). "
+  /// for a fix photo started from the floor map. Cleared with the other pending fields.
+  var pendingNotePrefix: String = ""
   /// Keep the glasses session alive when the app goes to the background (needed to test
   /// shutter-button delivery while backgrounded, issue #10). Off ends the session on background.
   var keepSessionInBackground: Bool { didSet { defaults.set(keepSessionInBackground, forKey: Keys.keepSessionInBackground) } }
   /// Chime on the phone the instant a capture is requested (shutter press or Capture button).
   var shutterSound: Bool { didSet { defaults.set(shutterSound, forKey: Keys.shutterSound) } }
+  /// Listen after each capture and attach what the wearer says as the photo's note.
+  var voiceContext: Bool { didSet { defaults.set(voiceContext, forKey: Keys.voiceContext) } }
+  /// Record from the glasses' microphone (Bluetooth headset) rather than the phone's.
+  var useGlassesMic: Bool { didSet { defaults.set(useGlassesMic, forKey: Keys.useGlassesMic) } }
+  /// Show the shift briefing before a shift starts.
+  var briefingOnStart: Bool { didSet { defaults.set(briefingOnStart, forKey: Keys.briefingOnStart) } }
+  /// When this wearer last ended a shift / acknowledged a briefing (local only).
+  var lastShiftEndedAt: Date? { didSet { defaults.set(lastShiftEndedAt, forKey: Keys.lastShiftEndedAt) } }
+  var lastBriefingAckAt: Date? { didSet { defaults.set(lastBriefingAckAt, forKey: Keys.lastBriefingAckAt) } }
 
   // MARK: Camera-roll import (issue #2)
   var cameraRollImportEnabled: Bool { didSet { defaults.set(cameraRollImportEnabled, forKey: Keys.cameraRollImportEnabled) } }
@@ -81,6 +93,11 @@ final class AppConfig {
     static let blurFaces = "capture.blurFaces"
     static let keepSessionInBackground = "capture.keepSessionInBackground"
     static let shutterSound = "capture.shutterSound"
+    static let voiceContext = "capture.voiceContext"
+    static let useGlassesMic = "capture.useGlassesMic"
+    static let briefingOnStart = "shift.briefingOnStart"
+    static let lastShiftEndedAt = "shift.lastShiftEndedAt"
+    static let lastBriefingAckAt = "shift.lastBriefingAckAt"
     static let cameraRollImportEnabled = "import.enabled"
     static let cameraRollOnlyGlassesPhotos = "import.onlyGlassesPhotos"
     static let seeded = "config.seededFromPlist"
@@ -113,6 +130,11 @@ final class AppConfig {
     blurFaces = defaults.object(forKey: Keys.blurFaces) as? Bool ?? true
     keepSessionInBackground = defaults.object(forKey: Keys.keepSessionInBackground) as? Bool ?? true
     shutterSound = defaults.object(forKey: Keys.shutterSound) as? Bool ?? true
+    voiceContext = defaults.object(forKey: Keys.voiceContext) as? Bool ?? true
+    useGlassesMic = defaults.object(forKey: Keys.useGlassesMic) as? Bool ?? true
+    briefingOnStart = defaults.object(forKey: Keys.briefingOnStart) as? Bool ?? true
+    lastShiftEndedAt = defaults.object(forKey: Keys.lastShiftEndedAt) as? Date
+    lastBriefingAckAt = defaults.object(forKey: Keys.lastBriefingAckAt) as? Date
     cameraRollImportEnabled = defaults.bool(forKey: Keys.cameraRollImportEnabled)
     cameraRollOnlyGlassesPhotos = defaults.object(forKey: Keys.cameraRollOnlyGlassesPhotos) as? Bool ?? true
 

@@ -58,6 +58,10 @@
 	<array>
 		<string>com.meta.ar.wearable</string>
 	</array>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>After you take a photo, Shift Memory listens for a few seconds so you can say what is going on. Only the text is attached to the photo; no audio is stored or uploaded.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Your spoken context is transcribed on this iPhone and attached to the photo as a note for the next shift.</string>
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>Shift Memory connects to your Meta glasses over Bluetooth to receive the photos you take.</string>
 	<key>NSBluetoothPeripheralUsageDescription</key>

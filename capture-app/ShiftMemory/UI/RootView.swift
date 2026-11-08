@@ -21,11 +21,30 @@ struct RootView: View {
           case .settings: SettingsView()
           case .diagnostics: DiagnosticsView()
           case .event(let id): EventDetailView(eventId: id)
+          case .floor:
+            FloorView(
+              store: model.floor,
+              onFixWithPhoto: { asset, issue in
+                model.fixWithPhoto(asset: asset, issue: issue)
+                if !path.isEmpty { path.removeLast() }
+              },
+              onOpenEvent: { id in path.append(Route.event(id)) }
+            )
+            .navigationTitle("Floor")
+            .navigationBarTitleDisplayMode(.inline)
           }
         }
     }
     .tint(Theme.accent)
-    .task { await model.start() }
+    .task {
+      await model.start()
+      #if DEBUG
+      // Screenshot / QA shortcuts: `-openFloor`, `-openBriefing`.
+      let args = ProcessInfo.processInfo.arguments
+      if args.contains("-openFloor") { path.append(Route.floor) }
+      if args.contains("-openBriefing") { model.presentBriefing(.review) }
+      #endif
+    }
   }
 }
 
@@ -33,6 +52,7 @@ enum Route: Hashable {
   case settings
   case diagnostics
   case event(String)
+  case floor
 }
 
 // MARK: - Home
@@ -46,7 +66,11 @@ struct HomeView: View {
   var body: some View {
     ScrollView {
       VStack(spacing: 12) {
+        if let notice = model.notice {
+          NoticeBanner(text: notice) { model.notice = nil }
+        }
         GlassesCard()
+        ShiftCard(path: $path)
         CaptureCard()
         PendingBanner()
         RecentEventsCard(path: $path)
@@ -85,6 +109,99 @@ struct HomeView: View {
     #if DEBUG
     .sheet(isPresented: $showDebug) { DebugMenuView() }
     #endif
+    .sheet(isPresented: Binding(get: { model.briefingPresented }, set: { model.briefingPresented = $0 })) {
+      NavigationStack {
+        BriefingView(
+          briefing: model.briefing,
+          isLoading: model.briefingLoading,
+          error: model.briefingError,
+          speaker: model.speaker,
+          onRefresh: { Task { await model.loadBriefing() } },
+          onOpenEvent: { id in
+            model.briefingPresented = false
+            path.append(Route.event(id))
+          },
+          onAcknowledge: { model.acknowledgeBriefing() },
+          onSkip: { model.skipBriefing() },
+          primaryTitle: model.briefingMode == .shiftStart ? "I'm up to speed, start shift" : "Got it"
+        )
+      }
+      .interactiveDismissDisabled(model.briefingMode == .shiftStart)
+    }
+    .confirmationDialog("End the shift", isPresented: Binding(get: { model.endShiftPresented }, set: { model.endShiftPresented = $0 }), titleVisibility: .visible) {
+      Button("Record a handoff, then end") { model.recordHandoff() }
+      Button("End without a handoff", role: .destructive) { model.endShiftWithoutHandoff() }
+      Button("Keep working", role: .cancel) {}
+    } message: {
+      Text("Take one closing photo and say what the next person needs to know. They hear it in their briefing.")
+    }
+  }
+}
+
+/// A dismissible one-line instruction ("Press the shutter at PDU A…").
+struct NoticeBanner: View {
+  let text: String
+  let onDismiss: () -> Void
+  var body: some View {
+    HStack(alignment: .top, spacing: 10) {
+      Image(systemName: "info.circle.fill").foregroundStyle(Theme.accent)
+      Text(text).font(.subheadline).foregroundStyle(Theme.ink).fixedSize(horizontal: false, vertical: true)
+      Spacer(minLength: 0)
+      Button(action: onDismiss) { Image(systemName: "xmark").font(.footnote.weight(.semibold)).foregroundStyle(Theme.ink3) }
+        .frame(minWidth: 44, minHeight: 44)
+        .accessibilityLabel("Dismiss")
+    }
+    .padding(.leading, 12)
+    .background(Theme.ground, in: RoundedRectangle(cornerRadius: Theme.radius, style: .continuous))
+    .overlay(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous).stroke(Theme.line, lineWidth: Theme.hairline))
+  }
+}
+
+// MARK: - Shift (briefing + floor)
+
+/// Where the shift stands on the shared floor: open issues, the briefing, the map.
+struct ShiftCard: View {
+  @Environment(AppModel.self) private var model
+  @Binding var path: NavigationPath
+
+  var body: some View {
+    let open = model.floor.snapshot.openIssues
+    Surface {
+      VStack(alignment: .leading, spacing: 10) {
+        PanelHead(title: "Shift", trailing: model.config.lastBriefingAckAt.map { "briefed \($0.formatted(date: .omitted, time: .shortened))" } ?? "not briefed")
+        HStack(spacing: 10) {
+          Image(systemName: open.isEmpty ? "checkmark.seal.fill" : "flame.fill")
+            .font(.title3)
+            .foregroundStyle(open.isEmpty ? Theme.good : Theme.critical)
+            .accessibilityHidden(true)
+          VStack(alignment: .leading, spacing: 2) {
+            Text(open.isEmpty ? "Nothing open on the floor" : "\(open.count) open issue\(open.count == 1 ? "" : "s") on the floor")
+              .font(.subheadline.weight(.semibold)).foregroundStyle(Theme.ink)
+            if let first = open.first {
+              Text("\(first.entityName): \(first.text)").font(.footnote).foregroundStyle(Theme.ink3).lineLimit(1)
+            }
+          }
+          Spacer(minLength: 0)
+        }
+        HStack(spacing: 8) {
+          Button { model.presentBriefing(.review) } label: {
+            Label("Briefing", systemImage: "text.bubble").frame(maxWidth: .infinity, minHeight: 44)
+          }
+          .buttonStyle(InkButtonStyle(prominent: false))
+          Button { path.append(Route.floor) } label: {
+            Label("Floor map", systemImage: "square.grid.3x3.topleft.filled").frame(maxWidth: .infinity, minHeight: 44)
+          }
+          .buttonStyle(InkButtonStyle(prominent: false))
+        }
+      }
+    }
+    .task {
+      // Keep the count on Home current without a full poll loop.
+      while !Task.isCancelled {
+        await model.floor.refresh()
+        try? await Task.sleep(for: .seconds(20))
+      }
+    }
   }
 }
 
@@ -151,11 +268,11 @@ struct GlassesCard: View {
       Button("Looking for glasses…") { Task { await g.refreshPermission() } }
         .buttonStyle(InkButtonStyle(prominent: false))
     case .deviceAvailable, .stopped:
-      Button("Start shift") { Task { await g.startShift() } }.buttonStyle(InkButtonStyle())
+      Button("Start shift") { model.beginShift() }.buttonStyle(InkButtonStyle())
     case .starting:
       Button("Starting camera…") {}.buttonStyle(InkButtonStyle()).disabled(true)
     case .ready, .capturing, .paused:
-      Button("End shift") { g.endShift(reason: "ended by operator") }.buttonStyle(InkButtonStyle(prominent: false))
+      Button("End shift") { model.requestEndShift() }.buttonStyle(InkButtonStyle(prominent: false))
     }
   }
 
@@ -223,6 +340,8 @@ struct CaptureCard: View {
         .buttonStyle(InkButtonStyle())
         .disabled(g.phase != .ready)
         .accessibilityHint("Takes one photo with the glasses and uploads it as an event")
+
+        NarrationBanner(narrator: model.narrator)
 
         if g.phase == .capturing {
           ProgressView(value: g.transferFraction ?? 0)

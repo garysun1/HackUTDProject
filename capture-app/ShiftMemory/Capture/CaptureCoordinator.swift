@@ -21,6 +21,11 @@ final class CaptureCoordinator {
 
   /// Phone clock minus server clock from the latest ping; informational on the event.
   var clockOffsetMs: Int?
+  /// Waits for the wearer's spoken context for this photo (FIFO with presses) and returns it.
+  /// Set by the composition root to `VoiceNarrator.takeNarration`; nil when voice is off.
+  var takeSpokenNote: (() async -> String?)?
+  /// Called after a glasses photo has been handed to the upload queue (end-of-shift handoff uses it).
+  var onGlassesPhotoQueued: ((CaptureEvent) -> Void)?
 
   init(config: AppConfig, pipeline: any ImagePipelineProtocol, store: EventStore, queue: UploadQueue, diagnostics: DiagnosticsStore) {
     self.config = config
@@ -54,15 +59,38 @@ final class CaptureCoordinator {
     if !photo.isAppRequested { diagnostics.noteShutterArrival(foreground: photo.appState == "active") }
     diagnostics.recordBattery(glasses: photo.glassesBattery, phone: CaptureCoordinator.phoneBatteryPercent())
 
-    // Contract: client_t is the capture timestamp the SDK delivers, else EXIF DateTimeOriginal.
-    // The toolkit's timestamp is phone-side arrival, so EXIF wins when the bytes carry it.
-    await ingest(
-      data: photo.data, source: source, metricsId: metricsId,
-      fallbackDate: photo.deliveredAt, fallbackOffset: TimeZone.current.secondsFromGMT(),
-      label: config.pendingLabel, note: config.pendingNote
-    )
+    // Read (and clear) the pending fields now, so a press that lands while this photo waits for its
+    // spoken note does not inherit them.
+    let label = config.pendingLabel
+    let typed = config.pendingNote
+    let prefix = config.pendingNotePrefix
     config.pendingLabel = ""
     config.pendingNote = ""
+    config.pendingNotePrefix = ""
+
+    // The wearer talks while the photo crosses from the glasses; hold the upload until they finish
+    // so perception (which reads the note) gets the context. The narrator caps the wait.
+    let spoken = await takeSpokenNote?()
+    let note = Self.composeNote(prefix: prefix, typed: typed, spoken: spoken)
+
+    // Contract: client_t is the capture timestamp the SDK delivers, else EXIF DateTimeOriginal.
+    // The toolkit's timestamp is phone-side arrival, so EXIF wins when the bytes carry it.
+    if let event = await ingest(
+      data: photo.data, source: source, metricsId: metricsId,
+      fallbackDate: photo.deliveredAt, fallbackOffset: TimeZone.current.secondsFromGMT(),
+      label: label, note: note
+    ) {
+      onGlassesPhotoQueued?(event)
+    }
+  }
+
+  /// "Handoff: " + typed note + spoken note, joined as sentences; nil when all are empty.
+  static func composeNote(prefix: String, typed: String, spoken: String?) -> String? {
+    let parts = [typed, spoken ?? ""].map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+    let body = parts.map { p in p.last.map { ".!?".contains($0) } == true ? p : p + "." }.joined(separator: " ")
+    let pre = prefix.trimmingCharacters(in: .whitespaces)
+    if body.isEmpty { return pre.isEmpty || pre.hasSuffix(":") ? nil : pre }
+    return pre.isEmpty ? body : pre + " " + body
   }
 
   /// A photo synced into the Photos library by the Meta AI app (fallback path, issue #2).
@@ -94,23 +122,26 @@ final class CaptureCoordinator {
     await ingest(
       data: data, source: .manualUpload, metricsId: metricsId,
       fallbackDate: creationDate ?? Date(), fallbackOffset: TimeZone.current.secondsFromGMT(),
-      label: config.pendingLabel, note: config.pendingNote
+      label: config.pendingLabel,
+      note: Self.composeNote(prefix: config.pendingNotePrefix, typed: config.pendingNote, spoken: nil)
     )
     config.pendingLabel = ""
     config.pendingNote = ""
+    config.pendingNotePrefix = ""
   }
 
   // MARK: - Shared path
 
+  @discardableResult
   private func ingest(data: Data, source: CaptureSource, metricsId: String,
-                      fallbackDate: Date, fallbackOffset: Int, label: String?, note: String?) async {
+                      fallbackDate: Date, fallbackOffset: Int, label: String?, note: String?) async -> CaptureEvent? {
     let options = PipelineOptions(blurFaces: config.blurFaces)
     let prepared: PreparedPhoto
     do {
       prepared = try await pipeline.prepare(data, options: options)
     } catch {
       diagnostics.update(id: metricsId) { $0.error = "pipeline: \(error)" }
-      return
+      return nil
     }
 
     // For camera-roll imports the library's creation date is authoritative (contract).
@@ -152,6 +183,7 @@ final class CaptureCoordinator {
 
     store.add(event, jpeg: prepared.jpeg, thumbnail: prepared.thumbnail)
     await queue.enqueue(event, jpeg: prepared.jpeg)
+    return event
   }
 
   static func phoneBatteryPercent() -> Int? {

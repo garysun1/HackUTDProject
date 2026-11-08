@@ -90,6 +90,17 @@ struct SettingsView: View {
       }
 
       Section {
+        Toggle("Listen after each photo", isOn: $config.voiceContext)
+        Toggle("Use the glasses' microphone", isOn: $config.useGlassesMic)
+          .disabled(!config.voiceContext)
+        Toggle("Briefing before each shift", isOn: $config.briefingOnStart)
+      } header: {
+        Text("Voice and briefing")
+      } footer: {
+        Text("After the chime, say what is going on: what you see, what you changed, why. It is transcribed on this iPhone and sent as the photo's note, which the backend reads with the image. No audio leaves the phone.")
+      }
+
+      Section {
         Toggle("Import from camera roll", isOn: Binding(
           get: { config.cameraRollImportEnabled },
           set: { on in Task { await model.setCameraRollImport(enabled: on) } }

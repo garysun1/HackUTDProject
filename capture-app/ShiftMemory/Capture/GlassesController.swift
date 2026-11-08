@@ -115,8 +115,14 @@ final class GlassesController {
   // MARK: Hooks (set by the composition root)
   var onPhoto: ((GlassesPhoto) async -> Void)?
   var onEvent: ((GlassesEvent) -> Void)?
-  /// Fired the instant the glasses report a capture-button press (before any debounce), for feedback.
+  /// Fired the instant the glasses report a capture-button press (before any debounce): the chime.
   var onShutterPress: (() -> Void)?
+  /// A shutter press was accepted and will produce a capture (now or after the one in flight): start
+  /// listening for the wearer's context. Exactly one photo, or one `onCaptureAbandoned`, follows.
+  var onShutterAccepted: (() -> Void)?
+  /// A capture that was requested (app or shutter, in flight or queued) will not produce a photo, so
+  /// the narration paired with it must be released; called once per abandoned capture.
+  var onCaptureAbandoned: ((Int) -> Void)?
 
   // MARK: Private
   private let wearables: (any WearablesInterface)?
@@ -554,24 +560,30 @@ final class GlassesController {
   }
 
   /// The wearer pressed the shutter: take the photo through our Photo child, tagged as theirs.
-  func shutterPressed() {
+  /// `fromQueue`: the press was already accepted (and its narration begun) when it was queued.
+  func shutterPressed(fromQueue: Bool = false) {
     guard phase == .ready, pending == nil, let photo, photoState == .started else {
-      if phase == .capturing, pending != nil {
+      if phase == .capturing, pending != nil, !shutterPressQueued, !fromQueue {
         // Full/high transfers take ~40 s over Bluetooth; a wearer pressing again meanwhile wants a
         // second photo, not a dropped one. Fire it when the current photo lands.
         shutterPressQueued = true
         glassesLog("shutter press queued: a capture is in flight")
+        onShutterAccepted?()
       } else {
-        glassesLog("shutter press ignored: phase=\(phase) pending=\(pending != nil) photoState=\(photoState.map { "\($0)" } ?? "nil")")
+        glassesLog("shutter press ignored: phase=\(phase) pending=\(pending != nil) queued=\(shutterPressQueued) photoState=\(photoState.map { "\($0)" } ?? "nil")")
+        if fromQueue { onCaptureAbandoned?(1) }
       }
       return
     }
     shutterPressQueued = false
+    if !fromQueue { onShutterAccepted?() }
     _ = startCapture(resolution: shutterResolution, quality: shutterQuality, appRequested: false, photo: photo)
   }
 
   /// Stop the camera (cascades to Photo) and the session. Safe to call at any time.
   func endShift(reason: String? = nil) {
+    let abandoned = (pending != nil ? 1 : 0) + (shutterPressQueued ? 1 : 0)
+    if abandoned > 0 { onCaptureAbandoned?(abandoned) }
     pending?.timeout?.cancel()
     pending = nil
     revival?.cancel()
@@ -634,6 +646,9 @@ final class GlassesController {
       self.transferFraction = nil
       self.transferBytes = nil
       if self.phase == .capturing { self.phase = .ready }
+      self.onCaptureAbandoned?(1)
+      // A press queued behind the lost capture still deserves its photo.
+      if self.shutterPressQueued { self.shutterPressQueued = false; self.shutterPressed(fromQueue: true) }
     }
     pending = p
     phase = .capturing
@@ -757,7 +772,9 @@ final class GlassesController {
 
   /// Fail the in-flight app capture (if any) with `message`; the wearer sees it as `lastError`.
   private func failPendingCapture(_ message: String) {
+    let abandoned = (pending != nil ? 1 : 0) + (shutterPressQueued ? 1 : 0)
     shutterPressQueued = false
+    if abandoned > 0 { onCaptureAbandoned?(abandoned) }
     guard pending != nil else { return }
     pending?.timeout?.cancel()
     pending = nil
@@ -854,7 +871,7 @@ final class GlassesController {
     await onPhoto?(photo)
     if shutterPressQueued {
       shutterPressQueued = false
-      shutterPressed()
+      shutterPressed(fromQueue: true)
     }
   }
 
@@ -865,10 +882,16 @@ final class GlassesController {
     }
     glassesLog("photo error: \(String(reflecting: error)) — \(error.description); underlying: \(describeUnderlying(underlying)); phase=\(phase) retriedSetupOnce=\(retriedSetupOnce) session.state=\(session.map { "\($0.state)" } ?? "nil")")
     lastError = error.description
+    let lostPending = pending != nil
     pending?.timeout?.cancel()
     pending = nil
     transferFraction = nil
     transferBytes = nil
+    if lostPending { onCaptureAbandoned?(1) }
+    defer {
+      // A press queued behind the failed capture still gets its photo once the camera is ready.
+      if phase == .ready, shutterPressQueued { shutterPressQueued = false; shutterPressed(fromQueue: true) }
+    }
     switch error {
     case .sessionSetupFailed:
       if phase == .starting, let waiter = photoStartWaiter {

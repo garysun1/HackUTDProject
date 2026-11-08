@@ -95,6 +95,35 @@ final class IngestClient: IngestClientProtocol, Sendable {
     _ = try await send(request)
   }
 
+  // MARK: - Shared memory reads (floor, briefing)
+
+  /// One SQL statement against the module's public tables; rows come back as positional values.
+  func sql(_ query: String) async throws(IngestError) -> [[SQLValue]] {
+    let current = endpoint()
+    guard current.isConfigured, let url = current.sqlURL else { throw .notConfigured("Backend") }
+    var request = URLRequest(url: url, timeoutInterval: Self.callTimeout)
+    request.httpMethod = "POST"
+    request.setValue("text/plain", forHTTPHeaderField: "Content-Type")
+    request.httpBody = Data(query.utf8)
+    let reply = try await send(request)
+    guard let resultSets = (try? JSONSerialization.jsonObject(with: reply.body)) as? [[String: Any]] else {
+      throw .decoding("sql reply: \(Self.excerpt(reply.body))")
+    }
+    guard let rows = resultSets.first?["rows"] as? [[Any]] else { return [] }
+    return rows.map { $0.map(SQLValue.init) }
+  }
+
+  /// `ack_alert(alert_id: u64)`: marks a floor issue resolved (the console and Slack see it at once).
+  func ackAlert(alertId: UInt64) async throws(IngestError) {
+    let current = endpoint()
+    guard current.isConfigured, let url = current.procedureURL("ack_alert") else { throw .notConfigured("Backend") }
+    var request = URLRequest(url: url, timeoutInterval: Self.callTimeout)
+    request.httpMethod = "POST"
+    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    request.httpBody = Data("[\(alertId)]".utf8)
+    _ = try await send(request)
+  }
+
   // MARK: - Requests
 
   /// `POST {host}/v1/database/{db}/call/{name}` with the arguments as a JSON array of strings.

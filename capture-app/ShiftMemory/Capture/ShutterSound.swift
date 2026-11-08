@@ -9,10 +9,10 @@
 // rising two-note bell (C6 → E6) with a faint click at the onset, about a third of a second.
 //
 // The sample is synthesized at startup into a WAV in memory (no asset to ship) and decoded once by
-// AVAudioPlayer, which is pre-rolled so `play()` is near-instant. The audio session is `.playback`
-// so the chime plays with the ring/silent switch on silent and while the phone is locked (the app
-// keeps running in the background for the glasses session; `audio` is in UIBackgroundModes), and
-// `.mixWithOthers` + `.duckOthers` so it dips rather than stops the wearer's music or call.
+// AVAudioPlayer, which is pre-rolled so `play()` is near-instant. The audio session belongs to
+// AudioSessionCoordinator (a playback/record category, so the chime plays on silent and while the
+// phone is locked, with `audio` in UIBackgroundModes); when narration follows, the session is
+// already in record mode, so the route does not switch between the chime and the listening.
 //
 
 import AVFoundation
@@ -23,9 +23,12 @@ import UIKit
 final class ShutterSound {
   private var player: AVAudioPlayer?
   private let haptic = UIImpactFeedbackGenerator(style: .medium)
-  private var sessionConfigured = false
+  /// Activates the shared audio session in the right mode (AudioSessionCoordinator owns it, so the
+  /// chime and the narration that follows it never fight over the category).
+  private let prepareAudio: () -> Void
 
-  init() {
+  init(prepareAudio: @escaping () -> Void) {
+    self.prepareAudio = prepareAudio
     if let player = try? AVAudioPlayer(data: Self.chimeWAV(), fileTypeHint: AVFileType.wav.rawValue) {
       player.volume = 0.9
       player.prepareToPlay()
@@ -36,27 +39,12 @@ final class ShutterSound {
 
   /// Play the chime (and a tap) now. Safe to call from any phase; overlapping calls restart it.
   func play() {
-    configureSessionIfNeeded()
+    prepareAudio()
     guard let player else { return }
     player.currentTime = 0
     player.play()
     haptic.impactOccurred()
     haptic.prepare()
-  }
-
-  private func configureSessionIfNeeded() {
-    let session = AVAudioSession.sharedInstance()
-    if !sessionConfigured {
-      do {
-        try session.setCategory(.playback, mode: .default, options: [.mixWithOthers, .duckOthers])
-        sessionConfigured = true
-      } catch {
-        glassesLog("shutter sound: audio session category failed: \(error)")
-      }
-    }
-    // Activation is per play so an interruption (a call) or the system deactivating us does not
-    // leave the next chime silent; deactivation lets the ducked audio come back.
-    try? session.setActive(true, options: [])
   }
 
   // MARK: - Synthesis
