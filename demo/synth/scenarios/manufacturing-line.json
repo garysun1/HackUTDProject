@@ -219,9 +219,10 @@
       "t": 255,
       "wearer": "luis",
       "room": "Press line",
-      "prompt": "Looking down at the base of a large hydraulic press beside a big yellow stenciled marking \"HP-2\" on its frame; a hydraulic hose fitting is wet with oil and a small dark puddle of oil spreads on the concrete floor, partly soaked by a white absorbent pad.",
+      "prompt": "Looking down at the base of a large hydraulic press beside a big yellow stenciled marking \"HP-2\" on its frame; a hydraulic hose fitting is wet with oil and a small dark puddle of oil spreads on the concrete floor, partly soaked by a white absorbent pad; a bright yellow tag zip-tied to the fitting reads \"OIL LEAK\" in large black marker letters.",
       "read": [
-        "HP-2"
+        "HP-2",
+        "OIL LEAK"
       ],
       "note": "HP-2 return-line fitting is weeping, small oil leak at the base. Pad down; needs a new fitting before it gets worse."
     },
