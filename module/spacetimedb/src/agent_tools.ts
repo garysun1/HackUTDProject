@@ -2,7 +2,7 @@
 // tables, with the same semantics as the MCP server's tools (mcp/src/tools.mjs), so an
 // agent gets the same answers whether it goes through Claude Desktop or the module.
 // No SpacetimeDB imports: tested with plain Node (module/test/agent_tools.test.ts).
-import { squash, clockCT, parseSinceArg, graphSections, assembleHandoff, segmentEvents, plainEpisodeTitle, type HandoffSnap, type HEvent, type HAlert } from './rules.ts';
+import { squash, clockCT, parseSinceArg, assembleHandoff, segmentEvents, plainEpisodeTitle, resolveCitedId, type HandoffSnap, type HEvent, type HAlert } from './rules.ts';
 
 export interface AChange {
   entityId: string;
@@ -208,10 +208,10 @@ function issuesOut(idx: AgentIndex) {
 }
 
 function toHandoffSnap(idx: AgentIndex, from: bigint): HandoffSnap {
-  const events: HEvent[] = idx.events.filter(e => e.t >= from).map(e => ({ id: e.id, t: e.t, wearer: e.wearer, assets: e.assets, place: e.place, summary: e.summary, note: e.note, label: e.label, changes: e.changes.map(c => `${c.entity}${c.attr ? ' ' + c.attr : ''}: ${c.from} -> ${c.to}`) }));
+  const events: HEvent[] = idx.events.filter(e => e.t >= from).map(e => ({ id: e.id, t: e.t, wearer: e.wearer, assets: e.assets, place: e.place, summary: e.summary, note: e.note, label: e.label, changes: e.changes.map(c => `${c.entity}${c.attr ? ' ' + c.attr : ''}: ${c.from} -> ${c.to}`), changedAssets: e.changes.map(c => c.entity) }));
   const alerts: HAlert[] = idx.alerts.filter(a => !a.acked || a.t >= from).map(a => ({ t: a.t, open: !a.acked, asset: a.entityName || a.entityId || 'unassigned', text: a.text, eventId: a.eventId, wearer: a.wearer }));
   const issues = idx.issues.map(i => ({ id: i.id, title: i.title, asset: i.assetName || i.assetId, status: i.status, openedBy: i.openedBy, resolvedEventId: i.resolvedEventId, resolutionNote: i.resolutionNote }));
-  return { sinceMicros: from, anchor: from > 0n ? clockCT(from) : 'the start of the record', events, alerts, total: events.length, issues };
+  return { sinceMicros: from, anchor: from > 0n ? clockCT(from) : 'the start of the record', events, alerts, total: events.length, issues, now: idx.now };
 }
 
 /** Run one tool. Always returns a JSON-able object; unknown tools and bad arguments return an error field. */
@@ -319,7 +319,7 @@ export function runTool(idx: AgentIndex, name: string, args: Record<string, unkn
       if (!since && idx.lastHandoff) return { handoff: idx.lastHandoff, source: 'cached' };
       const snap = toHandoffSnap(idx, since ? sinceMicros(since, idx) : 0n);
       if (!snap.events.length && !snap.alerts.some(x => x.open)) return { handoff: `No photos since ${snap.anchor}.`, source: 'graph' };
-      return { handoff: assembleHandoff(graphSections(snap), snap), source: 'graph' };
+      return { handoff: assembleHandoff(null, snap), source: 'graph' };
     }
     default:
       return { error: `unknown tool ${name}` };
@@ -363,8 +363,8 @@ export function groundCitations(text: string, known: Set<string>): { text: strin
   const cleaned = text.replace(/\[event:([^\]]+)\]/g, (_m, inner: string) => {
     const good = inner
       .split(/[\s,]+/)
-      .map(x => x.replace(/^event:/, ''))
-      .filter(x => x && known.has(x));
+      .map(x => resolveCitedId(x.replace(/^event:/, ''), known))
+      .filter((x): x is string => !!x);
     for (const id of good) if (!citations.includes(id)) citations.push(id);
     return good.map(id => `[event:${id}]`).join(' ');
   });

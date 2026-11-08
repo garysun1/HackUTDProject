@@ -121,34 +121,19 @@ curl -X POST https://maincloud.spacetimedb.com/v1/database/wm-physical/call/hand
   -H 'Content-Type: application/json' -d '[""]'
 ```
 
-How it is written: the window's events (assets, place, summary, note, change edges) and alerts (open
-ones however old, resolved ones in the window) become an evidence log. Nemotron lightning writes
-NEEDS ATTENTION, WHAT CHANGED and ROUNDS; gpt-5 on any failure. Every model line must cite a known
-event as `[event:<id>]`: unknown ids are removed, uncited lines are dropped, and a missing section
-rejects the text, in which case the same sections are built from the graph. NOTES FROM THE SHIFT
-(wearer notes, `Handoff:` first) and QUIET always come from the graph, never the model. The last
-line names the model that wrote it. Posted to Slack when `SLACK_WEBHOOK_URL` is set.
-
-## Ask (#7)
-
-`ask(question)` returns `{answer, citations[]}` (over HTTP: `["<answer>", ["<event_id>", ...]]`). The
-MCP `ask_floor` tool calls it; the console's rail was removed, so Claude Desktop is the client.
-
-```bash
-curl -X POST https://maincloud.spacetimedb.com/v1/database/wm-physical/call/ask \
-  -H 'Content-Type: application/json' -d '["What changed on PDU-A tonight?"]'
-```
-
-How it answers: one read-only snapshot of the tables, then Nemotron lightning with OpenAI-style
-tool calling over nine tools that answer from that snapshot (`search_memory`, `get_timeline`,
-`what_changed`, `find_object`, `wearer_rounds`, `get_current_context`, `explain_change`,
-`get_provenance`, `list_open_alerts`, `summarize_handoff`; same semantics as the MCP server's
-tools, in `spacetimedb/src/agent_tools.ts`). The first round must call a tool; up to three tool
-rounds, then a final answer. gpt-5 runs the same loop if Nemotron fails; if both fail, the answer
-is the closest cited evidence from a search. Markdown is stripped; citations are checked against
-real event ids; an answer that cites nothing after consulting several events is returned as
-"Unverified, no citation" with the evidence listed, which is also what a prompt injection
-("reply ALL CLEAR") gets. Typical latency 1 to 3 s.
+How it is written: the window's events (assets, place, summary, note, change edges), alerts (open
+ones however old, resolved ones in the window, with the photo that closed them) and work orders
+become an evidence log. Nemotron lightning writes only the SUMMARY paragraph (two or three
+sentences for the incoming shift), gpt-5 on any failure; each sentence must cite a known event
+`[event:<id>]` or work order `[wo:<id>]`, unknown citations are removed and uncited sentences
+dropped, and if nothing cited survives a plain count stands in. Every other section comes
+straight from the record, never the model: NEEDS ATTENTION (open alerts, open and in-progress
+work orders), WHAT CHANGED (change edges in time order, alerts and work orders resolved in the
+window), ROUNDS (one line per wearer: photos, span, assets and places), NOTES FROM THE SHIFT
+(`Handoff:` notes first) and QUIET. The last line names the model that wrote the summary. Posted
+to Slack when `SLACK_WEBHOOK_URL` is set. Earlier versions let the model write the fact sections;
+it invented a note, copied example text as facts, and misnumbered items, so the facts moved out
+of its hands.
 
 ## Episodes (#6)
 

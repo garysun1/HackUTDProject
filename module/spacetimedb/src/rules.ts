@@ -263,7 +263,35 @@ export function parseSinceArg(s: string, now: bigint): bigint | null {
     const unit = { m: 60n, h: 3600n, d: 86400n }[rel[2].toLowerCase() as 'm' | 'h' | 'd'];
     return now - BigInt(rel[1]) * unit * 1_000_000n;
   }
-  return microsFromIso(v);
+  return microsFromIso(withVenueOffset(v));
+}
+
+/** ISO input without a zone is read in the venue's zone (CST, UTC-6), the zone clockCT prints. */
+export function withVenueOffset(iso: string): string {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) return `${iso}T00:00:00-06:00`;
+  if (/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/.test(iso)) return `${iso.replace(' ', 'T')}-06:00`;
+  return iso;
+}
+
+/** A cited id: exact, or the one known id that starts with it (8+ chars), since models shorten UUIDs. */
+export function resolveCitedId(id: string, known: Set<string>): string | null {
+  if (known.has(id)) return id;
+  if (id.length < 8) return null;
+  let hit: string | null = null;
+  for (const k of known) {
+    if (!k.startsWith(id)) continue;
+    if (hit) return null;
+    hit = k;
+  }
+  return hit;
+}
+
+/** Short name for the footer: which model wrote the summary. */
+export function modelLabel(model: string): string {
+  if (!model || model === 'graph') return 'the record';
+  if (/nemotron/i.test(model)) return 'Nemotron';
+  if (model.startsWith('azure/')) return `${model.slice(6)} (fallback)`;
+  return model;
 }
 
 // ---------- handoff text ----------
@@ -278,6 +306,7 @@ export interface HEvent {
   note: string;
   label: string;
   changes: string[];
+  changedAssets?: string[]; // canonical names of the entities the changes are about
 }
 export interface HAlert {
   t: bigint;
@@ -286,6 +315,7 @@ export interface HAlert {
   text: string;
   eventId: string;
   wearer: string;
+  resolvedBy?: string; // event that closed it, when recorded
 }
 export interface HIssue {
   id: string;
@@ -303,10 +333,13 @@ export interface HandoffSnap {
   alerts: HAlert[];
   total: number;
   issues?: HIssue[]; // work orders: open ones however old, resolved ones in the window
+  now?: bigint; // for ages of old alerts
+  pending?: number; // photos in the window still being perceived
 }
 
 export const cite = (id: string) => `[event:${id}]`;
-export const MODEL_SECTIONS = ['NEEDS ATTENTION', 'WHAT CHANGED', 'ROUNDS'] as const;
+export const MODEL_SECTIONS = ['SUMMARY', 'ROUNDS'] as const; // what the model writes; the facts sections come from the graph
+const HEADER_RE = new RegExp(`^(${MODEL_SECTIONS.join('|')})\\s*:?\\s*(.*)$`, 'i');
 
 /** Wearer notes, close to verbatim, Handoff: notes first. */
 export function notesLines(snap: HandoffSnap): string[] {
@@ -317,7 +350,7 @@ export function notesLines(snap: HandoffSnap): string[] {
 
 /** Assets seen in the window with no open alert and no recorded change. */
 export function quietLines(snap: HandoffSnap): string[] {
-  const flagged = new Set<string>([...snap.alerts.filter(a => a.open).map(a => a.asset), ...snap.events.filter(e => e.changes.length).flatMap(e => e.assets)]);
+  const flagged = new Set<string>([...snap.alerts.filter(a => a.open).map(a => a.asset), ...snap.events.flatMap(e => e.changedAssets ?? (e.changes.length ? e.assets : []))]);
   const quiet: string[] = [];
   for (const e of snap.events) for (const a of e.assets) if (!flagged.has(a) && !quiet.includes(a)) quiet.push(a);
   if (!quiet.length) return ['none'];
@@ -325,42 +358,83 @@ export function quietLines(snap: HandoffSnap): string[] {
   return [`${quiet.join(', ')} ${cites.join(' ')}`];
 }
 
-/** The three judgement sections built from the graph alone; used when the models fail. */
-export function graphSections(snap: HandoffSnap): string[] {
-  const L: string[] = [];
-  const open = snap.alerts.filter(a => a.open);
-  const issues = snap.issues ?? [];
-  const openIssues = issues.filter(i => i.status !== 'resolved');
-  L.push('NEEDS ATTENTION');
-  const attention = [
-    ...open.map(a => `${a.asset}: ${a.text} (${clockCT(a.t)}, ${a.wearer}) ${cite(a.eventId)}`),
-    ...openIssues.map(i => `Work order ${i.id} ${i.status.replace('_', ' ')}: ${i.title} (${i.asset}, opened by ${i.openedBy})`),
+/** NEEDS ATTENTION from the graph: open alerts, then work orders still open or in progress. */
+const MAX_ATTENTION_ALERTS = 12;
+
+/** "2 d ago" / "14 h ago" for an alert older than half a day, else ''. */
+function ageSuffix(t: bigint, now?: bigint): string {
+  if (!now || now <= t) return '';
+  const hours = Number((now - t) / 3_600_000_000n);
+  if (hours < 12) return '';
+  return hours < 48 ? `, ${hours} h ago` : `, ${Math.floor(hours / 24)} d ago`;
+}
+
+export function attentionLines(snap: HandoffSnap): string[] {
+  const open = snap.alerts.filter(a => a.open).sort((x, y) => (x.t > y.t ? -1 : x.t < y.t ? 1 : 0)); // newest first
+  const openIssues = (snap.issues ?? []).filter(i => i.status !== 'resolved');
+  const shown = open.slice(0, MAX_ATTENTION_ALERTS);
+  const lines = [
+    ...shown.map(a => `${a.asset}: ${a.text} (${clockCT(a.t)}${ageSuffix(a.t, snap.now)}, ${a.wearer}) ${cite(a.eventId)}`),
+    ...(open.length > shown.length ? [`and ${open.length - shown.length} more open alerts`] : []),
+    ...openIssues.map(i => `Work order ${i.id} ${i.status.replace('_', ' ')}: ${i.title} (${i.asset}, opened by ${i.openedBy}) [wo:${i.id}]`),
   ];
-  L.push(...(attention.length ? attention : ['none']));
-  L.push('', 'WHAT CHANGED');
+  return lines.length ? lines : ['none'];
+}
+
+/** WHAT CHANGED from the graph: change edges in time order, then alerts and work orders resolved in the window. */
+export function changedLines(snap: HandoffSnap): string[] {
+  const issues = snap.issues ?? [];
   const changed = snap.events.flatMap(e => e.changes.map(c => `${c} (${clockCT(e.t)}) ${cite(e.id)}`));
   const resolved = [
-    ...snap.alerts.filter(a => !a.open).map(a => `${a.asset}: ${a.text}, resolved ${cite(a.eventId)}`),
-    ...issues.filter(i => i.status === 'resolved').map(i => `Work order ${i.id} resolved: ${i.title}${i.resolutionNote ? ', ' + i.resolutionNote : ''}${i.resolvedEventId ? ' ' + cite(i.resolvedEventId) : ''}`),
+    ...snap.alerts.filter(a => !a.open).map(a => `${a.asset}: ${a.text} (${clockCT(a.t)}), resolved ${cite(a.resolvedBy || a.eventId)}`),
+    ...issues.filter(i => i.status === 'resolved').map(i => `Work order ${i.id} resolved: ${i.title}${i.resolutionNote ? ', ' + i.resolutionNote : ''}${i.resolvedEventId ? ' ' + cite(i.resolvedEventId) : ` [wo:${i.id}]`}`),
   ];
-  L.push(...(changed.length || resolved.length ? [...changed, ...resolved] : ['none']));
-  L.push('', 'ROUNDS');
+  const lines = [...changed, ...resolved];
+  return lines.length ? lines : ['none'];
+}
+
+/** ROUNDS from the graph, one line per wearer; used when the models fail. */
+export function roundsLines(snap: HandoffSnap): string[] {
   const byWearer = new Map<string, HEvent[]>();
   for (const e of snap.events) {
     if (!byWearer.has(e.wearer)) byWearer.set(e.wearer, []);
     byWearer.get(e.wearer)!.push(e);
   }
+  const L: string[] = [];
   for (const [w, evs] of byWearer) {
-    const seen: string[] = [];
-    for (const e of evs) for (const n of [...e.assets, e.place]) if (n && !seen.includes(n)) seen.push(n);
+    // distinct assets, then distinct places; a place that contains one already listed is the same area
+    const assets: string[] = [];
+    const places: string[] = [];
+    for (const e of evs) {
+      for (const n of e.assets) if (n && !assets.includes(n)) assets.push(n);
+      if (e.place) {
+        const dup = places.findIndex(x => samePlace(x, e.place));
+        if (dup < 0) places.push(e.place);
+        else if (e.place.length < places[dup].length) places[dup] = e.place; // keep the more general name
+      }
+    }
+    // a place that is also a listed asset (a rack) is not repeated
+    const seen = [...assets, ...places.filter(pl => !assets.some(a => squash(a) === squash(pl)))];
     const first = evs[0];
     const last = evs[evs.length - 1];
     const cites = first === last ? cite(first.id) : `${cite(first.id)} ${cite(last.id)}`;
     const span = first === last ? clockCT(first.t) : `${clockCT(first.t)} to ${clockCT(last.t)}`;
     L.push(`${w}: ${evs.length} photo${evs.length === 1 ? '' : 's'} ${span}${seen.length ? ', ' + seen.join(', ') : ''} ${cites}`);
   }
-  if (!byWearer.size) L.push('none');
-  return L;
+  return L.length ? L : ['none'];
+}
+
+/** A plain SUMMARY line when the model wrote none. */
+export function plainSummary(snap: HandoffSnap): string[] {
+  const open = snap.alerts.filter(a => a.open).length;
+  const wo = (snap.issues ?? []).filter(i => i.status !== 'resolved').length;
+  const fixed = snap.alerts.filter(a => !a.open).length + (snap.issues ?? []).filter(i => i.status === 'resolved').length;
+  return [`${snap.total} photos since ${snap.anchor}; ${open} open alert${open === 1 ? '' : 's'}, ${wo} work order${wo === 1 ? '' : 's'} outstanding, ${fixed} resolved.${snap.pending ? ` ${snap.pending} photo${snap.pending === 1 ? '' : 's'} still being read.` : ''}`];
+}
+
+/** Kept for callers that want the whole handoff from the graph alone. */
+export function graphSections(snap: HandoffSnap): string[] {
+  return ['NEEDS ATTENTION', ...attentionLines(snap), '', 'WHAT CHANGED', ...changedLines(snap), '', 'ROUNDS', ...roundsLines(snap)];
 }
 
 /**
@@ -374,17 +448,22 @@ export function groundModelSections(text: string, known: Set<string>, knownWorkO
   const present = new Set<string>();
   let current = '';
   let bodyLines = 0;
+  const woUpper = new Map([...knownWorkOrders].map(id => [id.toUpperCase(), id]));
   for (const raw of text.split('\n')) {
-    const line = raw.replace(/^[\s\-*•]+/, '').trim();
+    let line = raw.replace(/^[\s\-*•]+/, '').trim();
     if (!line) continue;
-    const header = line.replace(/[:\s]+$/, '').toUpperCase();
-    if ((MODEL_SECTIONS as readonly string[]).includes(header)) {
-      if (present.has(header)) continue;
-      present.add(header);
-      current = header;
-      if (out.length) out.push('');
-      out.push(header);
-      continue;
+    // "SUMMARY" alone, "SUMMARY:", or "SUMMARY: first line" all open the section
+    const m = HEADER_RE.exec(line);
+    const header = m ? m[1].toUpperCase() : '';
+    if (header) {
+      if (!present.has(header)) {
+        present.add(header);
+        current = header;
+        if (out.length) out.push('');
+        out.push(header);
+      }
+      line = (m![2] ?? '').trim();
+      if (!line) continue;
     }
     if (!current) continue;
     if (/^none\.?$/i.test(line)) {
@@ -395,13 +474,18 @@ export function groundModelSections(text: string, known: Set<string>, knownWorkO
     const cleaned = line
       .replace(/\[event:([^\]]+)\]/g, (_m, inner: string) => {
         const ids = inner.split(/[\s,]+/).map(x => x.replace(/^event:/, '')).filter(x => x && x !== 'through' && x !== 'to' && x !== 'and');
-        const good = ids.filter(id => known.has(id));
-        ok += good.length;
-        return good.map(cite).join(' ');
+        const parts: string[] = [];
+        for (const id of ids) {
+          if (known.has(id)) parts.push(cite(id));
+          else if (woUpper.has(id.toUpperCase())) parts.push(`[wo:${woUpper.get(id.toUpperCase())}]`); // a work order filed as an event
+          else continue;
+          ok++;
+        }
+        return parts.join(' ');
       })
       .replace(/\[wo:([^\]]+)\]/g, (_m, inner: string) => {
         // a work order has no photo of its own; its id is the citation
-        const good = inner.split(/[\s,]+/).map(x => x.replace(/^wo:/, '')).filter(id => knownWorkOrders.has(id));
+        const good = inner.split(/[\s,]+/).map(x => x.replace(/^wo:/i, '')).map(x => woUpper.get(x.toUpperCase())).filter((x): x is string => !!x);
         ok += good.length;
         return good.map(id => `[wo:${id}]`).join(' ');
       });
@@ -421,39 +505,78 @@ export function groundModelSections(text: string, known: Set<string>, knownWorkO
   return final;
 }
 
-/** Full handoff text: model sections (or graph sections), then notes and quiet from the graph. */
-/**
- * NEEDS ATTENTION must match the record. A line whose only citations are resolved alerts or
- * resolved work orders is dropped (the model restating a fixed fault as open), and if the
- * section is then empty or "none" while alerts or work orders are open, the graph's own list
- * replaces it. The rest of the model text is kept.
- */
-export function keepAttention(sections: string[], snap: HandoffSnap): string[] {
-  const issues = snap.issues ?? [];
-  const open = snap.alerts.some(a => a.open) || issues.some(i => i.status !== 'resolved');
-  const i = sections.indexOf('NEEDS ATTENTION');
-  if (i < 0) return sections;
-  let j = i + 1;
-  while (j < sections.length && sections[j] !== '' && !(MODEL_SECTIONS as readonly string[]).includes(sections[j])) j++;
-  const openEvents = new Set(snap.alerts.filter(a => a.open).map(a => a.eventId));
-  const closedEvents = new Set(snap.alerts.filter(a => !a.open && !openEvents.has(a.eventId)).map(a => a.eventId));
-  const closedWo = new Set(issues.filter(x => x.status === 'resolved').map(x => x.id));
-  const stale = (line: string) => {
-    const evs = [...line.matchAll(/\[event:([^\]]+)\]/g)].map(m => m[1]);
-    const wos = [...line.matchAll(/\[wo:([^\]]+)\]/g)].map(m => m[1]);
-    const cites = evs.length + wos.length;
-    return cites > 0 && evs.every(e => closedEvents.has(e)) && wos.every(w => closedWo.has(w));
-  };
-  const body = sections.slice(i + 1, j).filter(l => !stale(l));
-  const empty = !body.length || (body.length === 1 && body[0] === 'none');
-  if (!empty || !open) return [...sections.slice(0, i + 1), ...(body.length ? body : ['none']), ...sections.slice(j)];
-  const g = graphSections(snap); const gi = g.indexOf('NEEDS ATTENTION'); let gj = gi + 1;
-  while (gj < g.length && g[gj] !== '') gj++;
-  return [...sections.slice(0, i + 1), ...g.slice(gi + 1, gj), ...sections.slice(j)];
+/** Lines under one section header in a grounded model output. */
+export function sectionLines(sections: string[], header: string): string[] {
+  const i = sections.indexOf(header);
+  if (i < 0) return [];
+  const out: string[] = [];
+  for (let k = i + 1; k < sections.length && sections[k] !== '' && !(MODEL_SECTIONS as readonly string[]).includes(sections[k]); k++) out.push(sections[k]);
+  return out;
 }
 
-export function assembleHandoff(sections: string[], snap: HandoffSnap): string {
-  return [...sections, '', 'NOTES FROM THE SHIFT', ...notesLines(snap), '', 'QUIET', ...quietLines(snap)].join('\n');
+/**
+ * The model's summary paragraph, grounded sentence by sentence: a sentence stays only if it
+ * cites a known event or work order; unknown citations are removed; markdown, bullets and a
+ * leading "SUMMARY:" are stripped. Returns null when nothing cited survives.
+ */
+export function groundSummary(text: string, known: Set<string>, knownWorkOrders: Set<string> = new Set()): string[] | null {
+  const woUpper = new Map([...knownWorkOrders].map(id => [id.toUpperCase(), id]));
+  const body = text
+    .replace(/\*\*|__|`/g, '')
+    .replace(/^\s*(summary|rounds)\s*:?\s*/gim, '')
+    .replace(/^[\s\-*•]+/gm, '');
+  const sentences = body.split(/\n+|(?<=[.!?\]])\s+(?=[A-Z0-9])/).map(x => x.trim()).filter(Boolean);
+  const out: string[] = [];
+  for (const sentence of sentences) {
+    let ok = 0;
+    const cleaned = sentence
+      .replace(/\[(?:event|wo):([^\]]+)\]/gi, (_m, inner: string) => {
+        const parts: string[] = [];
+        for (const raw of inner.split(/[\s,]+/)) {
+          const id = raw.replace(/^(event|wo):/i, '');
+          if (!id) continue;
+          const ev = resolveCitedId(id, known);
+          if (ev) parts.push(cite(ev));
+          else if (woUpper.has(id.toUpperCase())) parts.push(`[wo:${woUpper.get(id.toUpperCase())}]`);
+          else continue;
+          ok++;
+        }
+        return parts.join(' ');
+      })
+      .replace(/\s{2,}/g, ' ')
+      .replace(/\s+([.,;])/g, '$1')
+      .trim();
+    if (ok && cleaned.length > 3) out.push(cleaned);
+  }
+  // the same citation twice in a row reads once
+  const lines = out.map(l => l.replace(/(\[(?:event|wo):[^\]]+\])(?:[ ,]+\1)+/g, '$1'));
+  return lines.length ? [lines.join(' ')] : null;
+}
+
+/**
+ * Full handoff text. Facts (NEEDS ATTENTION, WHAT CHANGED, ROUNDS, NOTES, QUIET) always come
+ * from the graph; the model contributes the SUMMARY when it was grounded, else a plain count.
+ */
+export function assembleHandoff(summary: string[] | null, snap: HandoffSnap): string {
+  return [
+    'SUMMARY',
+    ...(summary && summary.length ? summary : plainSummary(snap)),
+    '',
+    'NEEDS ATTENTION',
+    ...attentionLines(snap),
+    '',
+    'WHAT CHANGED',
+    ...changedLines(snap),
+    '',
+    'ROUNDS',
+    ...roundsLines(snap),
+    '',
+    'NOTES FROM THE SHIFT',
+    ...notesLines(snap),
+    '',
+    'QUIET',
+    ...quietLines(snap),
+  ].join('\n');
 }
 
 // ---------- episodes (#6) ----------

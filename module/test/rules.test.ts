@@ -80,7 +80,7 @@ test('alert summary: concrete first, anomalies only as a last resort, near-dupli
 });
 
 // ---------- handoff helpers (#8) ----------
-import { parseSinceArg, clockCT, groundModelSections, graphSections, assembleHandoff, notesLines, quietLines } from '../spacetimedb/src/rules.ts';
+import { parseSinceArg, clockCT, groundModelSections, groundSummary, graphSections, assembleHandoff, notesLines, quietLines, sectionLines } from '../spacetimedb/src/rules.ts';
 
 const NOW = 1794100000000000n; // 2026-11-07T23:46:40Z
 
@@ -119,41 +119,55 @@ test('notes lead with Handoff:, quiet excludes alerted and changed assets', () =
 });
 
 test('graph sections cite every line and group rounds by wearer', () => {
-  const text = assembleHandoff(graphSections(snap), snap);
-  const lines = text.split('\n').filter(l => l && !/^[A-Z ]+$/.test(l) && l !== 'none');
-  for (const l of lines) assert.match(l, /\[event:[^\]]+\]/, l);
+  const text = assembleHandoff(null, snap);
+  assert.match(text, /^SUMMARY\n3 photos since the start of the record; 1 open alert, 0 work orders outstanding, 1 resolved\./);
+  const lines = text.split('\n').filter(l => l && !/^[A-Z ]+$/.test(l) && l !== 'none' && !l.startsWith('3 photos since'));
+  for (const l of lines) assert.match(l, /\[event:[^\]]+\]|\[wo:[^\]]+\]/, l);
   assert.match(text, /NEEDS ATTENTION\nPDU A \(Rack R12\): PSU2 FAULT \(22:30 CT, Maria\) \[event:e2\]/);
-  assert.match(text, /CRAC unit 2: OVERTEMP, resolved \[event:e0\]/);
+  assert.match(text, /CRAC unit 2: OVERTEMP \(19:06 CT\), resolved \[event:e0\]/);
+  const withResolver = assembleHandoff(null, { ...snap, alerts: [{ ...snap.alerts[1], resolvedBy: 'e3' }] });
+  assert.match(withResolver, /CRAC unit 2: OVERTEMP \(19:06 CT\), resolved \[event:e3\]/);
   assert.match(text, /Maria: 2 photos 22:00 CT to 22:30 CT, PDU A \(Rack R12\), Rack R12, Cold Aisle 3 \[event:e1\] \[event:e2\]/);
+  // a place that is also a listed asset is not repeated
+  const rackPlace = assembleHandoff(null, { ...snap, events: [{ ...snap.events[0], place: 'Rack R12' }, snap.events[1]] });
+  assert.match(rackPlace, /Maria: 2 photos 22:00 CT to 22:30 CT, PDU A \(Rack R12\), Rack R12, Cold Aisle 3 \[event:e1\] \[event:e2\]/);
+  // nested places collapse to the most general name in rounds
+  const nested = assembleHandoff(null, { ...snap, events: [{ ...snap.events[0], place: 'Cold Aisle 3, Row R12' }, { ...snap.events[1], place: 'Cold Aisle 3' }] });
+  assert.match(nested, /Maria: 2 photos 22:00 CT to 22:30 CT, PDU A \(Rack R12\), Rack R12, Cold Aisle 3 \[event:e1\] \[event:e2\]/);
   assert.match(text, /Dev: 1 photo 22:50 CT, UPS 1 \[event:e3\]/);
 });
 
 test('model output is grounded: bullets stripped, ranges split, unknown ids dropped, uncited lines dropped', () => {
   const known = new Set(['e1', 'e2', 'e3']);
   const model = [
-    'NEEDS ATTENTION',
-    '- PDU A fault on R12 [event:e2]',
+    'SUMMARY',
+    '- PDU A faulted on R12 and needs eyes first [event:e2]',
     'Something I made up with no citation',
     '',
-    'WHAT CHANGED:',
-    '* PDU A OK to FAULT [event:e2] [event:zzz]',
-    'ROUNDS',
-    'Maria walked the aisle [event:e1 through event:e3]',
+    'ROUNDS:',
+    '* Maria walked the aisle [event:e1 through event:e3] [event:zzz]',
     'Dev checked UPS [event:nope]',
   ].join('\n');
-  assert.deepEqual(groundModelSections(model, known), [
-    'NEEDS ATTENTION', 'PDU A fault on R12 [event:e2]', '',
-    'WHAT CHANGED', 'PDU A OK to FAULT [event:e2]', '',
-    'ROUNDS', 'Maria walked the aisle [event:e1] [event:e3]',
-  ]);
+  const g2 = groundModelSections(model, known);
+  assert.deepEqual(g2, ['SUMMARY', 'PDU A faulted on R12 and needs eyes first [event:e2]', '', 'ROUNDS', 'Maria walked the aisle [event:e1] [event:e3]']);
+  assert.deepEqual(sectionLines(g2!, 'ROUNDS'), ['Maria walked the aisle [event:e1] [event:e3]']);
   // a section emptied by grounding reads none; a missing section rejects the whole text
-  assert.deepEqual(groundModelSections('NEEDS ATTENTION\nnone\nWHAT CHANGED\nfake [event:q]\nROUNDS\nok [event:e1]', known),
-    ['NEEDS ATTENTION', 'none', '', 'WHAT CHANGED', 'none', '', 'ROUNDS', 'ok [event:e1]']);
-  assert.equal(groundModelSections('NEEDS ATTENTION\nx [event:e1]\nROUNDS\ny [event:e2]', known), null);
-  assert.equal(groundModelSections('NEEDS ATTENTION\nnone\nWHAT CHANGED\nnone\nROUNDS\nnone', known), null);
+  assert.deepEqual(groundModelSections('SUMMARY\nfake [event:q]\nROUNDS\nok [event:e1]', known), ['SUMMARY', 'none', '', 'ROUNDS', 'ok [event:e1]']);
+  assert.equal(groundModelSections('SUMMARY\nx [event:e1]', known), null);
+  assert.equal(groundModelSections('SUMMARY\nnone\nROUNDS\nnone', known), null);
+  // inline headers and work orders filed as events
+  assert.deepEqual(groundModelSections('SUMMARY: fixed PDU [event:e3] [event:wo-7]\nROUNDS: Maria walked [event:e1]', known, new Set(['WO-7'])),
+    ['SUMMARY', 'fixed PDU [event:e3] [wo:WO-7]', '', 'ROUNDS', 'Maria walked [event:e1]']);
   // work orders cite their own id; unknown ones are dropped
-  assert.deepEqual(groundModelSections('NEEDS ATTENTION\nCRAC-2 high return temp, in progress [wo:WO-1043] [wo:WO-9]\nWHAT CHANGED\nnone\nROUNDS\nok [event:e1]', known, new Set(['WO-1043'])),
-    ['NEEDS ATTENTION', 'CRAC-2 high return temp, in progress [wo:WO-1043]', '', 'WHAT CHANGED', 'none', '', 'ROUNDS', 'ok [event:e1]']);
+  assert.deepEqual(groundModelSections('SUMMARY\nCRAC-2 work order still open [wo:WO-1043] [wo:WO-9]\nROUNDS\nok [event:e1]', known, new Set(['WO-1043'])),
+    ['SUMMARY', 'CRAC-2 work order still open [wo:WO-1043]', '', 'ROUNDS', 'ok [event:e1]']);
+  // the summary paragraph: cited sentences survive, uncited ones go, headings and markdown are stripped
+  const sum = groundSummary('SUMMARY: **PDU A** faulted on R12 and needs eyes first [event:e2]. Everything else was fine. CRAC-2 work order is still open [wo:wo-7] [event:nope]. Dev left a note [event:e3] [event:e3].', known, new Set(['WO-7']));
+  assert.deepEqual(sum, ['PDU A faulted on R12 and needs eyes first [event:e2]. CRAC-2 work order is still open [wo:WO-7]. Dev left a note [event:e3].']);
+  assert.equal(groundSummary('All clear, nothing to report.', known), null);
+  const full = assembleHandoff(sum, snap);
+  assert.match(full, /^SUMMARY\nPDU A faulted on R12 and needs eyes first \[event:e2\]\. CRAC-2 work order is still open \[wo:WO-7\]\. Dev left a note \[event:e3\]\.\n\nNEEDS ATTENTION\nPDU A \(Rack R12\): PSU2 FAULT/);
+  assert.match(full, /ROUNDS\nMaria: 2 photos 22:00 CT to 22:30 CT, PDU A \(Rack R12\), Rack R12, Cold Aisle 3 \[event:e1\] \[event:e2\]\nDev: 1 photo 22:50 CT, UPS 1 \[event:e3\]\n\nNOTES FROM THE SHIFT/);
 });
 
 test('the most specific asset wins when a name mentions several', () => {
@@ -191,15 +205,15 @@ test('recovery and fixed-note signals (#23)', () => {
   assert.equal(isRecovery('FAULT', 'unknown'), false);
   assert.equal(FIXED_NOTE_RE.test('Swapped PSU2 under INC-4821; PDU-A back to normal'), true);
   assert.equal(FIXED_NOTE_RE.test('still faulting, parts on order'), false);
-  const withIssues = assembleHandoff(graphSections({ ...snap, issues: [
+  const withIssues = assembleHandoff(null, { ...snap, issues: [
     { id: 'WO-1', title: 'CRAC-2 high return temp', asset: 'CRAC unit 2', status: 'open', openedBy: 'Dana', resolvedEventId: '', resolutionNote: '' },
     { id: 'WO-2', title: 'PDU A breaker tripped', asset: 'PDU A (Rack R12)', status: 'resolved', openedBy: 'Dana', resolvedEventId: 'e3', resolutionNote: 'reset' },
-  ] }), snap);
-  assert.match(withIssues, /Work order WO-1 open: CRAC-2 high return temp \(CRAC unit 2, opened by Dana\)/);
+  ] });
+  assert.match(withIssues, /Work order WO-1 open: CRAC-2 high return temp \(CRAC unit 2, opened by Dana\) \[wo:WO-1\]/);
   assert.match(withIssues, /Work order WO-2 resolved: PDU A breaker tripped, reset \[event:e3\]/);
 });
 
-import { takenMicros, keepAttention } from '../spacetimedb/src/rules.ts';
+import { takenMicros } from '../spacetimedb/src/rules.ts';
 
 test('takenMicros uses the capture time unless it is a week off the receive time', () => {
   const recv = 1794150000000000n; // the next morning, when a replay uploaded it
@@ -208,22 +222,5 @@ test('takenMicros uses the capture time unless it is a week off the receive time
   assert.equal(takenMicros('2025-01-01T00:00:00Z', recv), recv); // phone clock wrong
 });
 
-test('keepAttention refuses "none" while something is open, keeps the rest of the model text', () => {
-  const model = ['NEEDS ATTENTION', 'none', '', 'WHAT CHANGED', 'PDU A status: OK to FAULT [event:e2]', '', 'ROUNDS', 'Maria: Cold Aisle 3 [event:e1]'];
-  const out = keepAttention(model, snap);
-  assert.deepEqual(out.slice(0, 2), ['NEEDS ATTENTION', 'PDU A (Rack R12): PSU2 FAULT (22:30 CT, Maria) [event:e2]']);
-  assert.deepEqual(out.slice(2), model.slice(2));
-  const ok = ['NEEDS ATTENTION', 'PDU A: PSU2 FAULT [event:e2]', '', 'WHAT CHANGED', 'none'];
-  assert.deepEqual(keepAttention(ok, snap), ok);
-  const quiet = { ...snap, alerts: snap.alerts.map(a => ({ ...a, open: false })) };
-  assert.deepEqual(keepAttention(model, quiet), model);
-});
+// keepAttention (main, 2a09b06) is superseded: NEEDS ATTENTION is built from the record, never by the model (pipeline, 278d1d8).
 
-test('keepAttention drops a NEEDS ATTENTION line that only cites a resolved alert', () => {
-  const model = ['NEEDS ATTENTION', 'CRAC unit 2: OVERTEMP, open since 22:00 [event:e0]', 'PDU A: PSU2 FAULT [event:e2]', '', 'ROUNDS', 'none'];
-  assert.deepEqual(keepAttention(model, snap).slice(0, 3), ['NEEDS ATTENTION', 'PDU A: PSU2 FAULT [event:e2]', '']);
-  const onlyStale = ['NEEDS ATTENTION', 'CRAC unit 2: OVERTEMP [event:e0]', '', 'ROUNDS', 'none'];
-  assert.deepEqual(keepAttention(onlyStale, snap).slice(0, 2), ['NEEDS ATTENTION', 'PDU A (Rack R12): PSU2 FAULT (22:30 CT, Maria) [event:e2]']);
-  const allQuiet = { ...snap, alerts: snap.alerts.map(a => ({ ...a, open: false })) };
-  assert.deepEqual(keepAttention(onlyStale, allQuiet).slice(0, 2), ['NEEDS ATTENTION', 'none']);
-});
