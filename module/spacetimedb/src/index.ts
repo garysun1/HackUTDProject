@@ -190,6 +190,7 @@ const AZURE_OPENAI_API_VERSION = '2024-10-21';
 const ALERT_DEDUPE_MICROS = 30n * 60n * 1_000_000n; // an unacked alert on the same asset within 30 min absorbs new findings
 const SIMILAR_MIN = 0.85; // cosine threshold for SIMILAR_TO edges
 const SIMILAR_TOP = 3;
+const CONTEXT_EVENTS = 6; // recent perceived events given to the model as history
 
 function isoFromMicros(micros: bigint): string {
   return new Date(Number(micros / 1000n)).toISOString();
@@ -221,7 +222,7 @@ const PERCEPTION_PROMPT =
   'objects (array of {name, attributes, position}; use the exact label printed on equipment as the name when one is visible), ' +
   'people_count (integer; never identify anyone), activity, ' +
   'text_in_scene (array of every string you can read: rack and asset labels, panel readouts, status words, cable tags, notes; copy them exactly, one string per label or line), ' +
-  'changes_since_previous (array of {entity, attr, from, to} compared with the previous event summary; empty if no previous or nothing changed), ' +
+  'changes_since_previous (array of {entity, attr, from, to}: compare each piece of equipment in this photo ONLY with the most recent earlier observation of that same equipment (same label or asset); never compare different equipment, and leave it empty when nothing in this photo was observed before or nothing changed), ' +
   'anomalies (array of {entity, description, severity: "low"|"medium"|"high"} for anything that looks abnormal: fault or alarm lights, error codes, warning notes, open panels, disconnected or loose cables, leaks; empty if none), ' +
   'summary (one sentence), confidence (0-1).';
 
@@ -326,13 +327,24 @@ export const perceive = spacetimedb.procedure(
       const ev = tx.db.event.eventId.find(eventId);
       const ph = tx.db.photo.eventId.find(eventId);
       if (!ev || !ph) return null;
+      // NEXT follows capture order, whether or not the previous photo is perceived yet.
+      // Context for "changes" is the recent perceived history, each line tagged with the
+      // registry assets it involved, so the model compares like with like.
       let prev: typeof ev | null = null;
+      const earlier: (typeof ev)[] = [];
       for (const other of tx.db.event.iter()) {
-        if (other.eventId !== eventId && other.tMicros < ev.tMicros && other.status === 'in_graph') {
-          if (!prev || other.tMicros > prev.tMicros) prev = other;
-        }
+        if (other.eventId === eventId || other.tMicros >= ev.tMicros) continue;
+        if (!prev || other.tMicros > prev.tMicros) prev = other;
+        if (other.status === 'in_graph' && other.summary) earlier.push(other);
       }
-      return { ev, ph, prevId: prev ? prev.eventId : null, prevSummary: prev ? prev.summary : '' };
+      earlier.sort((a, b) => (a.tMicros < b.tMicros ? -1 : a.tMicros > b.tMicros ? 1 : 0));
+      const history = earlier.slice(-CONTEXT_EVENTS).map(o => {
+        const assetIds = [...tx.db.edge.fromId.filter(o.eventId)]
+          .filter(e => e.kind === 'INVOLVES' && e.props.includes('"role":"asset"'))
+          .map(e => tx.db.entity.entityId.find(e.toId)?.canonicalName ?? e.toId);
+        return `- ${clockCT(o.tMicros)}${assetIds.length ? ` [${assetIds.join(', ')}]` : ''}: ${o.summary}`;
+      });
+      return { ev, ph, prevId: prev ? prev.eventId : null, history };
     });
     if (!snap) return {};
 
@@ -364,7 +376,9 @@ export const perceive = spacetimedb.procedure(
     // 3. perception: Nemotron VL first, Azure gpt-4o on any failure, stub if no keys at all
     const userText =
       PERCEPTION_PROMPT +
-      (snap.prevSummary ? ` Previous event summary: ${JSON.stringify(snap.prevSummary)}.` : ' Previous event summary: none.') +
+      (snap.history.length
+        ? ` Earlier observations this shift, oldest first, with the registered assets each involved:\n${snap.history.join('\n')}\n`
+        : ' Earlier observations: none.') +
       (snap.ev.label ? ` The wearer labeled the main object in this photo: ${JSON.stringify(snap.ev.label)}.` : '') +
       (snap.ev.note ? ` Wearer note: ${JSON.stringify(snap.ev.note)}.` : '');
     const imageUrl = `data:${snap.ph.mime};base64,${snap.ph.jpegB64}`;
@@ -552,6 +566,11 @@ export const perceive = spacetimedb.procedure(
       };
       if (ev.label) involve(ev.label, 'subject');
       const sceneAssets = assets.length ? matchAssets(texts, assets) : [];
+      // the photo's primary asset: equipment before the rack it sits in
+      const primary =
+        sceneAssets.find(m => assetById.get(m.assetId)?.assetType !== 'rack') ?? sceneAssets[0] ?? null;
+      const isRack = (name: string) => assetById.get(name)?.assetType === 'rack';
+      const primaryIsEquipment = !!primary && !isRack(primary.assetId);
       for (const m of sceneAssets) involve(m.assetId, 'asset', { matched: m.matchedText });
       for (const o of objects) if (o && typeof o.name === 'string') involve(o.name, 'target');
 
@@ -569,7 +588,11 @@ export const perceive = spacetimedb.procedure(
       for (const c of changes) {
         const ename = typeof c?.entity === 'string' ? c.entity : '';
         if (!ename) continue;
-        const r = resolve(ename);
+        // a first sighting ("" -> value) is not a change
+        if (!String(c.from ?? '').trim()) continue;
+        let r = resolve(ename);
+        // "Rack R12: PSU2 OK -> FAULT" in a photo of PDU-A is PDU-A's change
+        if (r.isAsset && isRack(r.name) && primaryIsEquipment) r = resolve(primary!.assetId);
         if (!r.id) continue;
         upsertEntity(r.id, r.name, r.isAsset ? 'asset' : 'object');
         tx.db.edge.insert({
@@ -619,8 +642,6 @@ export const perceive = spacetimedb.procedure(
       // stay in the alert text and the alert lands on the asset that contains them.
       const groups = new Map<string, { entityId: string; entityName: string; location: string; kind: string; items: { kind: string; text: string }[] }>();
       const rank = (k: string) => (k === 'state_change' ? 0 : k === 'fault_text' ? 1 : 2);
-      const primary =
-        sceneAssets.find(m => assetById.get(m.assetId)?.assetType !== 'rack') ?? sceneAssets[0] ?? null;
       const fallback = primary ? resolve(primary.assetId) : ev.label ? resolve(ev.label) : null;
       for (const c of candidates) {
         let target = c.entity ? resolve(c.entity) : null;
@@ -628,6 +649,9 @@ export const perceive = spacetimedb.procedure(
           const inText = assets.length ? matchAssets([c.text], assets) : [];
           target = inText.length ? resolve(inText[0].assetId) : fallback;
         }
+        // A finding that names the rack while the photo shows equipment inside it belongs to
+        // the equipment ("Rack R12: PSU2 FAULT" is PDU-A's fault), so both land on one alert.
+        if (target?.isAsset && isRack(target.name) && primaryIsEquipment) target = resolve(primary!.assetId);
         const entityId = target?.id ?? '';
         const a = target?.isAsset ? assetById.get(target.name) : undefined;
         let g = groups.get(entityId);
@@ -644,7 +668,19 @@ export const perceive = spacetimedb.procedure(
       const inserted: { alertId: bigint; text: string; kind: string; entityName: string; location: string }[] = [];
       for (const g of groups.values()) {
         // Findings with no asset never absorb other photos' alerts.
-        const open = g.entityId ? recent.find(r => !r.acked && r.entityId === g.entityId) : undefined;
+        // A finding on a rack also folds into an open alert on equipment inside that rack
+        // (its registry location names the rack): a note on R12 about PSU2 is PDU-A's incident.
+        const rackAsset = assets.find(a => slug(a.assetId) === g.entityId && a.assetType === 'rack');
+        const inRack = (entityId: string) => {
+          if (!rackAsset) return false;
+          const a = assets.find(x => slug(x.assetId) === entityId);
+          if (!a || a.assetType === 'rack') return false;
+          const loc = squash(a.location);
+          return [rackAsset.assetId, rackAsset.name].some(n => squash(n).length > 2 && loc.includes(squash(n)));
+        };
+        const open = g.entityId
+          ? (recent.find(r => !r.acked && r.entityId === g.entityId) ?? recent.find(r => !r.acked && inRack(r.entityId)))
+          : undefined;
         if (open) {
           // One open alert per asset: fold in new readings from the equipment (fault text),
           // up to 5 lines, no new Slack post. A repeat photo's "changes" compare against the

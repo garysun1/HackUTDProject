@@ -1,0 +1,98 @@
+{
+  "id": "manufacturing-line",
+  "title": "Automotive parts plant, second shift",
+  "summary": "A maintenance tech's walk of a machining cell: CNC machine, hydraulic press, a locked-out conveyor, a spindle alarm on CNC-07, and a quality check. Shows the same memory working on a plant floor.",
+  "shift_start": "2026-11-07T14:00:00-06:00",
+  "style": "Unedited first-person snapshot from a head-mounted wearable camera at eye level, deep focus with everything sharp, no bokeh, on an industrial factory floor, slightly off-level framing, mixed overhead sodium and LED lighting, light sensor noise, realistic grime and wear, no people or faces in frame.",
+  "wearers": [
+    {
+      "key": "luis",
+      "name": "Luis (maintenance)",
+      "role": "Maintenance technician",
+      "shift": "Second"
+    }
+  ],
+  "assets": [
+    {
+      "asset_id": "CNC-07",
+      "name": "CNC machining center 07",
+      "type": "cnc",
+      "location": "Cell 3",
+      "patterns": [
+        "CNC 07"
+      ]
+    },
+    {
+      "asset_id": "HP-2",
+      "name": "Hydraulic press 2",
+      "type": "press",
+      "location": "Cell 3",
+      "patterns": [
+        "PRESS 2"
+      ]
+    },
+    {
+      "asset_id": "CV-3",
+      "name": "Conveyor 3",
+      "type": "conveyor",
+      "location": "Cell 3 outfeed",
+      "patterns": [
+        "CONVEYOR 3"
+      ]
+    }
+  ],
+  "shots": [
+    {
+      "id": "01-cnc-running",
+      "t": 0,
+      "wearer": "luis",
+      "pair": "cnc",
+      "prompt": "Operator control screen of a CNC machining center, metal chips and coolant behind the window; a large plate above the screen reads \"CNC-07\"; the screen shows \"RUNNING\" in green and \"SPINDLE 8000 RPM\".",
+      "read": [
+        "CNC-07",
+        "RUNNING"
+      ]
+    },
+    {
+      "id": "02-press-gauge",
+      "t": 12,
+      "wearer": "luis",
+      "prompt": "Round analog hydraulic pressure gauge on a large industrial press with the needle in the green band; a yellow stenciled label next to it reads \"HP-2\".",
+      "read": [
+        "HP-2"
+      ]
+    },
+    {
+      "id": "03-conveyor-loto",
+      "t": 21,
+      "wearer": "luis",
+      "prompt": "A roller conveyor with a red lockout padlock on its disconnect switch and a red tag reading \"LOCKED OUT\"; a stenciled sign on the conveyor frame reads \"CV-3\".",
+      "read": [
+        "CV-3",
+        "LOCKED OUT"
+      ]
+    },
+    {
+      "id": "04-cnc-alarm",
+      "t": 33,
+      "wearer": "luis",
+      "pair": "cnc",
+      "prompt": "Operator control screen of a CNC machining center, metal chips and coolant behind the window; a large plate above the screen reads \"CNC-07\"; the screen shows a red banner \"ALARM 1012 SPINDLE OVERTEMP\".",
+      "read": [
+        "CNC-07",
+        "ALARM"
+      ],
+      "expect": "alert",
+      "edit": "change only the control screen so it shows a red banner reading \"ALARM 1012 SPINDLE OVERTEMP\" instead of RUNNING."
+    },
+    {
+      "id": "05-quality-check",
+      "t": 45,
+      "wearer": "luis",
+      "prompt": "A machined aluminum part on a granite inspection table next to digital calipers and a printed inspection sheet with large text \"LOT 2291 PASS\".",
+      "read": [
+        "LOT 2291"
+      ]
+    }
+  ]
+}

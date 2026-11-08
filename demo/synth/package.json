@@ -1,0 +1,13 @@
+{
+  "name": "wm-synth",
+  "private": true,
+  "type": "module",
+  "description": "Synthetic wearable-camera datasets for demos (images are clearly synthetic)",
+  "scripts": {
+    "generate": "node generate.mjs",
+    "replay": "node replay.mjs"
+  },
+  "dependencies": {
+    "sharp": "0.34.4"
+  }
+}

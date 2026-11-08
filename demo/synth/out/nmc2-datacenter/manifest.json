@@ -1,0 +1,216 @@
+{
+  "shots": {
+    "01-cold-aisle": {
+      "file": "01-cold-aisle.jpg",
+      "provider": "azure/flux-2-pro",
+      "seed": 50248,
+      "prompt": "Unedited first-person snapshot from a head-mounted wearable camera at eye level, deep focus with everything sharp, no bokeh, inside an enterprise colocation data center, slightly off-level framing, cool white LED lighting, light sensor noise, mild wide-angle lens distortion, realistic textures, no people or faces in frame. Looking down a cold aisle between two rows of black server racks with perforated floor tiles; a large blue sign hanging from the ceiling reads \"COLD AISLE 3\" in bold white letters. Off-center casual framing, not a composed hero shot. Flat practical lighting, deep focus with the background nearly as sharp as the foreground, no cinematic depth of field, no dramatic lighting, no text overlays or watermarks.",
+      "check": {
+        "pass": true,
+        "missing": [],
+        "faces": 0,
+        "looks_real": true,
+        "read": [
+          "COLD",
+          "AISLE 3",
+          "COLD",
+          "AISLE",
+          "AISLE"
+        ]
+      }
+    },
+    "02-rack-r12": {
+      "file": "02-rack-r12.jpg",
+      "provider": "azure/flux-2-pro",
+      "seed": 51786,
+      "prompt": "Unedited first-person snapshot from a head-mounted wearable camera at eye level, deep focus with everything sharp, no bokeh, inside an enterprise colocation data center, slightly off-level framing, cool white LED lighting, light sensor noise, mild wide-angle lens distortion, realistic textures, no people or faces in frame. Front of a black server rack with glass door, rows of 1U servers with green status LEDs; a large white label at the top of the rack door reads \"R12\" in black block letters. Off-center casual framing, not a composed hero shot. Flat practical lighting, deep focus with the background nearly as sharp as the foreground, no cinematic depth of field, no dramatic lighting, no text overlays or watermarks.",
+      "check": {
+        "pass": true,
+        "missing": [],
+        "faces": 0,
+        "looks_real": true,
+        "read": [
+          "R12"
+        ]
+      }
+    },
+    "03-pdu-a-ok": {
+      "file": "03-pdu-a-ok.jpg",
+      "provider": "azure/flux-2-pro",
+      "seed": 32438,
+      "prompt": "Unedited first-person snapshot from a head-mounted wearable camera at eye level, deep focus with everything sharp, no bokeh, inside an enterprise colocation data center, slightly off-level framing, cool white LED lighting, light sensor noise, mild wide-angle lens distortion, realistic textures, no people or faces in frame. Close-up of a vertical rack power distribution unit mounted inside rack R12; a white sticker label reads \"PDU-A\" in black block letters; its small backlit LCD shows \"10.9 kW\" and below it \"PSU2 OK\" with a green status light. Off-center casual framing, not a composed hero shot. Flat practical lighting, deep focus with the background nearly as sharp as the foreground, no cinematic depth of field, no dramatic lighting, no text overlays or watermarks.",
+      "check": {
+        "pass": true,
+        "missing": [],
+        "faces": 0,
+        "looks_real": true,
+        "read": [
+          "R12",
+          "10.9 kW",
+          "PSU2 OK",
+          "PDU-A"
+        ]
+      }
+    },
+    "07-pdu-a-fault": {
+      "file": "07-pdu-a-fault.jpg",
+      "provider": "azure/flux-2-pro",
+      "seed": 32438,
+      "edited_from": "03-pdu-a-ok",
+      "prompt": "EDIT of previous shot: change only the small backlit LCD so it reads \"11.8 kW\" and \"PSU2 FAULT\", and make its status light red instead of green.",
+      "check": {
+        "pass": true,
+        "missing": [],
+        "faces": 0,
+        "looks_real": true,
+        "read": [
+          "R12",
+          "10.8 kW",
+          "PSU2 FAULT",
+          "PDU-A",
+          "PRCD"
+        ]
+      }
+    },
+    "04-crac-2": {
+      "file": "04-crac-2.jpg",
+      "provider": "azure/flux-2-pro",
+      "seed": 75936,
+      "prompt": "Unedited first-person snapshot from a head-mounted wearable camera at eye level, deep focus with everything sharp, no bokeh, inside an enterprise colocation data center, slightly off-level framing, cool white LED lighting, light sensor noise, mild wide-angle lens distortion, realistic textures, no people or faces in frame. Control panel of a large precision cooling unit at the end of the row; a metal plate reads \"CRAC-2\"; the LCD shows \"SUPPLY 18.2C\" and \"RETURN 27.5C\". Off-center casual framing, not a composed hero shot. Flat practical lighting, deep focus with the background nearly as sharp as the foreground, no cinematic depth of field, no dramatic lighting, no text overlays or watermarks.",
+      "check": {
+        "pass": true,
+        "missing": [],
+        "faces": 0,
+        "looks_real": true,
+        "read": [
+          "CRAC-2",
+          "SUPPLY 18.2C",
+          "RETURN 27.5C",
+          "CITT"
+        ]
+      }
+    },
+    "05-cable-work": {
+      "file": "05-cable-work.jpg",
+      "provider": "azure/flux-2-pro",
+      "seed": 56523,
+      "prompt": "Unedited first-person snapshot from a head-mounted wearable camera at eye level, deep focus with everything sharp, no bokeh, inside an enterprise colocation data center, slightly off-level framing, cool white LED lighting, light sensor noise, mild wide-angle lens distortion, realistic textures, no people or faces in frame. A gloved hand holding a yellow single-mode fiber patch cable plugged into a dense patch panel; a white printed cable tag on the cable reads \"P24\" in large black text. Off-center casual framing, not a composed hero shot. Flat practical lighting, deep focus with the background nearly as sharp as the foreground, no cinematic depth of field, no dramatic lighting, no text overlays or watermarks.",
+      "check": {
+        "pass": true,
+        "missing": [],
+        "faces": 0,
+        "looks_real": true,
+        "read": [
+          "P24",
+          "P2"
+        ]
+      }
+    },
+    "08-ticket-note": {
+      "file": "08-ticket-note.jpg",
+      "provider": "azure/flux-2-pro",
+      "seed": 50653,
+      "prompt": "Unedited first-person snapshot from a head-mounted wearable camera at eye level, deep focus with everything sharp, no bokeh, inside an enterprise colocation data center, slightly off-level framing, cool white LED lighting, light sensor noise, mild wide-angle lens distortion, realistic textures, no people or faces in frame. A yellow sticky note taped to a server rack door, handwritten in black marker: \"INC-4821 PSU2 swap pending\". Off-center casual framing, not a composed hero shot. Flat practical lighting, deep focus with the background nearly as sharp as the foreground, no cinematic depth of field, no dramatic lighting, no text overlays or watermarks.",
+      "check": {
+        "pass": true,
+        "missing": [],
+        "faces": 0,
+        "looks_real": true,
+        "read": [
+          "INC-4821",
+          "PSU2 swap",
+          "pending"
+        ]
+      }
+    },
+    "09-ups-1": {
+      "file": "09-ups-1.jpg",
+      "provider": "azure/flux-2-pro",
+      "seed": 62536,
+      "prompt": "Unedited first-person snapshot from a head-mounted wearable camera at eye level, deep focus with everything sharp, no bokeh, inside an enterprise colocation data center, slightly off-level framing, cool white LED lighting, light sensor noise, mild wide-angle lens distortion, realistic textures, no people or faces in frame. Front touchscreen panel of a large floor-standing UPS cabinet in an electrical room; a nameplate reads \"UPS-1\"; the screen shows \"ONLINE\" in green and \"LOAD 42%\". Off-center casual framing, not a composed hero shot. Flat practical lighting, deep focus with the background nearly as sharp as the foreground, no cinematic depth of field, no dramatic lighting, no text overlays or watermarks.",
+      "check": {
+        "pass": true,
+        "missing": [],
+        "faces": 0,
+        "looks_real": true,
+        "read": [
+          "UPS-1",
+          "MENU",
+          "STATUS",
+          "LOGS",
+          "UPS-1",
+          "ONLINE",
+          "LOAD 42%",
+          "MENU",
+          "LOGS",
+          "Power Systems",
+          "DANGER",
+          "HIGH VOLTAGE",
+          "DANGER",
+          "HIGH VOLTAGE",
+          "DANGER",
+          "HIGH VOLTAGE"
+        ]
+      }
+    },
+    "06-core-switch": {
+      "file": "06-core-switch.jpg",
+      "provider": "azure/flux-2-pro",
+      "seed": 79082,
+      "prompt": "Unedited first-person snapshot from a head-mounted wearable camera at eye level, deep focus with everything sharp, no bokeh, inside an enterprise colocation data center, slightly off-level framing, cool white LED lighting, light sensor noise, mild wide-angle lens distortion, realistic textures, no people or faces in frame. Front of a network core switch in a rack with many blinking amber and green port LEDs and neatly dressed blue cables; a large white label on the chassis reads \"SW-CORE-1\". Off-center casual framing, not a composed hero shot. Flat practical lighting, deep focus with the background nearly as sharp as the foreground, no cinematic depth of field, no dramatic lighting, no text overlays or watermarks.",
+      "check": {
+        "pass": true,
+        "missing": [],
+        "faces": 0,
+        "looks_real": true,
+        "read": [
+          "SW-CORE-1",
+          "LEIGHTE Security",
+          "1",
+          "2",
+          "3",
+          "4",
+          "5",
+          "6",
+          "7",
+          "8",
+          "9",
+          "10",
+          "11",
+          "12",
+          "13",
+          "14",
+          "15",
+          "16",
+          "17",
+          "18",
+          "19",
+          "20",
+          "21",
+          "22",
+          "23",
+          "24",
+          "25",
+          "26",
+          "27",
+          "28",
+          "29",
+          "30",
+          "31",
+          "32",
+          "33",
+          "34",
+          "35",
+          "36",
+          "37",
+          "38",
+          "39",
+          "40"
+        ]
+      }
+    }
+  },
+  "scenario": "nmc2-datacenter",
+  "title": "NMC² data center night shift",
+  "synthetic": true
+}

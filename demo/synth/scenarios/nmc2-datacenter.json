@@ -1,0 +1,171 @@
+{
+  "id": "nmc2-datacenter",
+  "title": "NMC² data center night shift",
+  "summary": "One operator's rounds through a colo hall: cold aisle, rack R12, its PDU, cooling, cable work on the core switch, a PSU fault on PDU-A, a handwritten ticket note, and the UPS room. Drives the alert beat (PDU-A PSU2 OK → FAULT) and the shift handoff.",
+  "shift_start": "2026-11-07T22:00:00-06:00",
+  "style": "Unedited first-person snapshot from a head-mounted wearable camera at eye level, deep focus with everything sharp, no bokeh, inside an enterprise colocation data center, slightly off-level framing, cool white LED lighting, light sensor noise, mild wide-angle lens distortion, realistic textures, no people or faces in frame.",
+  "wearers": [
+    {
+      "key": "maria",
+      "name": "Maria (night tech)",
+      "role": "Data center technician",
+      "shift": "Night"
+    },
+    {
+      "key": "dev",
+      "name": "Dev (night tech)",
+      "role": "Data center technician",
+      "shift": "Night"
+    }
+  ],
+  "assets": [
+    {
+      "asset_id": "R12",
+      "name": "Rack R12",
+      "type": "rack",
+      "location": "Hall A / Row 1",
+      "patterns": [
+        "RACK R12",
+        "RACK 12"
+      ]
+    },
+    {
+      "asset_id": "R13",
+      "name": "Rack R13",
+      "type": "rack",
+      "location": "Hall A / Row 1",
+      "patterns": [
+        "RACK R13",
+        "RACK 13"
+      ]
+    },
+    {
+      "asset_id": "PDU-A",
+      "name": "PDU A (Rack R12)",
+      "type": "pdu",
+      "location": "Hall A / Row 1 / Rack R12",
+      "patterns": [
+        "PDU A"
+      ]
+    },
+    {
+      "asset_id": "CRAC-2",
+      "name": "CRAC unit 2",
+      "type": "crac",
+      "location": "Hall A / Row 1 end",
+      "patterns": [
+        "/crac\\s*-?\\s*0?2/"
+      ]
+    },
+    {
+      "asset_id": "SW-CORE-1",
+      "name": "Core switch 1",
+      "type": "switch",
+      "location": "Hall A / Row 1 / Rack R13",
+      "patterns": [
+        "CORE-1",
+        "SW CORE 1"
+      ]
+    },
+    {
+      "asset_id": "UPS-1",
+      "name": "UPS 1",
+      "type": "ups",
+      "location": "Electrical room",
+      "patterns": [
+        "UPS 1",
+        "UPS-01"
+      ]
+    }
+  ],
+  "shots": [
+    {
+      "id": "01-cold-aisle",
+      "t": 0,
+      "wearer": "maria",
+      "prompt": "Looking down a cold aisle between two rows of black server racks with perforated floor tiles; a large blue sign hanging from the ceiling reads \"COLD AISLE 3\" in bold white letters.",
+      "read": [
+        "COLD AISLE 3"
+      ]
+    },
+    {
+      "id": "02-rack-r12",
+      "t": 5,
+      "wearer": "maria",
+      "prompt": "Front of a black server rack with glass door, rows of 1U servers with green status LEDs; a large white label at the top of the rack door reads \"R12\" in black block letters.",
+      "read": [
+        "R12"
+      ]
+    },
+    {
+      "id": "03-pdu-a-ok",
+      "t": 9,
+      "wearer": "maria",
+      "pair": "pdu-a",
+      "prompt": "Close-up of a vertical rack power distribution unit mounted inside rack R12; a white sticker label reads \"PDU-A\" in black block letters; its small backlit LCD shows \"10.9 kW\" and below it \"PSU2 OK\" with a green status light.",
+      "read": [
+        "PDU-A",
+        "OK"
+      ]
+    },
+    {
+      "id": "04-crac-2",
+      "t": 16,
+      "wearer": "maria",
+      "prompt": "Control panel of a large precision cooling unit at the end of the row; a metal plate reads \"CRAC-2\"; the LCD shows \"SUPPLY 18.2C\" and \"RETURN 27.5C\".",
+      "read": [
+        "CRAC-2"
+      ]
+    },
+    {
+      "id": "05-cable-work",
+      "t": 24,
+      "wearer": "dev",
+      "prompt": "A gloved hand holding a yellow single-mode fiber patch cable plugged into a dense patch panel; a white printed cable tag on the cable reads \"P24\" in large black text.",
+      "read": [
+        "P24"
+      ]
+    },
+    {
+      "id": "06-core-switch",
+      "t": 31,
+      "wearer": "dev",
+      "prompt": "Front of a network core switch in a rack with many blinking amber and green port LEDs and neatly dressed blue cables; a large white label on the chassis reads \"SW-CORE-1\".",
+      "read": [
+        "SW-CORE-1"
+      ]
+    },
+    {
+      "id": "07-pdu-a-fault",
+      "t": 42,
+      "wearer": "maria",
+      "pair": "pdu-a",
+      "prompt": "Close-up of a vertical rack power distribution unit mounted inside rack R12; a white sticker label reads \"PDU-A\" in black block letters; its small backlit LCD shows \"11.8 kW\" and below it \"PSU2 FAULT\" with a red status light.",
+      "read": [
+        "PDU-A",
+        "FAULT"
+      ],
+      "expect": "alert",
+      "edit": "change only the small backlit LCD so it reads \"11.8 kW\" and \"PSU2 FAULT\", and make its status light red instead of green."
+    },
+    {
+      "id": "08-ticket-note",
+      "t": 47,
+      "wearer": "maria",
+      "prompt": "A yellow sticky note taped to a server rack door, handwritten in black marker: \"INC-4821 PSU2 swap pending\".",
+      "read": [
+        "INC-4821"
+      ]
+    },
+    {
+      "id": "09-ups-1",
+      "t": 56,
+      "wearer": "dev",
+      "prompt": "Front touchscreen panel of a large floor-standing UPS cabinet in an electrical room; a nameplate reads \"UPS-1\"; the screen shows \"ONLINE\" in green and \"LOAD 42%\".",
+      "read": [
+        "UPS-1",
+        "ONLINE"
+      ]
+    }
+  ]
+}

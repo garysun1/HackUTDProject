@@ -1,0 +1,80 @@
+{
+  "id": "utility-substation",
+  "title": "Utility field service: substation inspection",
+  "summary": "A lineworker's inspection of a distribution substation: site sign, power transformer, and a breaker that is found tripped on the second pass. Field service with no building at all.",
+  "shift_start": "2026-11-07T09:00:00-06:00",
+  "style": "Unedited first-person snapshot from a head-mounted wearable camera at eye level, deep focus with everything sharp, no bokeh, outdoors at an electrical utility substation, slightly off-level framing, overcast daylight, gravel ground, chain-link fence, light sensor noise, realistic, no people or faces in frame.",
+  "wearers": [
+    {
+      "key": "sam",
+      "name": "Sam (lineworker)",
+      "role": "Substation technician",
+      "shift": "Day"
+    }
+  ],
+  "assets": [
+    {
+      "asset_id": "T2",
+      "name": "Power transformer T2",
+      "type": "transformer",
+      "location": "Northlake substation",
+      "patterns": [
+        "TRANSFORMER T2",
+        "XFMR T2"
+      ]
+    },
+    {
+      "asset_id": "CB-12",
+      "name": "Circuit breaker CB-12",
+      "type": "breaker",
+      "location": "Northlake substation / bay 3",
+      "patterns": [
+        "CB 12"
+      ]
+    }
+  ],
+  "shots": [
+    {
+      "id": "01-site-sign",
+      "t": 0,
+      "wearer": "sam",
+      "prompt": "A white sign mounted on a chain-link fence gate reads \"NORTHLAKE SUBSTATION\" in large red letters, with high-voltage equipment behind the fence.",
+      "read": [
+        "NORTHLAKE"
+      ]
+    },
+    {
+      "id": "02-transformer",
+      "t": 9,
+      "wearer": "sam",
+      "prompt": "Side of a large green oil-filled power transformer with cooling fins and an analog oil temperature gauge; a big white stenciled marking on the tank reads \"T2\".",
+      "read": [
+        "T2"
+      ]
+    },
+    {
+      "id": "03-breaker-closed",
+      "t": 17,
+      "wearer": "sam",
+      "pair": "cb12",
+      "prompt": "Open door of an outdoor gray circuit breaker control cabinet; a white printed sticker label on the door reads \"CB-12\" in large bold black letters; a mechanical position indicator flag shows \"CLOSED\" in red and a counter.",
+      "read": [
+        "CB-12",
+        "CLOSED"
+      ]
+    },
+    {
+      "id": "04-breaker-tripped",
+      "t": 46,
+      "wearer": "sam",
+      "pair": "cb12",
+      "prompt": "Open door of an outdoor gray circuit breaker control cabinet; a white printed sticker label on the door reads \"CB-12\" in large bold black letters; a yellow alarm light is lit and a flag indicator reads \"TRIPPED\".",
+      "read": [
+        "CB-12",
+        "TRIPPED"
+      ],
+      "expect": "alert",
+      "edit": "change the position indicator flag so it reads \"TRIPPED\" and light the yellow alarm lamp; change nothing else."
+    }
+  ]
+}
