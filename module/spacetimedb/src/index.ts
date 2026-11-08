@@ -18,8 +18,7 @@ import {
   clockCT,
   microsFromIso,
   parseSinceArg,
-  groundModelSections,
-  graphSections,
+  groundSummary,
   assembleHandoff,
   type AssetLike,
   type HEvent,
@@ -1112,17 +1111,10 @@ function chatKeys(env: { NVIDIA_API_KEY?: string; NVIDIA_AGENT_MODEL?: string; A
 // ---------- handoff (#8) ----------
 
 const HANDOFF_PROMPT =
-  'You write the shift handoff for an operations team from an evidence log of photos taken by the outgoing shift. ' +
-  'Rules: use only facts in the log and never invent; every line you write must end with the event ids it rests on, each written as [event:<id>] with the full id, one bracket per id, never ranges; ' +
-  'never name or describe people, refer to wearers only by the name given in the log; plain text, no markdown, no em dashes; short lines; at most 180 words. ' +
-  'Write exactly three sections in this order, each a line in capitals followed by its lines, or the word none: ' +
-  'NEEDS ATTENTION (open alerts, work orders that are open or in progress, and anything abnormal, most urgent first, with the asset and where it is; a work order is cited as [wo:<id>] when no event applies), ' +
-  'WHAT CHANGED (state changes asset by asset; alerts and work orders marked resolved belong here, not above), ' +
-  'ROUNDS (which assets and areas were checked, by whom, in time order, at most one line per wearer). ' +
-  'Do not write a notes or quiet section; the system adds those from the record. ' +
-  'Line formats to follow: NEEDS ATTENTION line "PDU A (Rack R12), Cold Aisle 3: PSU2 FAULT, open since 22:42, seen by Maria [event:<id>]"; ' +
-  'WHAT CHANGED line "PDU A (Rack R12) status: PSU2 OK to PSU2 FAULT at 22:42 [event:<id>]"; ' +
-  'ROUNDS line "Maria: Cold Aisle 3, Rack R12, PDU A, CRAC-2 between 22:00 and 22:47 [event:<first id>] [event:<last id>]".';
+  'Write the summary paragraph of a shift handoff for an operations team from the evidence log below: two or three short sentences for the incoming shift saying what needs attention first, what was fixed, and what is quiet. ' +
+  'The system adds the lists of alerts, changes, rounds, notes and quiet assets itself; write only the paragraph, no headings, no markdown, no em dashes, at most 70 words. ' +
+  'Rules: use only facts in the log and never invent; alerts and work orders marked resolved are fixed, not open; every sentence ends with the ids it rests on, each written as [event:<id>] with the full id, or [wo:<id>] for a work order; ' +
+  'never name or describe people, refer to wearers only by the name given in the log.';
 
 // Shift handoff for the incoming shift: text with a [event:<id>] citation on every line,
 // cached in the handoff table. Called by the console (Generate) and the MCP server.
@@ -1166,10 +1158,12 @@ export const handoff = spacetimedb.procedure({ since: t.string() }, t.string(), 
       }
       return { id: e.eventId, t: e.tMicros, wearer: nameOf(e.deviceId), assets, place, summary: e.summary, note: e.note ?? '', label: e.label ?? '', changes };
     });
+    const resolvedBy = new Map<bigint, string>();
+    for (const r of tx.db.alertResolution.iter()) resolvedBy.set(r.alertId, r.eventId);
     const alerts: HAlert[] = [...tx.db.alert.iter()]
-      .filter(a => !a.acked || a.tMicros >= sinceMicros) // anything still open needs attention, however old
+      .filter(a => !a.acked || a.tMicros >= sinceMicros || (a.ackedMicros ?? 0n) >= sinceMicros) // open however old; resolved in the window
       .sort((a, b) => (a.tMicros < b.tMicros ? -1 : a.tMicros > b.tMicros ? 1 : 0))
-      .map(a => ({ t: a.tMicros, open: !a.acked, asset: a.entityName || a.entityId || 'unassigned', text: a.text, eventId: a.eventId, wearer: a.wearerName || nameOf(a.deviceId) }));
+      .map(a => ({ t: a.tMicros, open: !a.acked, asset: a.entityName || a.entityId || 'unassigned', text: a.text, eventId: a.eventId, wearer: a.wearerName || nameOf(a.deviceId), resolvedBy: resolvedBy.get(a.alertId) }));
     const assetName = (id: string) => tx.db.asset.assetId.find(id)?.name || id;
     const issues: HIssue[] = [...tx.db.issue.iter()]
       .filter(i => i.status !== 'resolved' || (i.resolvedMicros ?? 0n) >= sinceMicros)
@@ -1189,7 +1183,7 @@ export const handoff = spacetimedb.procedure({ since: t.string() }, t.string(), 
     ` by ${wearers.join(', ') || 'nobody'}. Open alerts: ${openAlerts}.`;
   const digest = [
     ...(snap.issues ?? []).map(i => `WORK ORDER ${i.id} ${i.status} | ${i.asset} | ${i.title} | opened by ${i.openedBy}${i.resolvedEventId ? ` | resolved by event ${i.resolvedEventId}${i.resolutionNote ? ': ' + i.resolutionNote : ''}` : ''}`),
-    ...snap.alerts.map(a => `ALERT ${a.open ? 'OPEN' : 'resolved'} | ${clockCT(a.t)} | ${a.asset} | ${a.text} | seen by ${a.wearer} | event ${a.eventId}`),
+    ...snap.alerts.map(a => `ALERT ${a.open ? 'OPEN' : 'resolved'} | ${clockCT(a.t)} | ${a.asset} | ${a.text} | seen by ${a.wearer} | event ${a.eventId}${a.resolvedBy ? ` | resolved by event ${a.resolvedBy}` : ''}`),
     ...snap.events.map(
       e =>
         `event ${e.id} | ${clockCT(e.t)} | ${e.wearer} | assets: ${e.assets.join(', ') || '-'}${e.place ? ` | place: ${e.place}` : ''} | ${e.summary}` +
@@ -1198,15 +1192,18 @@ export const handoff = spacetimedb.procedure({ since: t.string() }, t.string(), 
         (e.changes.length ? ` | changes: ${e.changes.join('; ')}` : '')
     ),
   ].join('\n');
-  const r = chatWithFallback(ctx.http, chatKeys(env), [{ role: 'user', content: `${HANDOFF_PROMPT}\n\n${header}\n\nEVIDENCE LOG (oldest first):\n${digest}` }], 700);
+  const r = chatWithFallback(ctx.http, chatKeys(env), [{ role: 'user', content: `${HANDOFF_PROMPT}\n\n${header}\n\nEVIDENCE LOG (oldest first):\n${digest}` }], 300);
   for (const f of r.failures) console.warn(`handoff: ${f}`);
   const known = new Set(snap.events.map(e => e.id));
-  for (const a of snap.alerts) known.add(a.eventId);
+  for (const a of snap.alerts) {
+    known.add(a.eventId);
+    if (a.resolvedBy) known.add(a.resolvedBy);
+  }
   for (const i of snap.issues ?? []) if (i.resolvedEventId) known.add(i.resolvedEventId);
-  const grounded = r.text ? groundModelSections(r.text, known, new Set((snap.issues ?? []).map(i => i.id))) : null;
-  if (r.text && !grounded) console.warn('handoff: model text rejected, using graph sections');
+  const grounded = r.text ? groundSummary(r.text, known, new Set((snap.issues ?? []).map(i => i.id))) : null;
+  if (r.text && !grounded) console.warn(`handoff: model summary rejected: ${r.text.slice(0, 160)}`);
   const model = grounded ? r.model : 'graph';
-  const text = assembleHandoff(grounded ?? graphSections(snap), snap) + `\n\n${snap.events.length} photos since ${snap.anchor}, written ${clockCT(now)} by ${model}.`;
+  const text = assembleHandoff(grounded, snap) + `\n\n${snap.events.length} photos since ${snap.anchor}; summary written ${clockCT(now)} by ${model}, the rest from the record.`;
 
   // 3. cache, and post to the channel when configured
   ctx.withTx(tx => {

@@ -2,7 +2,7 @@
 // tables, with the same semantics as the MCP server's tools (mcp/src/tools.mjs), so an
 // agent gets the same answers whether it goes through Claude Desktop or the module.
 // No SpacetimeDB imports: tested with plain Node (module/test/agent_tools.test.ts).
-import { squash, clockCT, parseSinceArg, graphSections, assembleHandoff, segmentEvents, plainEpisodeTitle, type HandoffSnap, type HEvent, type HAlert } from './rules.ts';
+import { squash, clockCT, parseSinceArg, assembleHandoff, segmentEvents, plainEpisodeTitle, type HandoffSnap, type HEvent, type HAlert } from './rules.ts';
 
 export interface AChange {
   entityId: string;
@@ -319,7 +319,7 @@ export function runTool(idx: AgentIndex, name: string, args: Record<string, unkn
       if (!since && idx.lastHandoff) return { handoff: idx.lastHandoff, source: 'cached' };
       const snap = toHandoffSnap(idx, since ? sinceMicros(since, idx) : 0n);
       if (!snap.events.length && !snap.alerts.some(x => x.open)) return { handoff: `No photos since ${snap.anchor}.`, source: 'graph' };
-      return { handoff: assembleHandoff(graphSections(snap), snap), source: 'graph' };
+      return { handoff: assembleHandoff(null, snap), source: 'graph' };
     }
     default:
       return { error: `unknown tool ${name}` };
