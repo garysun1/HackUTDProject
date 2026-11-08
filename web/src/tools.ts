@@ -42,7 +42,7 @@ export function renderTools(userView: boolean = userViewFn()) {
     key = k;
     tools.innerHTML =
       (tracedName ? `<button type="button" class="pill" data-clear title="Stop tracing">Tracing <b>${esc(tracedName)}</b> · ${tracedCount} photo${tracedCount === 1 ? '' : 's'} · clear</button>` : '') +
-      (r.on
+      (view.mode === 'map' ? '' : r.on
         ? `<span class="replay" role="group" aria-label="Replay"><button type="button" class="btn ghost play" data-play title="${r.playing ? 'Pause' : 'Play'} (space)">${r.playing ? '❚❚' : '▶'}</button>` +
           `<span class="speeds">${SPEEDS.map(s => `<button type="button" data-speed="${s}" aria-pressed="${r.speed === s}">${s}×</button>`).join('')}</span>` +
           `<label class="scrub" title="Scrub the ${esc(vocab().session.toLowerCase())}"><input type="range" min="0" max="1000" value="${Math.round(r.progress * 1000)}" data-scrub aria-label="Replay position"></label>` +

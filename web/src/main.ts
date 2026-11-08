@@ -50,7 +50,7 @@ function renderMenu() {
 }
 function renderWorkspace() { const w = current(); wsName.textContent = w.name; wsSub.textContent = w.subtitle; wsBtn.title = `${w.name} · ${w.db}`; dbEl.textContent = DB;
   const h2 = document.querySelector('.floor .colhead h2'); if (h2) h2.textContent = vocab().session;
-  const lg = document.querySelector('.floor .legend'); if (lg && view.mode === 'map') { const v = vocab(); lg.innerHTML = `<i class="k k-walk"></i>walk <i class="k k-heat"></i>time spent <i class="k k-ph"></i>photo <i class="k k-al"></i>open ${v.flag.toLowerCase()}`; }
+  const lg = document.querySelector('.floor .legend'); if (lg && view.mode === 'map') { lg.innerHTML = ''; }
   else if (lg) { const v = vocab(); lg.innerHTML = `<i class="k k-ph"></i>photo <i class="k k-as"></i>${v.tracked.toLowerCase()} <i class="k k-al"></i>${v.flag.toLowerCase()} <i class="k k-chg"></i>change <i class="k k-nt"></i>${v.note.toLowerCase()}${state.questions.size ? ' <i class="k k-q"></i>question' : ''}`; }
 }
 function openMenu(open: boolean) { wsMenu.hidden = !open; wsBtn.setAttribute('aria-expanded', String(open)); if (open) { renderMenu(); refreshCounts(); (wsMenu.querySelector('[aria-checked="true"]') as HTMLElement | null)?.focus(); } }

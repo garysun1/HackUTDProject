@@ -3,27 +3,28 @@
 // and a heat layer where they lingered; photo pins where photos were taken, red while an alert is
 // open. Live, or driven by the replay clock. The shift-memory panel sits beside it. Reads the
 // console's store (subscriptions, capture time); nothing here is fetched separately.
-import { state, wearerColor, wearerName, fmtTime, loadPhoto, alertsFor } from './store';
+import { state, wearerColor, wearerName, fmtTime, fmtTimeS, loadPhoto, alertsFor } from './store';
 import { select } from './timeline';
-import { view, onView, clock as viewClock, jumpTo, shownEvents } from './view';
+import { view, onView, clock as viewClock, jumpTo, shownEvents, togglePlay, stopReplay, setSpeed, scrubReplay, replayRange } from './view';
 import { photoCard, showTip, hideTip } from './card';
 import { fitRequested } from './tools';
 import { current } from './workspaces';
 import { SiteScene, type PinSpec, type SiteData } from './site3d/scene';
 import { pointInRing, centroid, haversineM } from './site3d/geo';
 import ecsw from './site3d/data/ecsw.json';
-import { shifts, positionAt, renderBrain, openAt, type Shift } from './brain';
+import { shifts, positionAt, renderBrain, openAt, shiftEnd, type Shift } from './brain';
 
 const host = document.getElementById('map') as HTMLElement;
 let scene: SiteScene | null = null; let brainEl: HTMLElement; let followBtn: HTMLButtonElement; let seenFit = fitRequested;
-let raf = 0; let brainAt = 0;
+let raf = 0; let brainAt = 0; let scrubEl: HTMLInputElement; let marksEl: HTMLElement; let scrubbing = false; let marksSig = '';
 
 function ensureScene(): SiteScene {
   if (scene) return scene;
   host.innerHTML = `<canvas class="s3-gl" aria-label="3D view of the site"></canvas><div class="s3-labels" aria-hidden="true"></div>
     <div class="s3-ctl"><span class="seg" role="group" aria-label="Camera"><button type="button" data-cam="3d" aria-pressed="true">3D</button><button type="button" data-cam="2d" aria-pressed="false">Top-down</button></span><button type="button" class="btn ghost" data-follow aria-pressed="false" title="Keep the camera on the wearer (F)">Follow</button></div>
     <aside class="s3-brain" aria-label="Shift memory"><div class="bh"><h2>Shift memory</h2></div><div class="s3-brain-body"></div></aside>
-    <div class="s3-attr">Imagery © Esri · Building © OpenStreetMap contributors</div>`;
+    <div class="s3-replay" role="group" aria-label="Replay"><button type="button" data-play aria-label="Play">▶</button><button type="button" data-live class="on">Live</button><div class="speeds" role="group" aria-label="Speed">${[1, 10, 60, 300].map(v => `<button type="button" data-speed="${v}">${v}×</button>`).join('')}</div><div class="scrub"><input type="range" min="0" max="1000" value="1000" data-scrub aria-label="Time" /><div class="s3-marks"></div></div><span class="clock mono" data-clock>—</span></div>
+    <div class="s3-legend"><span><i class="sw trail"></i>walk</span><span><i class="sw heat"></i>time spent</span><span><i class="sw photo"></i>photo</span><span><i class="sw alert"></i>open issue</span><span class="attr">Imagery © Esri · Building © OpenStreetMap contributors</span></div>`;
   const canvas = host.querySelector('canvas')!; const labels = host.querySelector('.s3-labels') as HTMLElement;
   scene = new SiteScene(canvas, labels, host); (window as any).__scene = scene;
   brainEl = host.querySelector('.s3-brain-body') as HTMLElement; followBtn = host.querySelector('[data-follow]') as HTMLButtonElement;
@@ -31,6 +32,11 @@ function ensureScene(): SiteScene {
   followBtn.addEventListener('click', () => scene!.setFollow(!scene!.follow));
   host.addEventListener('site:follow', (e: any) => followBtn.setAttribute('aria-pressed', String(e.detail.on)));
   document.addEventListener('keydown', e => { const t = e.target as HTMLElement; if (t.closest('input, select, textarea, button, a, [role="button"], [contenteditable]')) return; if (e.key === 'f' && view.mode === 'map') followBtn.click(); });
+  // replay bar: the same controls as the standalone site view, driving the shared clock
+  const bar = host.querySelector('.s3-replay') as HTMLElement; scrubEl = bar.querySelector('[data-scrub]') as HTMLInputElement; marksEl = bar.querySelector('.s3-marks') as HTMLElement;
+  bar.addEventListener('click', e => { const t = e.target as HTMLElement; const sp = t.closest('[data-speed]') as HTMLElement | null; if (sp) { setSpeed(Number(sp.dataset.speed)); return; } if (t.closest('[data-play]')) togglePlay(); if (t.closest('[data-live]')) stopReplay(); });
+  scrubEl.addEventListener('input', () => scrubReplay(Number(scrubEl.value) / 1000));
+  scrubEl.addEventListener('pointerdown', () => { scrubbing = true; }); document.addEventListener('pointerup', () => { scrubbing = false; });
   scene.onPinClick = id => select(id);
   scene.onPinHover = (id, x, y) => { if (id) showTip(photoCard(id), x, y, id); else hideTip(); };
   document.addEventListener('select', () => { const id = state.selected; const l = id ? state.locations.get(id) : null; if (l && scene && site) { const [x, z] = scene.proj.toXZ(l.lon, l.lat); scene.focus(x, z); } });
@@ -132,8 +138,27 @@ function frameBody() {
   if (fitRequested !== seenFit) { seenFit = fitRequested; sc.resetView(); }
   const now = performance.now();
   if (now - brainAt > 250) { brainAt = now; renderBrain(brainEl, { clock, locate, onSelect: select, onJump: jumpTo }); }
+  renderBar(clock);
   sc.frame();
   raf = requestAnimationFrame(frame);
+}
+
+function renderBar(clock: number) {
+  const r = view.replay; const bar = host.querySelector('.s3-replay') as HTMLElement | null; if (!bar) return;
+  const [t0, t1] = replayRange();
+  (bar.querySelector('[data-play]') as HTMLElement).textContent = r.on && r.playing ? '❚❚' : '▶';
+  (bar.querySelector('[data-live]') as HTMLElement).classList.toggle('on', !r.on);
+  bar.querySelectorAll<HTMLElement>('[data-speed]').forEach(b => b.classList.toggle('on', Number(b.dataset.speed) === r.speed));
+  if (!scrubbing && document.activeElement !== scrubEl) scrubEl.value = String(Math.round(((clock - t0) / Math.max(1, t1 - t0)) * 1000));
+  (bar.querySelector('[data-clock]') as HTMLElement).textContent = (r.on ? `${r.speed}× · ` : '') + fmtTimeS(BigInt(Math.round(clock)) * 1000n);
+  // marks: photos (grey), photos with an alert (red), shift changes (blue)
+  const sig = `${state.events.size}|${state.alerts.size}|${state.track.size}|${Math.round(t0 / 60000)}|${Math.round(t1 / 600000)}`;
+  if (sig !== marksSig) {
+    marksSig = sig; const f = (t: number) => `${((t - t0) / Math.max(1, t1 - t0)) * 100}%`;
+    const evs = [...state.events.values()].map(e => `<i style="left:${f(Number(e.tMicros) / 1000)}" class="${alertsFor(e).length ? 'a' : ''}"></i>`);
+    const all = shifts(); const hs = all.filter(s => s.endMs !== null || all.some(o => o.startMs > shiftEnd(s))).map(s => `<i class="h" style="left:${f(shiftEnd(s))}"></i>`);
+    marksEl.innerHTML = evs.join('') + hs.join('');
+  }
 }
 
 export function renderMap() {

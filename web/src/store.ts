@@ -77,6 +77,7 @@ export function nowMicros(): bigint { return BigInt(Date.now()) * 1000n; }
 export function fmtTime(micros: bigint): string {
   return new Date(Number(micros / 1000n)).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
+export function fmtTimeS(micros: bigint): string { return new Date(Number(micros / 1000n)).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }); }
 export function visibleEvents(): Ev[] {
   const cutoff = state.windowMin ? nowMicros() - BigInt(state.windowMin) * 60_000_000n : 0n;
   return [...state.events.values()]

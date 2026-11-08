@@ -304,3 +304,23 @@ body[data-conn="connecting"] .col, body[data-conn="error"] .col { opacity: .7; }
 @media (prefers-reduced-motion: reduce) { .s3-pin, .s3-brain .ev, .s3-brain .issue .ic { animation: none !important; } }
 /* the drawer is the detail of what you clicked: the memory panel yields while it is open */
 .floor:has(.drawer:not([hidden])) .s3-brain { display: none; }
+/* the map's own replay bar and legend, as on the standalone site view (#26) */
+.s3-replay { position: absolute; left: 12px; right: 364px; bottom: 12px; z-index: 950; display: flex; align-items: center; gap: 8px; background: var(--glass-bg); backdrop-filter: blur(12px); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; box-shadow: var(--shadow); }
+.s3-replay button { border: 1px solid transparent; background: transparent; border-radius: 4px; padding: 4px 9px; color: var(--ink-2); font: 500 13px var(--font); cursor: pointer; min-height: 26px; }
+.s3-replay button:hover { background: var(--hover); color: var(--ink); }
+.s3-replay button.on { background: var(--ink); color: var(--ground); }
+.s3-replay [data-play] { width: 34px; font-size: 13px; }
+.s3-replay .speeds { display: inline-flex; gap: 2px; border-left: 1px solid var(--line); border-right: 1px solid var(--line); padding: 0 6px; }
+.s3-replay .scrub { flex: 1; position: relative; height: 28px; display: flex; align-items: center; }
+.s3-replay .scrub input { width: 100%; -webkit-appearance: none; appearance: none; height: 4px; background: var(--line-strong); border-radius: 2px; margin: 0; position: relative; z-index: 2; accent-color: var(--ink); }
+.s3-replay .scrub input::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%; background: var(--ink); border: 2px solid var(--ground); box-shadow: 0 0 0 1px var(--line-strong); }
+.s3-marks { position: absolute; left: 7px; right: 7px; top: 4px; height: 8px; pointer-events: none; }
+.s3-marks i { position: absolute; top: 0; width: 2px; height: 8px; background: var(--ink-4); border-radius: 1px; } .s3-marks i.a { background: var(--critical); height: 10px; top: -1px; } .s3-marks i.h { background: var(--accent); width: 3px; height: 12px; top: -2px; }
+.s3-replay .clock { min-width: 128px; text-align: right; color: var(--ink-2); font-size: 12.5px; }
+.s3-legend { position: absolute; left: 12px; bottom: 66px; z-index: 950; display: flex; gap: 14px; align-items: center; color: var(--ink-2); font-size: 12px; pointer-events: none; background: var(--glass-bg); backdrop-filter: blur(10px); border: 1px solid var(--line); border-radius: var(--r); padding: 4px 10px; }
+.s3-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.s3-legend .sw { display: inline-block; width: 12px; height: 12px; border-radius: 50%; }
+.s3-legend .sw.trail { background: var(--w1); border-radius: 2px; height: 3px; width: 16px; } .s3-legend .sw.heat { background: var(--heat); opacity: .6; filter: blur(1px); } .s3-legend .sw.photo { background: var(--ground); border: 2px solid var(--w1); border-radius: 2px; } .s3-legend .sw.alert { background: var(--critical); animation: s3-burn 1.6s infinite; }
+.s3-legend .attr { margin-left: 8px; color: var(--ink-4); font-size: 11px; }
+.map .s3-attr { display: none; }
+@media (max-width: 1100px) { .s3-replay { right: 324px; } }

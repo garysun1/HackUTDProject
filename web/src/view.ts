@@ -10,7 +10,7 @@ export type Mode = 'map' | 'graph';
 export const view = {
   mode: 'graph' as Mode,
   modeChosen: false, // the user picked a mode; stop auto-switching to the map when positions appear
-  replay: { on: false, playing: false, start: 0, progress: 1, speed: 300, clockMs: 0 },
+  replay: { on: false, playing: false, start: 0, progress: 1, speed: 60, clockMs: 0 },
   scope: null as Set<string> | null, // shift line narrowed to these events
   scopeLabel: '',
 };
