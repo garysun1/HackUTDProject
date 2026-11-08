@@ -404,7 +404,7 @@ function main() {
     const outThumb = path.join(photosDir, `${e.id}.thumb.jpg`);
     const keep = keepArg(e.keepFaces);
     const mode = haveBlur ? 'blur' : 'copy';
-    const key = `${keep}|${mode}`;
+    const key = `${keep}|${mode}|${JSON.stringify(e.extraBlur ?? [])}`;
 
     if (!fs.existsSync(src)) {
       warn(`event ${e.id}: photo ${src} not found; skipped`);
@@ -421,7 +421,9 @@ function main() {
 
     let ok = false;
     if (haveBlur) {
-      const r = run('swift', [blurTool, 'blur', src, outJpg, '--keep', keep]);
+      // extraBlur: normalised rects (origin top-left) the manifest adds by hand where the detector misses a face
+      const extra = Array.isArray(e.extraBlur) ? e.extraBlur.map((r) => r.join(',')).join(';') : '';
+      const r = spawnSync('swift', [blurTool, 'blur', src, outJpg, '--keep', keep], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, env: { ...process.env, BLUR_DEBUG_FACES: extra } });
       if (r.status === 0 && fs.existsSync(outJpg)) ok = true;
       else warn(`event ${e.id}: blur failed (exit ${r.status}): ${(r.stderr || '').trim().split('\n').slice(-2).join(' | ')}; falling back to copy`);
     } else if (!blurWarned) {

@@ -106,6 +106,20 @@ guard var image = CIImage(contentsOf: inURL, options: [.applyOrientationProperty
 // Normalise origin to (0,0) after the orientation transform.
 image = image.transformed(by: CGAffineTransform(translationX: -image.extent.origin.x, y: -image.extent.origin.y))
 
+// Detect on the full-resolution frame first: small faces at the back of a room vanish once the
+// image is downscaled to 1600 px. Normalised boxes carry over to the resized image unchanged.
+var fullFaces: [CGRect] = []
+do {
+    let fullRect = CGRect(x: 0, y: 0, width: floor(image.extent.width), height: floor(image.extent.height))
+    if let fullCG = ciContext.createCGImage(image.cropped(to: fullRect), from: fullRect, format: .RGBA8, colorSpace: CGColorSpace(name: CGColorSpace.sRGB)) {
+        let req = VNDetectFaceRectanglesRequest()
+        if let latest = VNDetectFaceRectanglesRequest.supportedRevisions.max() { req.revision = latest }
+        let h = VNImageRequestHandler(cgImage: fullCG, orientation: .up, options: [:])
+        if (try? h.perform([req])) != nil {
+            fullFaces = (req.results ?? []).map { obs in let b = obs.boundingBox; return CGRect(x: b.minX, y: 1 - b.maxY, width: b.width, height: b.height) }
+        }
+    }
+}
 let longEdge = max(image.extent.width, image.extent.height)
 if longEdge > maxEdge {
     let scale = maxEdge / longEdge
@@ -136,6 +150,8 @@ var faces: [CGRect] = (request.results ?? []).map { obs in
     let b = obs.boundingBox
     return CGRect(x: b.minX, y: 1 - b.maxY, width: b.width, height: b.height)
 }
+// union with the full-resolution pass (skip boxes that overlap one already found)
+for f in fullFaces where !faces.contains(where: { $0.intersection(f).width > 0 && $0.intersection(f).height > 0 }) { faces.append(f) }
 // Debug hook: BLUR_DEBUG_FACES="x,y,w,h;…" adds synthetic faces (normalised, top-left) to exercise the blur path.
 if let dbg = ProcessInfo.processInfo.environment["BLUR_DEBUG_FACES"], !dbg.isEmpty {
     for part in dbg.split(separator: ";") {

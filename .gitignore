@@ -15,3 +15,4 @@ site3d/dist/
 web/public/weekend/.cache.json
 web/public/weekend/.track-input.json
 demo/weekend/out/
+demo/weekend/photos/
