@@ -12,10 +12,18 @@ import { fitRequested } from './tools';
 import { current } from './workspaces';
 import { SiteScene, type PinSpec, type IssueSpec, type SiteData } from './site3d/scene';
 import { centroid } from './site3d/geo';
-import { siteFor, locateIn, type KnownSite } from './site3d/sites';
+import { siteFor, ecswSite, locateIn, type KnownSite } from './site3d/sites';
+import { badgeOf } from './overlay';
 import { sessionShifts, shifts, positionAt, renderBrain, openAt, shiftEnd, inSession, sessionRange, raisedAt, resolvedAt, type Shift } from './brain';
 
 const host = document.getElementById('map') as HTMLElement;
+// Replay speeds: a shift plays at up to 300×; a record that spans a day or more gets two faster steps.
+let speedsSig = '';
+function speedList(): number[] { const [t0, t1] = replayRange(); const h = (t1 - t0) / 3_600_000; return h > 6 ? [1, 60, 300, 1800, 3600] : [1, 10, 60, 300]; }
+// A line that appears on the map for a few seconds: a live photo that joined the record.
+let toastTimer = 0;
+function toast(html: string) { const el = host.querySelector('.s3-toast') as HTMLElement | null; if (!el) return; el.innerHTML = html; el.hidden = false; el.classList.remove('show'); void el.offsetWidth; el.classList.add('show'); clearTimeout(toastTimer); toastTimer = window.setTimeout(() => { el.hidden = true; }, 9000); }
+const toasted = new Set<string>();
 let scene: SiteScene | null = null; let brainEl: HTMLElement; let statsEl: HTMLElement; let followBtn: HTMLButtonElement; let seenFit = fitRequested;
 let raf = 0; let brainAt = 0; let scrubEl: HTMLInputElement; let marksEl: HTMLElement; let scrubbing = false; let marksSig = '';
 
@@ -24,7 +32,8 @@ function ensureScene(): SiteScene {
   host.innerHTML = `<canvas class="s3-gl" aria-label="3D view of the site"></canvas><div class="s3-labels" aria-hidden="true"></div>
     <div class="s3-ctl"><span class="seg" role="group" aria-label="Camera"><button type="button" data-cam="3d" aria-pressed="true">3D</button><button type="button" data-cam="2d" aria-pressed="false">Top-down</button></span><button type="button" class="btn ghost" data-follow aria-pressed="false" title="Keep the camera on the wearer (F)">Follow</button></div>
     <aside class="s3-brain" aria-label="Shift memory"><div class="bh"><h2>Shift memory</h2></div><div class="s3-brain-stats"></div><div class="s3-brain-body"></div></aside>
-    <div class="s3-replay" role="group" aria-label="Replay"><button type="button" data-play aria-label="Play">▶</button><button type="button" data-live class="on">Live</button><div class="speeds" role="group" aria-label="Speed">${[1, 10, 60, 300].map(v => `<button type="button" data-speed="${v}">${v}×</button>`).join('')}</div><div class="scrub"><input type="range" min="0" max="1000" value="1000" data-scrub aria-label="Time" /><div class="s3-marks"></div></div><span class="clock mono" data-clock>—</span></div>
+    <div class="s3-replay" role="group" aria-label="Replay"><button type="button" data-play aria-label="Play">▶</button><button type="button" data-live class="on">Live</button><div class="speeds" role="group" aria-label="Speed">${speedList().map(v => `<button type="button" data-speed="${v}">${v}×</button>`).join('')}</div><div class="scrub"><input type="range" min="0" max="1000" value="1000" data-scrub aria-label="Time" /><div class="s3-marks"></div></div><span class="clock mono" data-clock>—</span></div>
+    <div class="s3-toast" role="status" aria-live="polite" hidden></div>
     <div class="s3-legend"><span><i class="sw trail"></i>walk</span><span><i class="sw heat"></i>time spent</span><span><i class="sw photo"></i>photo</span><span><i class="sw alert"></i>open issue</span><span><i class="sw done"></i>resolved</span><span class="attr">Imagery © Esri · Building © OpenStreetMap contributors</span></div>`;
   const canvas = host.querySelector('canvas')!; const labels = host.querySelector('.s3-labels') as HTMLElement;
   scene = new SiteScene(canvas, labels, host); (window as any).__scene = scene;
@@ -61,8 +70,10 @@ function dataCentroid(): [number, number] | null {
   return pts.length ? centroid(pts) : null;
 }
 function ensureSite(sc: SiteScene) {
-  const c = dataCentroid(); const k = siteFor(c);
-  const key = k ? k.key : `generic:${current().db}`;
+  const ws = current(); const c = dataCentroid(); const k0 = siteFor(c);
+  // the weekend workspace walks the wider campus (campus.json) around ECSW; a tile radius widens the imagery
+  const k = ws.campus ? ecswSite(true, ws.tileRadius ?? 4) : k0?.key === 'ecsw' && ws.tileRadius ? ecswSite(false, ws.tileRadius) : k0;
+  const key = k ? k.key : `generic:${ws.db}`;
   if (site && site.builtFor === key) return;
   if (k) { sc.buildSite(k.data); site = { kind: 'known', known: k, builtFor: key }; }
   else {
@@ -133,7 +144,7 @@ function frameBody() {
   const drawnDevices = new Set<string>();
   for (const [dev, list] of byDevice) {
     drawnDevices.add(dev); let drawn = false;
-    for (const s of list) {
+    for (const s of [...list].reverse()) { // when two shifts of one device overlap (a live one over a reconstructed one), the later-started wins
       const pos = positionAt(s, clock); if (!pos) continue;
       const [x, z] = sc.proj.toXZ(pos.lon, pos.lat); const y = lvl(pos.floor) * sc.floorH + 1.1;
       const trail: number[] = []; for (let i = 0; i <= pos.i; i++) { const q = s.smooth[i]; const [tx, tz] = sc.proj.toXZ(q.lon, q.lat); trail.push(tx, lvl(q.floor) * sc.floorH + 0.6, tz); } trail.push(x, y - 0.5, z);
@@ -161,7 +172,9 @@ function frameBody() {
     if (!inSession(e, all)) continue; const l = state.locations.get(e.eventId); if (!l) continue;
     const [x, z] = sc.proj.toXZ(l.lon, l.lat); const url = state.photos.get(e.eventId); if (!url) loadPhoto(e.eventId);
     const alert = alertsFor(e).some(a => openAt(a, clock));
-    pins.push({ id: e.eventId, x, y: lvl(l.floor) * sc.floorH, z, color: wearerColor(e.deviceId), time: fmtTime(e.tMicros), alert, thumb: url, selected: state.selected === e.eventId, title: e.summary });
+    const badge = badgeOf(e.eventId);
+    pins.push({ id: e.eventId, x, y: lvl(l.floor) * sc.floorH, z, color: wearerColor(e.deviceId), time: fmtTime(e.tMicros), alert, thumb: url, selected: state.selected === e.eventId, title: badge ? `${badge} · ${e.summary}` : e.summary, badge });
+    if (badge && !toasted.has(e.eventId)) { toasted.add(e.eventId); toast(`<span class="crown" aria-hidden="true">★</span><b>${esc(badge)}</b> · ${fmtTime(e.tMicros)} · joined the record from the glasses, faces blurred on the phone`); if (!view.replay.on) sc.focus(x, z); }
   }
   sc.setPins(pins);
   sc.setIssues(issueSpecs(sc, clock, lvl));
@@ -178,6 +191,7 @@ function renderBar(clock: number) {
   const [t0, t1] = replayRange();
   (bar.querySelector('[data-play]') as HTMLElement).textContent = r.on && r.playing ? '❚❚' : '▶';
   (bar.querySelector('[data-live]') as HTMLElement).classList.toggle('on', !r.on);
+  const sl = speedList(); const ssig = sl.join(','); if (ssig !== speedsSig) { speedsSig = ssig; (bar.querySelector('.speeds') as HTMLElement).innerHTML = sl.map(v => `<button type="button" data-speed="${v}">${v}×</button>`).join(''); }
   bar.querySelectorAll<HTMLElement>('[data-speed]').forEach(b => b.classList.toggle('on', Number(b.dataset.speed) === r.speed));
   if (!scrubbing && document.activeElement !== scrubEl) scrubEl.value = String(Math.round(((clock - t0) / Math.max(1, t1 - t0)) * 1000));
   (bar.querySelector('[data-clock]') as HTMLElement).textContent = (r.on ? `${r.speed}× · ` : '') + fmtTimeS(BigInt(Math.round(clock)) * 1000n);

@@ -35,7 +35,7 @@ export type Detail =
   | { kind: 'helipad'; at: LonLat; r: number }
   | { kind: 'stack' | 'mast'; at: LonLat; height: number; r?: number; lift?: number };
 export type IssueSpec = { id: string; x: number; y: number; z: number; open: boolean; title: string; lift: number /* stacking order when several issues share a spot */ };
-export type PinSpec = { id: string; x: number; y: number; z: number; color: string; time: string; alert: boolean; thumb?: string; selected: boolean; title: string };
+export type PinSpec = { id: string; x: number; y: number; z: number; color: string; time: string; alert: boolean; thumb?: string; selected: boolean; title: string; badge?: string /* a line pinned above the photo, e.g. the judging beat */ };
 export type WearerSpec = { color: string; name: string; sub: string; pos: [number, number, number] | null; trail: number[] /* flat xyz */; acc?: number /* metres of GPS uncertainty, drawn as a ring */ };
 
 const IMAGERY = (z: number, x: number, y: number) => `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${z}/${y}/${x}`;
@@ -346,7 +346,7 @@ export class SiteScene {
     for (const p of list) {
       keep.add(p.id);
       let v = this.pins.get(p.id);
-      const sig = `${p.alert}|${p.thumb ? 1 : 0}|${p.selected}|${p.color}`;
+      const sig = `${p.alert}|${p.thumb ? 1 : 0}|${p.selected}|${p.color}|${p.badge ?? ''}`;
       if (!v) {
         const el = document.createElement('div'); el.className = 'pin arrive'; el.dataset.id = p.id;
         el.addEventListener('click', ev => { ev.stopPropagation(); this.onPinClick(p.id); });
@@ -358,7 +358,8 @@ export class SiteScene {
       v.pole.scale.y = p.y + 2.6; v.pole.position.set(p.x, (p.y + 2.6) / 2, p.z);
       if (v.sig !== sig) {
         v.sig = sig; v.el.style.setProperty('--c', p.color); v.el.classList.toggle('alert', p.alert); v.el.classList.toggle('sel', p.selected); v.el.title = p.title;
-        v.el.innerHTML = `${p.thumb ? `<img src="${p.thumb}" alt="">` : '<i></i>'}<b>${p.time}</b>`;
+        v.el.classList.toggle('badged', !!p.badge);
+        v.el.innerHTML = `${p.badge ? `<em>${p.badge.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c] as string))}</em>` : ''}${p.thumb ? `<img src="${p.thumb}" alt="">` : '<i></i>'}<b>${p.time}</b>`;
       }
     }
     for (const [id, v] of this.pins) if (!keep.has(id)) { this.scene.remove(v.obj, v.pole); v.el.remove(); this.pins.delete(id); }

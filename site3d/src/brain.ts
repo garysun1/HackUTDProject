@@ -184,7 +184,7 @@ export function renderBrain(el: HTMLElement, ctx: BrainCtx): Snapshot {
     parts.push(`<section class="sec"><h3>Photos <span class="n">${snap.events.length}</span></h3><div class="feed">${snap.events.length ? snap.events.map(evHtml).join('') : '<div class="empty">No photos yet at this time.</div>'}</div></section>`);
     watchScroll(el);
     const keepTop = el.scrollTop; el.innerHTML = parts.join(''); el.scrollTop = keepTop;
-    if (curId && curId !== lastCur) { lastCur = curId; if (performance.now() - userScrollAt > 6000) el.querySelector('.ev.cur')?.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
+    if (curId && curId !== lastCur) { lastCur = curId; if (performance.now() - userScrollAt > 6000) { const c = el.querySelector('.ev.cur') as HTMLElement | null; if (c) el.scrollTo({ top: Math.max(0, c.offsetTop - el.clientHeight / 2), behavior: 'auto' }); } /* instant, on the panel itself: a smooth scrollIntoView left the body blank when the feed was rebuilt mid-animation */ }
     el.querySelectorAll<HTMLElement>('[data-ev]').forEach(n => n.addEventListener('click', () => ctx.onSelect(n.dataset.ev!)));
     el.querySelectorAll<HTMLElement>('[data-jump]').forEach(n => n.addEventListener('click', e => { e.stopPropagation(); if (n.dataset.jump) ctx.onJump(Number(n.dataset.jump)); }));
   } else {

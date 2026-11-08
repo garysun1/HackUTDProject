@@ -332,3 +332,17 @@ body[data-conn="connecting"] .col, body[data-conn="error"] .col { opacity: .7; }
 .s3-legend .attr { margin-left: 8px; color: var(--ink-4); font-size: 11px; }
 .map .s3-attr { display: none; }
 @media (max-width: 1100px) { .s3-replay { right: 324px; } }
+
+/* ---------- the weekend workspace (decision 0033): badge, toast, switcher tag ---------- */
+.ws-item .tag.us { color: var(--good-ink); border-color: color-mix(in srgb, var(--good) 45%, transparent); background: var(--good-bg); }
+.badge { display: inline-flex; align-items: center; gap: 5px; font: 500 12px var(--font); color: var(--warning-ink); background: var(--warning-bg); border: 1px solid color-mix(in srgb, var(--warning) 55%, transparent); border-radius: 999px; padding: 1px 8px 1px 6px; }
+.badge .crown, .s3-toast .crown, .s3-brain .ev .badge .crown { color: var(--warning); font-size: 12px; line-height: 1; }
+.s3-brain .ev .tx .badge { margin: 2px 0 3px; }
+.s3-brain .ev.badged { background: color-mix(in srgb, var(--warning-bg) 60%, transparent); }
+.s3-pin.badged { border-color: var(--warning); overflow: visible; }
+.s3-pin.badged em { position: absolute; left: 50%; bottom: calc(100% + 6px); transform: translateX(-50%); white-space: nowrap; font: 600 11px/1 var(--font); font-style: normal; color: var(--warning-ink); background: var(--warning-bg); border: 1px solid color-mix(in srgb, var(--warning) 55%, transparent); border-radius: 999px; padding: 4px 9px; box-shadow: var(--shadow); animation: s3-drop .5s ease-out; }
+.s3-pin.badged em::before { content: "★ "; color: var(--warning); }
+.s3-toast { position: absolute; left: 50%; top: 14px; transform: translateX(-50%); z-index: 960; display: inline-flex; align-items: center; gap: 7px; max-width: min(640px, 70%); background: var(--glass-bg); backdrop-filter: blur(12px); border: 1px solid color-mix(in srgb, var(--warning) 55%, transparent); border-radius: 999px; padding: 7px 14px; box-shadow: var(--shadow); font-size: 13px; color: var(--ink); pointer-events: none; opacity: 0; }
+.s3-toast.show { animation: s3-toast 9s ease-out forwards; } .s3-toast[hidden] { display: none; }
+@keyframes s3-toast { 0% { opacity: 0; transform: translate(-50%, -8px); } 6% { opacity: 1; transform: translate(-50%, 0); } 85% { opacity: 1; } 100% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .s3-toast.show { animation: none; opacity: 1; } .s3-pin.badged em { animation: none; } }

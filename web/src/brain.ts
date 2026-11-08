@@ -6,6 +6,7 @@ import { state, type Alert, type Ev, type Issue, type TrackPoint, wearerColor, w
 import { esc } from './timeline';
 import { vocab } from './workspaces';
 import { haversineM } from './site3d/geo';
+import { overlayActive, badgeOf } from './overlay';
 
 const ms = (micros: bigint) => Number(micros) / 1000;
 export type Fix = { tMs: number; lat: number; lon: number; floor?: number; acc: number };
@@ -66,7 +67,7 @@ function filteredShifts(): Shift[] {
  *  database and out of the way. */
 export function sessionShifts(): Shift[] {
   const all = filteredShifts();
-  if (ALL_SHIFTS) return all;
+  if (ALL_SHIFTS || overlayActive()) return all; // a workspace with an overlay is about the whole record
   if (SHIFT_PARAM) return all.filter(s => s.shiftId.startsWith(SHIFT_PARAM));
   const real = all.filter(s => s.lastMs - s.startMs >= 120_000 && s.smooth.length >= 5);
   const withFloor = real.filter(s => s.pts.some(p => p.floor !== undefined));
@@ -80,6 +81,7 @@ export function sessionShifts(): Shift[] {
 }
 /** A photo belongs to the session when a tracked shift of its wearer covers it (or its fix names the shift). */
 export function inSession(e: Ev, all: Shift[] = sessionShifts()): boolean {
+  if (overlayActive()) return true; // the overlay is the session
   const loc = state.locations.get(e.eventId);
   if (loc && all.some(s => s.shiftId === loc.shiftId && s.deviceId === loc.deviceId)) return true;
   const t = ms(e.tMicros);
@@ -170,7 +172,7 @@ export function renderBrain(el: HTMLElement, ctx: BrainCtx): Snapshot {
   const raisedN = snap.raised.length + snap.workOrders.length; const resolvedN = snap.resolved.length + snap.workOrders.filter(woDone).length;
   const openN = snap.open.length + snap.workOrders.filter(i => !woDone(i)).length;
   const spent = focus ? Math.min(ctx.clock, shiftEnd(focus)) - focus.startMs : 0;
-  const sig = [state.events.size, state.alerts.size, state.issues.size, state.track.size, focus?.key, snap.raised.map(a => a.id).join(','), snap.resolved.map(a => a.id).join(','), snap.workOrders.map(w => w.issueId + woDone(w)).join(','), snap.events.length, snap.events[0]?.eventId, snap.handoff?.atMs, snap.handoff?.carried.filter(c => c.done).length, state.selected, state.photos.size, state.hiddenWearers.size, v.session].join('|');
+  const sig = [state.events.size, state.alerts.size, state.issues.size, state.track.size, focus?.key, snap.raised.map(a => a.id).join(','), snap.resolved.map(a => a.id).join(','), snap.workOrders.map(w => w.issueId + woDone(w)).join(','), snap.events.length, snap.events[0]?.eventId, snap.handoff?.atMs, snap.handoff?.carried.filter(c => c.done).length, state.selected, state.photos.size, state.hiddenWearers.size, v.session, state.badges.size].join('|');
   if (sig !== lastSig) {
     lastSig = sig;
     // the three numbers that matter stay pinned above the scrolling feed
@@ -204,14 +206,16 @@ export function renderBrain(el: HTMLElement, ctx: BrainCtx): Snapshot {
       const place = placeOf(e.eventId)?.canonicalName || e.locationGuess;
       const fresh = !seen.has(e.eventId); seen.add(e.eventId);
       const pending = !(e.summary && e.confidence > 0);
-      return `<div class="ev${open ? ' alert' : ''}${chg.length ? ' change' : ''}${state.selected === e.eventId ? ' sel' : ''}${fresh ? ' arrive' : ''}${e.eventId === curId ? ' cur' : ''}" data-ev="${e.eventId}" style="--c:${wearerColor(e.deviceId)}"><span class="k"><i></i></span>${url ? `<img class="th" src="${url}" alt="">` : '<span class="th"></span>'}<div class="tx"><div class="t">${fmt(ms(e.tMicros))}${place && !isAck ? ` · ${esc(place)}` : ''}</div>` +
+      const badge = badgeOf(e.eventId);
+      return `<div class="ev${open ? ' alert' : ''}${chg.length ? ' change' : ''}${state.selected === e.eventId ? ' sel' : ''}${fresh ? ' arrive' : ''}${e.eventId === curId ? ' cur' : ''}${badge ? ' badged' : ''}" data-ev="${e.eventId}" style="--c:${wearerColor(e.deviceId)}"><span class="k"><i></i></span>${url ? `<img class="th" src="${url}" alt="">` : '<span class="th"></span>'}<div class="tx"><div class="t">${fmt(ms(e.tMicros))}${place && !isAck ? ` · ${esc(place)}` : ''}</div>` +
+        (badge ? `<p class="badge"><span class="crown" aria-hidden="true">★</span>${esc(badge)}</p>` : '') +
         (isAck ? `<p class="note">Briefing confirmed. ${esc(e.note!.replace(/^briefing ack:\s*/i, ''))}</p>` : `<p>${pending ? `<span class="pending">${e.status === 'failed' ? 'This photo could not be read.' : 'Reading the photo…'}</span>` : esc(e.summary)}</p>`) +
         (e.note && !isAck ? `<p class="note">“${esc(e.note)}”</p>` : '') + chg.map(c => `<p class="chg">Changed: ${esc(String(c))}</p>`).join('') + `</div></div>`;
     };
     parts.push(`<section class="sec"><h3>Photos <span class="n">${snap.events.length}</span></h3><div class="feed">${snap.events.length ? snap.events.map(evHtml).join('') : '<div class="s3-empty">No photos yet at this time.</div>'}</div></section>`);
     watchScroll(el);
     const top = el.scrollTop; el.innerHTML = parts.join(''); el.scrollTop = top;
-    if (curId && curId !== lastCur) { lastCur = curId; if (performance.now() - userScrollAt > 6000) el.querySelector('.ev.cur')?.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
+    if (curId && curId !== lastCur) { lastCur = curId; if (performance.now() - userScrollAt > 6000) { const c = el.querySelector('.ev.cur') as HTMLElement | null; if (c) el.scrollTo({ top: Math.max(0, c.offsetTop - el.clientHeight / 2), behavior: 'auto' }); } /* instant, on the panel itself: a smooth scrollIntoView left the body blank when the feed was rebuilt mid-animation */ }
     el.querySelectorAll<HTMLElement>('[data-ev]').forEach(n => n.addEventListener('click', () => ctx.onSelect(n.dataset.ev!)));
     el.querySelectorAll<HTMLElement>('[data-jump]').forEach(n => n.addEventListener('click', e => { e.stopPropagation(); if (n.dataset.jump) ctx.onJump(Number(n.dataset.jump)); }));
   } else {
