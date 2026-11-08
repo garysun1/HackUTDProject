@@ -205,7 +205,10 @@ final class AppConfig {
     voiceContext = defaults.object(forKey: Keys.voiceContext) as? Bool ?? true
     useGlassesMic = defaults.object(forKey: Keys.useGlassesMic) as? Bool ?? true
     briefingOnStart = defaults.object(forKey: Keys.briefingOnStart) as? Bool ?? true
-    spokenBriefingCheck = defaults.object(forKey: Keys.spokenBriefingCheck) as? Bool ?? true
+    // Demo: the briefing is read on screen, not aloud. The spoken read-and-repeat check starts off every launch
+    // (a stored on is ignored); the Settings toggle still turns it on for the current run.
+    _ = defaults.object(forKey: Keys.spokenBriefingCheck)
+    spokenBriefingCheck = false
     nvidiaApiKey = keychain.string(for: Keys.nvidiaApiKey) ?? ""
     elevenLabsApiKey = keychain.string(for: Keys.elevenLabsApiKey) ?? ""
     elevenLabsVoiceId = defaults.string(forKey: Keys.elevenLabsVoiceId) ?? ""
