@@ -211,6 +211,13 @@ for (const id of ids) {
     const baseSeed = 1000 + [...(group[0].pair || group[0].id)].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 100000, 7);
     let ref = null;
     for (const shot of group) {
+      // a member that already passed is kept; later members are edited from its photo
+      const have = join(outDir, `${shot.id}.jpg`);
+      if (!force && manifest.shots[shot.id]?.check?.pass && existsSync(have)) {
+        if (!ref) ref = readFileSync(have);
+        console.log(`  skip ${shot.id} (exists, passed)`);
+        continue;
+      }
       // the nvidia provider cannot edit: pair members reuse the base seed instead
       const r = await makeShot(sc, shot, ref, baseSeed);
       if (!r) {
