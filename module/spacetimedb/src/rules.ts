@@ -21,6 +21,7 @@ export interface AssetLike {
 export interface AssetMatch {
   assetId: string;
   matchedText: string;
+  specificity: number; // length of the matched pattern; longer is a more specific match
 }
 
 /**
@@ -31,33 +32,32 @@ export interface AssetMatch {
  */
 export function matchAssets(texts: string[], assets: AssetLike[]): AssetMatch[] {
   const out: AssetMatch[] = [];
-  const seen = new Set<string>();
   for (const a of assets) {
     const pats = [a.assetId, a.name, ...a.patterns].filter(p => typeof p === 'string' && p.trim());
-    let hit: string | null = null;
+    let best: AssetMatch | null = null;
     for (const text of texts) {
       if (typeof text !== 'string' || !text) continue;
+      const st = squash(text);
       for (const p of pats) {
+        let spec = 0;
         if (p.length > 2 && p.startsWith('/') && p.endsWith('/')) {
           try {
-            if (new RegExp(p.slice(1, -1), 'i').test(text)) hit = text;
+            const m = new RegExp(p.slice(1, -1), 'i').exec(text);
+            if (m) spec = Math.max(3, squash(m[0]).length);
           } catch {
             /* bad regex in the registry: ignore */
           }
         } else {
           const sp = squash(p);
-          if (sp.length > 2 && squash(text).includes(sp)) hit = text;
+          if (sp.length > 2 && st.includes(sp)) spec = sp.length;
         }
-        if (hit) break;
+        if (spec && (!best || spec > best.specificity)) best = { assetId: a.assetId, matchedText: text, specificity: spec };
       }
-      if (hit) break;
     }
-    if (hit && !seen.has(a.assetId)) {
-      seen.add(a.assetId);
-      out.push({ assetId: a.assetId, matchedText: hit });
-    }
+    if (best) out.push(best);
   }
-  return out;
+  // most specific first, so "PDU A (Rack R12)" resolves to the PDU, not the rack it names
+  return out.sort((x, y) => y.specificity - x.specificity);
 }
 
 // ---------- alerts ----------
@@ -206,4 +206,173 @@ export function summarizeFindings(items: { kind: string; text: string }[], max =
     if (out.length >= max) break;
   }
   return out;
+}
+
+// ---------- time ----------
+
+/** "14:32 CT": the venue is in Dallas; CST (UTC-6) after 2026-11-01. */
+export function clockCT(micros: bigint): string {
+  const d = new Date(Number(micros / 1000n) - 6 * 3600 * 1000);
+  return `${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')} CT`;
+}
+
+export function microsFromIso(s: string): bigint | null {
+  const ms = Date.parse(s);
+  return Number.isFinite(ms) ? BigInt(Math.round(ms)) * 1000n : null;
+}
+
+/**
+ * A handoff window start. '' means since the last handoff (null); '0' the whole record;
+ * digits are micros (>= 15 digits), millis (>= 12) or seconds; '2h' / '45m' / '1d' are
+ * relative to now; anything else is parsed as ISO-8601; unparseable means ''.
+ */
+export function parseSinceArg(s: string, now: bigint): bigint | null {
+  const v = (s ?? '').trim();
+  if (!v) return null;
+  if (/^\d+$/.test(v)) {
+    if (v === '0') return 0n;
+    if (v.length >= 15) return BigInt(v);
+    if (v.length >= 12) return BigInt(v) * 1000n;
+    return BigInt(v) * 1_000_000n;
+  }
+  const rel = /^(\d+)\s*([mhd])$/i.exec(v);
+  if (rel) {
+    const unit = { m: 60n, h: 3600n, d: 86400n }[rel[2].toLowerCase() as 'm' | 'h' | 'd'];
+    return now - BigInt(rel[1]) * unit * 1_000_000n;
+  }
+  return microsFromIso(v);
+}
+
+// ---------- handoff text ----------
+
+export interface HEvent {
+  id: string;
+  t: bigint;
+  wearer: string;
+  assets: string[];
+  place: string;
+  summary: string;
+  note: string;
+  label: string;
+  changes: string[];
+}
+export interface HAlert {
+  t: bigint;
+  open: boolean;
+  asset: string;
+  text: string;
+  eventId: string;
+  wearer: string;
+}
+export interface HandoffSnap {
+  sinceMicros: bigint;
+  anchor: string;
+  events: HEvent[];
+  alerts: HAlert[];
+  total: number;
+}
+
+export const cite = (id: string) => `[event:${id}]`;
+export const MODEL_SECTIONS = ['NEEDS ATTENTION', 'WHAT CHANGED', 'ROUNDS'] as const;
+
+/** Wearer notes, close to verbatim, Handoff: notes first. */
+export function notesLines(snap: HandoffSnap): string[] {
+  const isHandoff = (e: HEvent) => (e.note.trim().startsWith('Handoff:') ? 1 : 0);
+  const notes = snap.events.filter(e => e.note.trim()).sort((a, b) => isHandoff(b) - isHandoff(a));
+  return notes.length ? notes.map(e => `${e.wearer}: ${e.note.trim()} ${cite(e.id)}`) : ['none'];
+}
+
+/** Assets seen in the window with no open alert and no recorded change. */
+export function quietLines(snap: HandoffSnap): string[] {
+  const flagged = new Set<string>([...snap.alerts.filter(a => a.open).map(a => a.asset), ...snap.events.filter(e => e.changes.length).flatMap(e => e.assets)]);
+  const quiet: string[] = [];
+  for (const e of snap.events) for (const a of e.assets) if (!flagged.has(a) && !quiet.includes(a)) quiet.push(a);
+  if (!quiet.length) return ['none'];
+  const cites = snap.events.filter(e => e.assets.some(a => quiet.includes(a))).slice(-3).map(e => cite(e.id));
+  return [`${quiet.join(', ')} ${cites.join(' ')}`];
+}
+
+/** The three judgement sections built from the graph alone; used when the models fail. */
+export function graphSections(snap: HandoffSnap): string[] {
+  const L: string[] = [];
+  const open = snap.alerts.filter(a => a.open);
+  L.push('NEEDS ATTENTION');
+  L.push(...(open.length ? open.map(a => `${a.asset}: ${a.text} (${clockCT(a.t)}, ${a.wearer}) ${cite(a.eventId)}`) : ['none']));
+  L.push('', 'WHAT CHANGED');
+  const changed = snap.events.flatMap(e => e.changes.map(c => `${c} (${clockCT(e.t)}) ${cite(e.id)}`));
+  const resolved = snap.alerts.filter(a => !a.open).map(a => `${a.asset}: ${a.text}, resolved ${cite(a.eventId)}`);
+  L.push(...(changed.length || resolved.length ? [...changed, ...resolved] : ['none']));
+  L.push('', 'ROUNDS');
+  const byWearer = new Map<string, HEvent[]>();
+  for (const e of snap.events) {
+    if (!byWearer.has(e.wearer)) byWearer.set(e.wearer, []);
+    byWearer.get(e.wearer)!.push(e);
+  }
+  for (const [w, evs] of byWearer) {
+    const seen: string[] = [];
+    for (const e of evs) for (const n of [...e.assets, e.place]) if (n && !seen.includes(n)) seen.push(n);
+    const first = evs[0];
+    const last = evs[evs.length - 1];
+    const cites = first === last ? cite(first.id) : `${cite(first.id)} ${cite(last.id)}`;
+    const span = first === last ? clockCT(first.t) : `${clockCT(first.t)} to ${clockCT(last.t)}`;
+    L.push(`${w}: ${evs.length} photo${evs.length === 1 ? '' : 's'} ${span}${seen.length ? ', ' + seen.join(', ') : ''} ${cites}`);
+  }
+  if (!byWearer.size) L.push('none');
+  return L;
+}
+
+/**
+ * Keep only what the model was allowed to write: the three section headers, "none", and
+ * lines that cite at least one known event id (unknown ids are dropped from a line; a line
+ * left with no citation is dropped). Returns null when a section is missing or nothing
+ * grounded survives, so the caller falls back to the graph.
+ */
+export function groundModelSections(text: string, known: Set<string>): string[] | null {
+  const out: string[] = [];
+  const present = new Set<string>();
+  let current = '';
+  let bodyLines = 0;
+  for (const raw of text.split('\n')) {
+    const line = raw.replace(/^[\s\-*•]+/, '').trim();
+    if (!line) continue;
+    const header = line.replace(/[:\s]+$/, '').toUpperCase();
+    if ((MODEL_SECTIONS as readonly string[]).includes(header)) {
+      if (present.has(header)) continue;
+      present.add(header);
+      current = header;
+      if (out.length) out.push('');
+      out.push(header);
+      continue;
+    }
+    if (!current) continue;
+    if (/^none\.?$/i.test(line)) {
+      out.push('none');
+      continue;
+    }
+    let ok = 0;
+    const cleaned = line.replace(/\[event:([^\]]+)\]/g, (_m, inner: string) => {
+      const ids = inner.split(/[\s,]+/).map(x => x.replace(/^event:/, '')).filter(x => x && x !== 'through' && x !== 'to' && x !== 'and');
+      const good = ids.filter(id => known.has(id));
+      ok += good.length;
+      return good.map(cite).join(' ');
+    });
+    if (!ok) continue;
+    out.push(cleaned.replace(/\s{2,}/g, ' ').trim());
+    bodyLines++;
+  }
+  if (present.size !== MODEL_SECTIONS.length || bodyLines === 0) return null;
+  // a section whose lines were all dropped gets "none"
+  const final: string[] = [];
+  for (let i = 0; i < out.length; i++) {
+    final.push(out[i]);
+    const isHeader = (MODEL_SECTIONS as readonly string[]).includes(out[i]);
+    const next = out[i + 1];
+    if (isHeader && (next === undefined || next === '' || (MODEL_SECTIONS as readonly string[]).includes(next))) final.push('none');
+  }
+  return final;
+}
+
+/** Full handoff text: model sections (or graph sections), then notes and quiet from the graph. */
+export function assembleHandoff(sections: string[], snap: HandoffSnap): string {
+  return [...sections, '', 'NOTES FROM THE SHIFT', ...notesLines(snap), '', 'QUIET', ...quietLines(snap)].join('\n');
 }

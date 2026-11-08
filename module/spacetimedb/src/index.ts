@@ -1,6 +1,6 @@
 // Working Memory for the Physical World — SpacetimeDB module (TypeScript).
 // Tables: event, photo, entity, edge, episode, handoff, alert, asset, wearer, perceive_job.
-// Procedures: ping, ingestPhoto (ingest_photo), perceive (scheduled), slackTest (slack_test).
+// Procedures: ping, ingestPhoto (ingest_photo), ingestTrack, perceive (scheduled), handoff, slackTest (slack_test).
 // Reducers: setLabel, setNote, ackAlert; admin: upsertAsset, deleteAsset, upsertWearer.
 // See docs/DESIGN.md §5–§8 and docs/CONTRACT.md. Pure rules (alerts, asset matching) in rules.ts.
 
@@ -15,7 +15,16 @@ import {
   cosine,
   parseJsonObject,
   summarizeFindings,
+  clockCT,
+  microsFromIso,
+  parseSinceArg,
+  groundModelSections,
+  graphSections,
+  assembleHandoff,
   type AssetLike,
+  type HEvent,
+  type HAlert,
+  type HandoffSnap,
 } from './rules';
 
 // ---------- tables ----------
@@ -90,7 +99,7 @@ const episode = table(
   }
 );
 
-const handoff = table(
+const handoffTable = table(
   { name: 'handoff', public: true },
   {
     handoffId: t.u64().primaryKey().autoInc(),
@@ -194,7 +203,7 @@ const trackPoint = table(
 );
 
 const spacetimedb = schema(
-  { event, photo, entity, edge, episode, handoff, alert, asset, wearer, perceiveJob, eventLocation, trackPoint },
+  { event, photo, entity, edge, episode, handoff: handoffTable, alert, asset, wearer, perceiveJob, eventLocation, trackPoint },
   {
     // #14: secrets live in the database's environment, set with
     //   spacetime publish wm-physical --env-only --server maincloud  (see module/README.md)
@@ -204,9 +213,11 @@ const spacetimedb = schema(
       ADMIN_TOKEN: t.option(t.string()), // admin reducers; falls back to INGEST_TOKEN
       NVIDIA_API_KEY: t.option(t.string()),
       NVIDIA_VL_MODEL: t.option(t.string()),
+      NVIDIA_AGENT_MODEL: t.option(t.string()), // handoff and ask; default nemotron-3.5-lightning
       AZURE_AI_KEY: t.option(t.string()), // one key for Azure OpenAI and AI Vision
       AZURE_OPENAI_ENDPOINT: t.option(t.string()),
       AZURE_VLM_DEPLOYMENT: t.option(t.string()),
+      AZURE_AGENT_DEPLOYMENT: t.option(t.string()), // gpt-5 fallback for handoff and ask; default agent-gpt-5
       AZURE_AI_SERVICES_ENDPOINT: t.option(t.string()),
       SLACK_WEBHOOK_URL: t.option(t.string()),
     },
@@ -242,10 +253,6 @@ function readFix(loc: any) {
     ageMs: num(loc.age_ms) !== undefined ? Math.max(0, Math.round(loc.age_ms)) : undefined,
   };
 }
-function microsFromIso(s: string): bigint | null {
-  const ms = Date.parse(s);
-  return Number.isFinite(ms) ? BigInt(Math.round(ms)) * 1000n : null;
-}
 const SlackTestResult = t.object('SlackTestResult', { status: t.string() });
 
 const DEFAULT_VL_MODEL = 'nvidia/nemotron-3.5-super-vl-120b-a12b';
@@ -256,16 +263,13 @@ const ALERT_DEDUPE_MICROS = 30n * 60n * 1_000_000n; // an unacked alert on the s
 const SIMILAR_MIN = 0.85; // cosine threshold for SIMILAR_TO edges
 const SIMILAR_TOP = 3;
 const CONTEXT_EVENTS = 6; // recent perceived events given to the model as history
+const DEFAULT_AGENT_MODEL = 'nvidia/nemotron-3.5-lightning-30b-a3b';
+const HANDOFF_MAX_EVENTS = 150; // newest events kept in a handoff digest
 
 function isoFromMicros(micros: bigint): string {
   return new Date(Number(micros / 1000n)).toISOString();
 }
 
-/** "14:32 CT" — the venue is in Dallas; CST (UTC-6) after 2026-11-01. */
-function clockCT(micros: bigint): string {
-  const d = new Date(Number(micros / 1000n) - 6 * 3600 * 1000);
-  return `${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')} CT`;
-}
 
 /** Wall clock for latency metadata only; 0 if the runtime does not provide one. */
 function wallMs(): number {
@@ -288,7 +292,7 @@ const PERCEPTION_PROMPT =
   'people_count (integer; never identify anyone), activity, ' +
   'text_in_scene (array of every string you can read: rack and asset labels, panel readouts, status words, cable tags, notes; copy them exactly, one string per label or line), ' +
   'changes_since_previous (array of {entity, attr, from, to}: compare each piece of equipment in this photo ONLY with the most recent earlier observation of that same equipment (same label or asset); never compare different equipment, and leave it empty when nothing in this photo was observed before or nothing changed), ' +
-  'anomalies (array of {entity, description, severity: "low"|"medium"|"high"} for anything that looks abnormal: fault or alarm lights, error codes, warning notes, open panels, disconnected or loose cables, leaks; empty if none), ' +
+  'anomalies (array of {entity, description, severity: "low"|"medium"|"high"} for anything that looks abnormal in THIS photo: fault or alarm lights, error codes, warning notes, open panels, disconnected or loose cables, leaks; never include anything you only know from the earlier observations; empty if none), ' +
   'summary (one sentence), confidence (0-1).';
 
 type Perception = any;
@@ -522,7 +526,7 @@ export const perceive = spacetimedb.procedure(
     const userText =
       PERCEPTION_PROMPT +
       (snap.history.length
-        ? ` Earlier observations this shift, oldest first, with the registered assets each involved:\n${snap.history.join('\n')}\n`
+        ? ` Earlier observations this shift, oldest first, with the registered assets each involved. They are context for detecting changes to the SAME equipment only; never report anything from them as present in this photo unless this photo shows it:\n${snap.history.join('\n')}\n`
         : ' Earlier observations: none.') +
       (snap.ev.label ? ` The wearer labeled the main object in this photo: ${JSON.stringify(snap.ev.label)}.` : '') +
       (snap.ev.note ? ` Wearer note: ${JSON.stringify(snap.ev.note)}.` : '');
@@ -620,6 +624,9 @@ export const perceive = spacetimedb.procedure(
     const newAlerts = ctx.withTx(tx => {
       const ev = tx.db.event.eventId.find(eventId);
       if (!ev) return [];
+      // entities that existed before this photo: a change needs an earlier sighting to compare with
+      const preExisting = new Set<string>();
+      for (const en of tx.db.entity.iter()) preExisting.add(en.entityId);
       const p = outcome.perception;
       if (!p) {
         tx.db.event.eventId.update({
@@ -716,6 +723,9 @@ export const perceive = spacetimedb.procedure(
         sceneAssets.find(m => assetById.get(m.assetId)?.assetType !== 'rack') ?? sceneAssets[0] ?? null;
       const isRack = (name: string) => assetById.get(name)?.assetType === 'rack';
       const primaryIsEquipment = !!primary && !isRack(primary.assetId);
+      // registry assets this photo is actually about: read in the scene, or the wearer's label
+      const labelAsset = ev.label ? resolve(ev.label) : null;
+      const inPhoto = (assetId: string) => sceneAssets.some(m => m.assetId === assetId) || (!!labelAsset && labelAsset.isAsset && labelAsset.name === assetId);
       for (const m of sceneAssets) involve(m.assetId, 'asset', { matched: m.matchedText });
       for (const o of objects) if (o && typeof o.name === 'string') involve(o.name, 'target');
 
@@ -729,16 +739,20 @@ export const perceive = spacetimedb.procedure(
         }
       }
 
-      // CHANGES
+      // CHANGES: only for an entity seen in an earlier photo, and only when the value differs
+      const realChanges: any[] = [];
       for (const c of changes) {
         const ename = typeof c?.entity === 'string' ? c.entity : '';
         if (!ename) continue;
-        // a first sighting ("" -> value) is not a change
-        if (!String(c.from ?? '').trim()) continue;
+        const from = String(c.from ?? '').trim();
+        const to = String(c.to ?? '').trim();
+        if (!from || !to || squash(from) === squash(to)) continue; // first sighting or no-op
         let r = resolve(ename);
         // "Rack R12: PSU2 OK -> FAULT" in a photo of PDU-A is PDU-A's change
         if (r.isAsset && isRack(r.name) && primaryIsEquipment) r = resolve(primary!.assetId);
-        if (!r.id) continue;
+        if (!r.id || !preExisting.has(r.id)) continue; // nothing earlier to compare with
+        if (r.isAsset && !inPhoto(r.name)) continue; // about an asset this photo does not show: restated history
+        realChanges.push({ ...c, entity: r.name });
         upsertEntity(r.id, r.name, r.isAsset ? 'asset' : 'object');
         tx.db.edge.insert({
           edgeId: 0n,
@@ -770,7 +784,14 @@ export const perceive = spacetimedb.procedure(
       }
 
       // ALERTS (#17)
-      const candidates = detectAlerts(texts, changes, anomalies);
+      // an anomaly about a registry asset this photo does not show is restated history, not a finding
+      const realAnomalies = anomalies.filter(a => {
+        const name = typeof a?.entity === 'string' ? a.entity : '';
+        if (!name) return true;
+        const r = resolve(name);
+        return !r.isAsset || inPhoto(r.name);
+      });
+      const candidates = detectAlerts(texts, realChanges, realAnomalies);
       if (!candidates.length) return [];
       const w = tx.db.wearer.deviceId.find(ev.deviceId);
       const wearerName = w ? w.name : '';
@@ -914,6 +935,199 @@ export const slackTest = spacetimedb.procedure({ adminToken: t.string() }, Slack
   } catch (e) {
     return { status: `error:${String(e).slice(0, 200)}` };
   }
+});
+
+// ---------- chat helpers (Nemotron first, Azure gpt-5 fallback) ----------
+
+interface ChatKeys {
+  nvidiaKey?: string;
+  nvidiaModel?: string;
+  azureKey?: string;
+  azureEndpoint?: string;
+  azureDeployment?: string;
+}
+interface ChatOutcome {
+  text: string;
+  model: string;
+  failure: string;
+}
+type Http = { fetch: (url: string, init: any) => any };
+
+function chatNvidia(http: Http, k: ChatKeys, messages: any[], maxTokens: number, timeoutMs: number): ChatOutcome {
+  const model = k.nvidiaModel ?? DEFAULT_AGENT_MODEL;
+  try {
+    const res = http.fetch('https://integrate.api.nvidia.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${k.nvidiaKey}`, 'Content-Type': 'application/json' },
+      timeout: TimeDuration.fromMillis(timeoutMs),
+      body: JSON.stringify({ model, max_tokens: maxTokens, temperature: 0.2, chat_template_kwargs: { enable_thinking: false }, messages }),
+    });
+    if (res.status !== 200) return { text: '', model, failure: `nvidia_http_${res.status}` };
+    const text: string = res.json()?.choices?.[0]?.message?.content ?? '';
+    return text.trim() ? { text, model, failure: '' } : { text: '', model, failure: 'nvidia_empty' };
+  } catch (e) {
+    return { text: '', model, failure: `nvidia_error:${String(e).slice(0, 160)}` };
+  }
+}
+
+function chatAzure(http: Http, k: ChatKeys, messages: any[], maxTokens: number, timeoutMs: number): ChatOutcome {
+  const deployment = k.azureDeployment ?? 'agent-gpt-5';
+  const model = `azure/${deployment}`;
+  try {
+    const base = trimSlash(k.azureEndpoint ?? DEFAULT_AZURE_OPENAI);
+    const res = http.fetch(`${base}/openai/deployments/${deployment}/chat/completions?api-version=${AZURE_OPENAI_API_VERSION}`, {
+      method: 'POST',
+      headers: { 'api-key': k.azureKey ?? '', 'Content-Type': 'application/json' },
+      timeout: TimeDuration.fromMillis(timeoutMs),
+      // gpt-5 spends max_completion_tokens on reasoning first; minimal effort keeps the reply text.
+      body: JSON.stringify({ messages, max_completion_tokens: maxTokens, reasoning_effort: 'minimal' }),
+    });
+    if (res.status !== 200) return { text: '', model, failure: `azure_http_${res.status}` };
+    const text: string = res.json()?.choices?.[0]?.message?.content ?? '';
+    return text.trim() ? { text, model, failure: '' } : { text: '', model, failure: 'azure_empty' };
+  } catch (e) {
+    return { text: '', model, failure: `azure_error:${String(e).slice(0, 160)}` };
+  }
+}
+
+/** Nemotron (lightning) first, Azure gpt-5 on any failure. Empty text means both failed. */
+function chatWithFallback(http: Http, k: ChatKeys, messages: any[], maxTokens: number): { text: string; model: string; failures: string[] } {
+  const failures: string[] = [];
+  if (k.nvidiaKey) {
+    const r = chatNvidia(http, k, messages, maxTokens, 30_000);
+    if (r.text) return { text: r.text, model: r.model, failures };
+    failures.push(r.failure);
+  }
+  if (k.azureKey) {
+    const r = chatAzure(http, k, messages, maxTokens, 45_000);
+    if (r.text) return { text: r.text, model: r.model, failures };
+    failures.push(r.failure);
+  }
+  if (!k.nvidiaKey && !k.azureKey) failures.push('no_keys');
+  return { text: '', model: '', failures };
+}
+
+function chatKeys(env: { NVIDIA_API_KEY?: string; NVIDIA_AGENT_MODEL?: string; AZURE_AI_KEY?: string; AZURE_OPENAI_ENDPOINT?: string; AZURE_AGENT_DEPLOYMENT?: string }): ChatKeys {
+  return {
+    nvidiaKey: env.NVIDIA_API_KEY,
+    nvidiaModel: env.NVIDIA_AGENT_MODEL,
+    azureKey: env.AZURE_AI_KEY,
+    azureEndpoint: env.AZURE_OPENAI_ENDPOINT,
+    azureDeployment: env.AZURE_AGENT_DEPLOYMENT,
+  };
+}
+
+// ---------- handoff (#8) ----------
+
+const HANDOFF_PROMPT =
+  'You write the shift handoff for an operations team from an evidence log of photos taken by the outgoing shift. ' +
+  'Rules: use only facts in the log and never invent; every line you write must end with the event ids it rests on, each written as [event:<id>] with the full id, one bracket per id, never ranges; ' +
+  'never name or describe people, refer to wearers only by the name given in the log; plain text, no markdown, no em dashes; short lines; at most 180 words. ' +
+  'Write exactly three sections in this order, each a line in capitals followed by its lines, or the word none: ' +
+  'NEEDS ATTENTION (open alerts and anything abnormal, most urgent first, with the asset and where it is), ' +
+  'WHAT CHANGED (state changes asset by asset; alerts marked resolved belong here, not above), ' +
+  'ROUNDS (which assets and areas were checked, by whom, in time order, at most one line per wearer). ' +
+  'Do not write a notes or quiet section; the system adds those from the record. ' +
+  'Line formats to follow: NEEDS ATTENTION line "PDU A (Rack R12), Cold Aisle 3: PSU2 FAULT, open since 22:42, seen by Maria [event:<id>]"; ' +
+  'WHAT CHANGED line "PDU A (Rack R12) status: PSU2 OK to PSU2 FAULT at 22:42 [event:<id>]"; ' +
+  'ROUNDS line "Maria: Cold Aisle 3, Rack R12, PDU A, CRAC-2 between 22:00 and 22:47 [event:<first id>] [event:<last id>]".';
+
+// Shift handoff for the incoming shift: text with a [event:<id>] citation on every line,
+// cached in the handoff table. Called by the console (Generate) and the MCP server.
+export const handoff = spacetimedb.procedure({ since: t.string() }, t.string(), (ctx, { since }) => {
+  const env = ctx.env;
+  const now = ctx.timestamp.microsSinceUnixEpoch;
+
+  // 1. gather the window
+  const snap: HandoffSnap = ctx.withTx(tx => {
+    let sinceMicros = parseSinceArg(since, now);
+    let anchor = 'the start of the record';
+    if (sinceMicros === null) {
+      let last: { generatedMicros: bigint } | null = null;
+      for (const h of tx.db.handoff.iter()) if (!last || h.generatedMicros > last.generatedMicros) last = h;
+      sinceMicros = last ? last.generatedMicros : 0n;
+      if (last) anchor = `the last handoff at ${clockCT(last.generatedMicros)}`;
+    } else if (sinceMicros > 0n) {
+      anchor = clockCT(sinceMicros);
+    }
+    const wearerName = new Map<string, string>();
+    for (const w of tx.db.wearer.iter()) wearerName.set(w.deviceId, w.name);
+    const nameOf = (d: string) => wearerName.get(d) ?? d;
+    const entName = (id: string) => tx.db.entity.entityId.find(id)?.canonicalName ?? id;
+    const all = [...tx.db.event.iter()].filter(e => e.status === 'in_graph' && e.tMicros >= sinceMicros);
+    all.sort((a, b) => (a.tMicros < b.tMicros ? -1 : a.tMicros > b.tMicros ? 1 : 0));
+    const events: HEvent[] = all.slice(-HANDOFF_MAX_EVENTS).map(e => {
+      const assets: string[] = [];
+      const changes: string[] = [];
+      let place = '';
+      for (const x of tx.db.edge.fromId.filter(e.eventId)) {
+        if (x.kind === 'INVOLVES') {
+          if (x.props.includes('"role":"asset"')) assets.push(entName(x.toId));
+          else if (x.props.includes('"role":"setting"')) place = entName(x.toId);
+        } else if (x.kind === 'CHANGES') {
+          let p: any = {};
+          try {
+            p = JSON.parse(x.props);
+          } catch {}
+          changes.push(`${entName(x.toId)}${p.attr ? ' ' + p.attr : ''}: ${p.from ?? ''} -> ${p.to ?? ''}`);
+        }
+      }
+      return { id: e.eventId, t: e.tMicros, wearer: nameOf(e.deviceId), assets, place, summary: e.summary, note: e.note ?? '', label: e.label ?? '', changes };
+    });
+    const alerts: HAlert[] = [...tx.db.alert.iter()]
+      .filter(a => !a.acked || a.tMicros >= sinceMicros) // anything still open needs attention, however old
+      .sort((a, b) => (a.tMicros < b.tMicros ? -1 : a.tMicros > b.tMicros ? 1 : 0))
+      .map(a => ({ t: a.tMicros, open: !a.acked, asset: a.entityName || a.entityId || 'unassigned', text: a.text, eventId: a.eventId, wearer: a.wearerName || nameOf(a.deviceId) }));
+    return { sinceMicros, anchor, events, alerts, total: all.length };
+  });
+
+  const openAlerts = snap.alerts.filter(a => a.open).length;
+  if (!snap.events.length && !openAlerts) return `No photos since ${snap.anchor}.`;
+
+  // 2. digest -> model (Nemotron, then gpt-5); graph-built sections if both fail or stray
+  const wearers = [...new Set(snap.events.map(e => e.wearer))];
+  const header =
+    `Window: since ${snap.anchor} until ${clockCT(now)} today. ${snap.total} photos` +
+    (snap.total > snap.events.length ? ` (${snap.events.length} newest shown)` : '') +
+    ` by ${wearers.join(', ') || 'nobody'}. Open alerts: ${openAlerts}.`;
+  const digest = [
+    ...snap.alerts.map(a => `ALERT ${a.open ? 'OPEN' : 'resolved'} | ${clockCT(a.t)} | ${a.asset} | ${a.text} | seen by ${a.wearer} | event ${a.eventId}`),
+    ...snap.events.map(
+      e =>
+        `event ${e.id} | ${clockCT(e.t)} | ${e.wearer} | assets: ${e.assets.join(', ') || '-'}${e.place ? ` | place: ${e.place}` : ''} | ${e.summary}` +
+        (e.label ? ` | label: ${e.label}` : '') +
+        (e.note ? ` | note: ${JSON.stringify(e.note)}` : '') +
+        (e.changes.length ? ` | changes: ${e.changes.join('; ')}` : '')
+    ),
+  ].join('\n');
+  const r = chatWithFallback(ctx.http, chatKeys(env), [{ role: 'user', content: `${HANDOFF_PROMPT}\n\n${header}\n\nEVIDENCE LOG (oldest first):\n${digest}` }], 700);
+  for (const f of r.failures) console.warn(`handoff: ${f}`);
+  const known = new Set(snap.events.map(e => e.id));
+  for (const a of snap.alerts) known.add(a.eventId);
+  const grounded = r.text ? groundModelSections(r.text, known) : null;
+  if (r.text && !grounded) console.warn('handoff: model text rejected, using graph sections');
+  const model = grounded ? r.model : 'graph';
+  const text = assembleHandoff(grounded ?? graphSections(snap), snap) + `\n\n${snap.events.length} photos since ${snap.anchor}, written ${clockCT(now)} by ${model}.`;
+
+  // 3. cache, and post to the channel when configured
+  ctx.withTx(tx => {
+    tx.db.handoff.insert({ handoffId: 0n, sinceMicros: snap.sinceMicros, generatedMicros: now, text, eventIds: snap.events.map(e => e.id) });
+  });
+  const hook = env.SLACK_WEBHOOK_URL;
+  if (hook) {
+    try {
+      const res = ctx.http.fetch(hook, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        timeout: TimeDuration.fromMillis(5_000),
+        body: JSON.stringify({ text: `:clipboard: *Shift handoff*\n${text.slice(0, 3500)}` }),
+      });
+      if (res.status !== 200) console.warn(`handoff slack post: http ${res.status}`);
+    } catch (e) {
+      console.warn(`handoff slack post: ${String(e).slice(0, 160)}`);
+    }
+  }
+  return text;
 });
 
 // ---------- reducers ----------

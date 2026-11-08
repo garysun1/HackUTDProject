@@ -17,9 +17,12 @@ cd module && node --experimental-strip-types --test test/rules.test.ts
    (HTTP error, timeout, bad JSON) falls back to Azure `vlm-gpt-4o` (30 s). With no keys at all, a
    stub is written so the slice still works. `event.perception_json._meta` records the model, the
    latency, and the fallback reason.
-3. Graph: `EVIDENCED_BY`, `NEXT`, `INVOLVES` (label → subject, registry assets read in the scene →
+3. Graph: `EVIDENCED_BY`, `NEXT` (capture order), `INVOLVES` (label → subject, registry assets read in the scene →
    asset, object names → target, location → setting), `CHANGES`, and `SIMILAR_TO` (top 3 earlier
-   events with cosine ≥ 0.85).
+   events with cosine ≥ 0.85). The model sees the last 6 perceived events tagged with their assets and
+   compares equipment only with its own earlier sighting; a `CHANGES` edge needs an asset seen in an
+   earlier photo, a real difference, and the asset in this photo. Anomalies about a registry asset the
+   photo does not show are dropped as restated history.
 4. Alert rule: fault words in `text_in_scene` (FAULT, FAIL, ALARM, CRITICAL, OVERTEMP, OVERLOAD,
    DEGRADED, TRIPPED, LEAK, OFFLINE, DOWN, ERROR), a change from a healthy value into one, or a
    `high`-severity anomaly. Findings are grouped into **one alert per asset**. While that alert is
@@ -53,6 +56,8 @@ Verify with `spacetime describe wm-physical env --server maincloud` (lists the d
 | `AZURE_AI_KEY` | for fallback + embeddings | one key for Azure OpenAI and AI Vision |
 | `AZURE_OPENAI_ENDPOINT`, `AZURE_VLM_DEPLOYMENT`, `AZURE_AI_SERVICES_ENDPOINT` | no | default to the `hackutd-wm-garysun` resource and `vlm-gpt-4o` |
 | `SLACK_WEBHOOK_URL` | for alert posting | Slack incoming webhook for the alerts channel |
+| `NVIDIA_AGENT_MODEL` | no | text model for handoff and ask; default `nvidia/nemotron-3.5-lightning-30b-a3b` |
+| `AZURE_AGENT_DEPLOYMENT` | no | gpt-5 fallback for handoff and ask; default `agent-gpt-5` |
 
 Check the webhook end to end (module HTTP calls to private addresses are refused, so this needs
 the real Slack URL):
@@ -75,6 +80,25 @@ rows with the labels actually photographed at the venue.
 
 `demo/wearers.csv`: `device_id,name,role,shift`. The phone's `device_id` comes from the capture
 app's event JSON; rows starting with `REPLACE` are skipped.
+
+## Handoff (#8)
+
+`handoff(since)` returns the shift handoff as text and caches it in the `handoff` table. `since` is
+`""` (since the last handoff, else the whole record), `"0"` (whole record), micros, millis, seconds,
+`"2h"`, or ISO-8601. The console's Generate button and the MCP `summarize_handoff` tool call it.
+
+```bash
+curl -X POST https://maincloud.spacetimedb.com/v1/database/wm-physical/call/handoff \
+  -H 'Content-Type: application/json' -d '[""]'
+```
+
+How it is written: the window's events (assets, place, summary, note, change edges) and alerts (open
+ones however old, resolved ones in the window) become an evidence log. Nemotron lightning writes
+NEEDS ATTENTION, WHAT CHANGED and ROUNDS; gpt-5 on any failure. Every model line must cite a known
+event as `[event:<id>]`: unknown ids are removed, uncited lines are dropped, and a missing section
+rejects the text, in which case the same sections are built from the graph. NOTES FROM THE SHIFT
+(wearer notes, `Handoff:` first) and QUIET always come from the graph, never the model. The last
+line names the model that wrote it. Posted to Slack when `SLACK_WEBHOOK_URL` is set.
 
 ## Admin and UI reducers
 
