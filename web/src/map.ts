@@ -5,36 +5,36 @@
 // console's store (subscriptions, capture time); nothing here is fetched separately.
 import { state, wearerColor, wearerName, fmtTime, fmtTimeS, loadPhoto, alertsFor } from './store';
 import { select } from './timeline';
-import { view, onView, clock as viewClock, jumpTo, shownEvents, togglePlay, stopReplay, setSpeed, scrubReplay, replayRange } from './view';
+import { view, onView, clock as viewClock, jumpTo, shownEvents, togglePlay, stopReplay, setSpeed, scrubReplay, replayRange, setRangeSource } from './view';
 import { photoCard, showTip, hideTip } from './card';
 import { fitRequested } from './tools';
 import { current } from './workspaces';
 import { SiteScene, type PinSpec, type SiteData } from './site3d/scene';
 import { pointInRing, centroid, haversineM } from './site3d/geo';
 import ecsw from './site3d/data/ecsw.json';
-import { shifts, positionAt, renderBrain, openAt, shiftEnd, type Shift } from './brain';
+import { sessionShifts, positionAt, renderBrain, openAt, shiftEnd, inSession, sessionRange, type Shift } from './brain';
 
 const host = document.getElementById('map') as HTMLElement;
-let scene: SiteScene | null = null; let brainEl: HTMLElement; let followBtn: HTMLButtonElement; let seenFit = fitRequested;
+let scene: SiteScene | null = null; let brainEl: HTMLElement; let statsEl: HTMLElement; let followBtn: HTMLButtonElement; let seenFit = fitRequested;
 let raf = 0; let brainAt = 0; let scrubEl: HTMLInputElement; let marksEl: HTMLElement; let scrubbing = false; let marksSig = '';
 
 function ensureScene(): SiteScene {
   if (scene) return scene;
   host.innerHTML = `<canvas class="s3-gl" aria-label="3D view of the site"></canvas><div class="s3-labels" aria-hidden="true"></div>
     <div class="s3-ctl"><span class="seg" role="group" aria-label="Camera"><button type="button" data-cam="3d" aria-pressed="true">3D</button><button type="button" data-cam="2d" aria-pressed="false">Top-down</button></span><button type="button" class="btn ghost" data-follow aria-pressed="false" title="Keep the camera on the wearer (F)">Follow</button></div>
-    <aside class="s3-brain" aria-label="Shift memory"><div class="bh"><h2>Shift memory</h2></div><div class="s3-brain-body"></div></aside>
+    <aside class="s3-brain" aria-label="Shift memory"><div class="bh"><h2>Shift memory</h2></div><div class="s3-brain-stats"></div><div class="s3-brain-body"></div></aside>
     <div class="s3-replay" role="group" aria-label="Replay"><button type="button" data-play aria-label="Play">▶</button><button type="button" data-live class="on">Live</button><div class="speeds" role="group" aria-label="Speed">${[1, 10, 60, 300].map(v => `<button type="button" data-speed="${v}">${v}×</button>`).join('')}</div><div class="scrub"><input type="range" min="0" max="1000" value="1000" data-scrub aria-label="Time" /><div class="s3-marks"></div></div><span class="clock mono" data-clock>—</span></div>
     <div class="s3-legend"><span><i class="sw trail"></i>walk</span><span><i class="sw heat"></i>time spent</span><span><i class="sw photo"></i>photo</span><span><i class="sw alert"></i>open issue</span><span class="attr">Imagery © Esri · Building © OpenStreetMap contributors</span></div>`;
   const canvas = host.querySelector('canvas')!; const labels = host.querySelector('.s3-labels') as HTMLElement;
   scene = new SiteScene(canvas, labels, host); (window as any).__scene = scene;
-  brainEl = host.querySelector('.s3-brain-body') as HTMLElement; followBtn = host.querySelector('[data-follow]') as HTMLButtonElement;
+  brainEl = host.querySelector('.s3-brain-body') as HTMLElement; statsEl = host.querySelector('.s3-brain-stats') as HTMLElement; followBtn = host.querySelector('[data-follow]') as HTMLButtonElement;
   host.querySelectorAll<HTMLButtonElement>('[data-cam]').forEach(b => b.addEventListener('click', () => { scene!.setView(b.dataset.cam as '3d' | '2d'); host.querySelectorAll('[data-cam]').forEach(x => x.setAttribute('aria-pressed', String(x === b))); }));
   followBtn.addEventListener('click', () => scene!.setFollow(!scene!.follow));
   host.addEventListener('site:follow', (e: any) => followBtn.setAttribute('aria-pressed', String(e.detail.on)));
   document.addEventListener('keydown', e => { const t = e.target as HTMLElement; if (t.closest('input, select, textarea, button, a, [role="button"], [contenteditable]')) return; if (e.key === 'f' && view.mode === 'map') followBtn.click(); });
   // replay bar: the same controls as the standalone site view, driving the shared clock
   const bar = host.querySelector('.s3-replay') as HTMLElement; scrubEl = bar.querySelector('[data-scrub]') as HTMLInputElement; marksEl = bar.querySelector('.s3-marks') as HTMLElement;
-  bar.addEventListener('click', e => { const t = e.target as HTMLElement; const sp = t.closest('[data-speed]') as HTMLElement | null; if (sp) { setSpeed(Number(sp.dataset.speed)); return; } if (t.closest('[data-play]')) togglePlay(); if (t.closest('[data-live]')) stopReplay(); });
+  bar.addEventListener('click', e => { const t = e.target as HTMLElement; const sp = t.closest('[data-speed]') as HTMLElement | null; if (sp) { setSpeed(Number(sp.dataset.speed)); return; } if (t.closest('[data-play]')) { if (!view.replay.on) { resetHeat(); scene!.setFollow(true); } togglePlay(); } if (t.closest('[data-live]')) stopReplay(); });
   scrubEl.addEventListener('input', () => scrubReplay(Number(scrubEl.value) / 1000));
   scrubEl.addEventListener('pointerdown', () => { scrubbing = true; }); document.addEventListener('pointerup', () => { scrubbing = false; });
   scene.onPinClick = id => select(id);
@@ -99,13 +99,13 @@ function frame() {
 function frameBody() {
   if (view.mode !== 'map' || host.hidden) return;
   const sc = ensureScene();
-  if (current().db !== lastDb) { lastDb = current().db; site = null; resetHeat(); for (const dev of [...sc.wearers.keys()]) sc.hideWearer(dev); sc.setPins([]); brainEl.innerHTML = ''; }
+  if (current().db !== lastDb) { lastDb = current().db; site = null; resetHeat(); for (const dev of [...sc.wearers.keys()]) sc.hideWearer(dev); sc.setPins([]); brainEl.innerHTML = ''; statsEl.innerHTML = ''; }
   if (state.track.size || state.locations.size) ensureSite(sc);
   const clock = viewClock();
-  if (!site) { const t = performance.now(); if (t - brainAt > 250) { brainAt = t; renderBrain(brainEl, { clock, locate, onSelect: select, onJump: jumpTo }); } sc.frame(); raf = requestAnimationFrame(frame); return; }
+  if (!site) { const t = performance.now(); if (t - brainAt > 250) { brainAt = t; renderBrain(brainEl, { clock, stats: statsEl, locate, onSelect: select, onJump: jumpTo }); } sc.frame(); raf = requestAnimationFrame(frame); return; }
   const filterSig = `${state.windowMin}|${[...state.hiddenWearers].sort().join(',')}`; if (filterSig !== lastFilterSig) { lastFilterSig = filterSig; resetHeat(); }
-  const cutoff = state.windowMin ? Date.now() - state.windowMin * 60_000 : 0;
-  const all = shifts().filter(s => !state.hiddenWearers.has(s.deviceId) && s.lastMs >= cutoff);
+  const all = sessionShifts();
+  const lvl = (f: number | undefined) => Math.max(0, Math.min(f ?? 0, sc.levels - 1)); // the phone may count past the roof
   const byDevice = new Map<string, Shift[]>(); for (const s of all) (byDevice.get(s.deviceId) ?? byDevice.set(s.deviceId, []).get(s.deviceId)!).push(s);
   sc.followId = (state.selected && state.events.get(state.selected)?.deviceId) || byDevice.keys().next().value || null;
   const drawnDevices = new Set<string>();
@@ -113,31 +113,38 @@ function frameBody() {
     drawnDevices.add(dev); let drawn = false;
     for (const s of list) {
       const pos = positionAt(s, clock); if (!pos) continue;
-      const [x, z] = sc.proj.toXZ(pos.lon, pos.lat); const y = (pos.floor ?? 0) * sc.floorH + 1.1;
-      const trail: number[] = []; for (let i = 0; i <= pos.i; i++) { const q = s.smooth[i]; const [tx, tz] = sc.proj.toXZ(q.lon, q.lat); trail.push(tx, (q.floor ?? 0) * sc.floorH + 0.6, tz); } trail.push(x, y - 0.5, z);
+      const [x, z] = sc.proj.toXZ(pos.lon, pos.lat); const y = lvl(pos.floor) * sc.floorH + 1.1;
+      const trail: number[] = []; for (let i = 0; i <= pos.i; i++) { const q = s.smooth[i]; const [tx, tz] = sc.proj.toXZ(q.lon, q.lat); trail.push(tx, lvl(q.floor) * sc.floorH + 0.6, tz); } trail.push(x, y - 0.5, z);
       const where = locate(pos.lat, pos.lon); const last = s.smooth[pos.i]; const stale = clock - last.tMs > 90_000;
-      sc.setWearer(dev, { color: wearerColor(dev), name: wearerName(dev), sub: where ? where : stale ? `last fix ${fmtTime(BigInt(Math.round(last.tMs)) * 1000n)}` : 'on site', pos: [x, y, z], trail });
+      const floorTxt = pos.floor !== undefined && pos.floor > 0 ? ` · L${pos.floor}` : '';
+      sc.setWearer(dev, { color: wearerColor(dev), name: wearerName(dev), sub: (where ? where : stale ? `last fix ${fmtTime(BigInt(Math.round(last.tMs)) * 1000n)}` : 'on shift') + floorTxt, pos: [x, y, z], trail, acc: pos.acc });
       drawn = true; break;
     }
     if (!drawn) {
-      const s = [...list].reverse().find(s => s.startMs <= clock && s.smooth.length >= 2);
-      if (s) { const trail: number[] = []; for (const q of s.smooth) { if (q.tMs > clock) break; const [tx, tz] = sc.proj.toXZ(q.lon, q.lat); trail.push(tx, (q.floor ?? 0) * sc.floorH + 0.6, tz); } sc.setWearer(dev, { color: wearerColor(dev), name: wearerName(dev), sub: '', pos: null, trail }); }
-      else sc.hideWearer(dev);
+      // a finished shift keeps its whole trail and its dot at the last point, with when it ended
+      const s = [...list].reverse().find(s => s.startMs <= clock && s.smooth.length >= 1);
+      if (s) {
+        const trail: number[] = []; let last = s.smooth[0];
+        for (const q of s.smooth) { if (q.tMs > clock) break; last = q; const [tx, tz] = sc.proj.toXZ(q.lon, q.lat); trail.push(tx, lvl(q.floor) * sc.floorH + 0.6, tz); }
+        const [x, z] = sc.proj.toXZ(last.lon, last.lat); const y = lvl(last.floor) * sc.floorH + 1.1;
+        const where = locate(last.lat, last.lon);
+        sc.setWearer(dev, { color: wearerColor(dev), name: wearerName(dev), sub: `${where ? where + ' · ' : ''}ended ${fmtTime(BigInt(Math.round(shiftEnd(s))) * 1000n)}`, pos: [x, y, z], trail });
+      } else sc.hideWearer(dev);
     }
   }
   for (const dev of sc.wearers.keys()) if (!drawnDevices.has(dev)) sc.hideWearer(dev);
   advanceHeat(sc, all, clock);
   const pins: PinSpec[] = [];
   for (const e of shownEvents()) {
-    const l = state.locations.get(e.eventId); if (!l) continue;
+    if (!inSession(e, all)) continue; const l = state.locations.get(e.eventId); if (!l) continue;
     const [x, z] = sc.proj.toXZ(l.lon, l.lat); const url = state.photos.get(e.eventId); if (!url) loadPhoto(e.eventId);
     const alert = alertsFor(e).some(a => openAt(a, clock));
-    pins.push({ id: e.eventId, x, y: (l.floor ?? 0) * sc.floorH, z, color: wearerColor(e.deviceId), time: fmtTime(e.tMicros), alert, thumb: url, selected: state.selected === e.eventId, title: e.summary });
+    pins.push({ id: e.eventId, x, y: lvl(l.floor) * sc.floorH, z, color: wearerColor(e.deviceId), time: fmtTime(e.tMicros), alert, thumb: url, selected: state.selected === e.eventId, title: e.summary });
   }
   sc.setPins(pins);
   if (fitRequested !== seenFit) { seenFit = fitRequested; sc.resetView(); }
   const now = performance.now();
-  if (now - brainAt > 250) { brainAt = now; renderBrain(brainEl, { clock, locate, onSelect: select, onJump: jumpTo }); }
+  if (now - brainAt > 250) { brainAt = now; renderBrain(brainEl, { clock, stats: statsEl, locate, onSelect: select, onJump: jumpTo }); }
   renderBar(clock);
   sc.frame();
   raf = requestAnimationFrame(frame);
@@ -155,8 +162,9 @@ function renderBar(clock: number) {
   const sig = `${state.events.size}|${state.alerts.size}|${state.track.size}|${Math.round(t0 / 60000)}|${Math.round(t1 / 600000)}`;
   if (sig !== marksSig) {
     marksSig = sig; const f = (t: number) => `${((t - t0) / Math.max(1, t1 - t0)) * 100}%`;
-    const evs = [...state.events.values()].map(e => `<i style="left:${f(Number(e.tMicros) / 1000)}" class="${alertsFor(e).length ? 'a' : ''}"></i>`);
-    const all = shifts(); const hs = all.filter(s => s.endMs !== null || all.some(o => o.startMs > shiftEnd(s))).map(s => `<i class="h" style="left:${f(shiftEnd(s))}"></i>`);
+    const all = sessionShifts();
+    const evs = [...state.events.values()].filter(e => inSession(e, all)).map(e => `<i style="left:${f(Number(e.tMicros) / 1000)}" class="${alertsFor(e).length ? 'a' : ''}"></i>`);
+    const hs = all.filter(s => s.endMs !== null || all.some(o => o.startMs > shiftEnd(s))).map(s => `<i class="h" style="left:${f(shiftEnd(s))}"></i>`);
     marksEl.innerHTML = evs.join('') + hs.join('');
   }
 }
@@ -167,4 +175,5 @@ export function renderMap() {
   if (!raf) raf = requestAnimationFrame(frame);
 }
 export function mapUserView() { return !!scene?.userView; }
+setRangeSource(sessionRange);
 onView(() => renderMap());

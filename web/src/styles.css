@@ -248,45 +248,46 @@ body[data-conn="connecting"] .col, body[data-conn="error"] .col { opacity: .7; }
 .s3-brain { position: absolute; top: 10px; right: 12px; bottom: 10px; width: 340px; z-index: 950; display: flex; flex-direction: column; background: var(--glass-bg); backdrop-filter: blur(12px); border: 1px solid var(--line); border-radius: 8px; box-shadow: var(--shadow); overflow: hidden; font-size: 13.5px; }
 .s3-brain .bh { display: flex; align-items: center; justify-content: space-between; padding: 9px 14px; border-bottom: 1px solid var(--line); }
 .s3-brain .bh h2 { font-size: 14px; }
-.s3-brain-body { overflow-y: auto; padding: 10px 12px 14px; scrollbar-width: thin; }
+.s3-brain-stats { padding: 10px 12px 0; }
+.s3-brain-body { overflow-y: auto; padding: 4px 12px 14px; scrollbar-width: thin; }
+.s3-brain .stats { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin-bottom: 8px; }
+.s3-brain .stat { background: var(--panel); border-radius: var(--r); padding: 9px 10px 8px; display: flex; flex-direction: column; gap: 1px; position: relative; }
+.s3-brain .stat b { display: block; font-size: 20px; line-height: 1.1; font-weight: 600; letter-spacing: -0.01em; font-family: var(--mono); }
+.s3-brain .stat span { font-size: 11px; color: var(--ink-3); white-space: nowrap; }
+.s3-brain .stat i { position: absolute; top: 10px; right: 10px; width: 9px; height: 9px; border-radius: 50%; }
+.s3-brain .stat.raised i { background: var(--critical); animation: s3-burn 1.6s ease-in-out infinite; }
+.s3-brain .stat.resolved i { background: var(--good); }
+.s3-brain .stat.raised b { color: var(--critical-ink); } .s3-brain .stat.resolved b { color: var(--good-ink); }
+.s3-brain .stat.raised, .s3-brain .stat.resolved { cursor: pointer; }
+.s3-brain .issue { display: flex; gap: 9px; align-items: flex-start; padding: 6px 8px; border-radius: var(--r); margin-bottom: 3px; cursor: pointer; }
+.s3-brain .issue:hover { background: var(--hover); }
+.s3-brain .issue .ic { flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--critical); margin-top: 5px; animation: s3-burn 1.6s ease-in-out infinite; }
+.s3-brain .issue.done .ic { background: var(--good); animation: none; } .s3-brain .issue.wo:not(.done) .ic { background: var(--ink-4); animation: none; } .s3-brain .issue.wo.prog .ic { background: var(--warning); }
+.s3-brain .issue .tx { min-width: 0; } .s3-brain .issue b { font-weight: 600; } .s3-brain .issue .what { color: var(--ink-2); } .s3-brain .issue .m { font-size: 11.5px; color: var(--ink-3); font-family: var(--mono); }
+.s3-brain .issue.done b, .s3-brain .issue.done .what { color: var(--ink-3); }
 .s3-brain .sec { margin-bottom: 14px; }
 .s3-brain .sec h3 { font-size: 11.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-3); margin-bottom: 6px; display: flex; align-items: center; gap: 8px; }
 .s3-brain .sec h3 .n { font-family: var(--mono); color: var(--ink-4); font-weight: 400; }
-.s3-brain .now { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.s3-brain .now .stat { background: var(--panel); border-radius: var(--r); padding: 8px 10px; }
-.s3-brain .now .stat b { display: block; font-size: 18px; font-weight: 600; letter-spacing: -0.01em; font-family: var(--mono); }
-.s3-brain .now .stat span { font-size: 12px; color: var(--ink-3); }
-.s3-brain .who { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--r); margin-bottom: 8px; background: var(--ground); }
-.s3-brain .who .sw { width: 10px; height: 10px; border-radius: 50%; flex: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--c) 25%, transparent); background: var(--c); }
-.s3-brain .who b { font-weight: 600; } .s3-brain .who span { color: var(--ink-3); font-size: 12.5px; }
-.s3-brain .who .where { margin-left: auto; font-size: 12px; color: var(--ink-2); background: var(--panel); border-radius: 999px; padding: 2px 8px; white-space: nowrap; }
-.s3-brain .who.idle { opacity: .6; }
-.s3-brain .issue { display: flex; gap: 8px; align-items: flex-start; padding: 8px 10px; border-radius: var(--r); margin-bottom: 6px; background: var(--critical-bg); border: 1px solid color-mix(in srgb, var(--critical) 35%, transparent); cursor: pointer; }
-.s3-brain .issue.done { background: var(--good-bg); border-color: color-mix(in srgb, var(--good) 35%, transparent); }
-.s3-brain .issue.wo { background: var(--panel); border-color: var(--line-strong); } .s3-brain .issue.wo.prog { background: var(--warning-bg); border-color: color-mix(in srgb, var(--warning) 45%, transparent); }
-.s3-brain .issue .ic { flex: none; width: 18px; height: 18px; border-radius: 50%; background: var(--critical); color: #fff; font-size: 11px; display: grid; place-items: center; font-weight: 600; animation: s3-burn 1.6s ease-in-out infinite; }
-.s3-brain .issue.done .ic { background: var(--good); animation: none; } .s3-brain .issue.wo .ic { background: var(--ink-4); animation: none; } .s3-brain .issue.wo.prog .ic { background: var(--warning); color: var(--ink); }
-.s3-brain .issue b { font-weight: 600; } .s3-brain .issue .m { font-size: 12px; color: var(--ink-3); }
-.s3-brain .issue.done b { text-decoration: line-through; color: var(--ink-3); }
 .s3-brain .clear { color: var(--good-ink); display: flex; align-items: center; gap: 8px; padding: 6px 2px; }
 .s3-brain .clear::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--good); }
-.s3-brain .hand { border: 1px solid var(--line-strong); border-radius: 8px; padding: 10px 12px; background: var(--ground); cursor: pointer; }
-.s3-brain .hand .arrow { display: flex; align-items: center; gap: 8px; font-weight: 600; margin-bottom: 6px; }
+.s3-brain .hand { border: 1px solid var(--line); border-radius: 8px; padding: 9px 12px; background: var(--ground); position: relative; cursor: pointer; }
+.s3-brain .hand .arrow { display: flex; align-items: center; gap: 8px; font-weight: 600; }
 .s3-brain .hand .arrow i { color: var(--ink-4); font-style: normal; }
 .s3-brain .hand .t { font-family: var(--mono); font-size: 12px; color: var(--ink-3); margin-left: auto; font-weight: 400; }
-.s3-brain .hand ul { margin: 6px 0 0; padding-left: 18px; } .s3-brain .hand li { margin: 2px 0; } .s3-brain .hand li.done { color: var(--ink-3); text-decoration: line-through; }
+.s3-brain .hand ul { margin: 6px 0 0; padding-left: 0; list-style: none; } .s3-brain .hand li { margin: 3px 0; font-size: 13px; display: flex; gap: 8px; align-items: baseline; } .s3-brain .hand li::before { content: ""; flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--critical); } .s3-brain .hand li.done { color: var(--ink-3); } .s3-brain .hand li.done::before { background: var(--good); }
 .s3-brain .hand .said { margin-top: 8px; padding: 8px 10px; border-left: 3px solid var(--line-strong); color: var(--ink-2); font-style: italic; }
 .s3-brain .hand pre { white-space: pre-wrap; font: 12.5px/1.45 var(--font); color: var(--ink-2); margin: 6px 0 0; }
 .s3-brain .feed { position: relative; } .s3-brain .feed::before { content: ""; position: absolute; left: 9px; top: 6px; bottom: 6px; width: 2px; background: var(--line); }
-.s3-brain .ev { position: relative; display: grid; grid-template-columns: 20px 56px 1fr; gap: 8px; align-items: start; padding: 5px 0; animation: s3-arrive .35s ease-out; cursor: pointer; border-radius: var(--r); border: 0; }
+.s3-brain .ev { position: relative; display: grid; grid-template-columns: 20px 72px 1fr; gap: 9px; align-items: start; padding: 6px 4px 6px 0; animation: s3-arrive .35s ease-out; cursor: pointer; border-radius: var(--r); border: 0; }
 .s3-brain .ev:hover { background: var(--hover); } .s3-brain .ev.sel { background: var(--panel); }
+.s3-brain .ev.cur { background: var(--panel); box-shadow: inset 3px 0 0 var(--c); }
 @keyframes s3-arrive { from { opacity: 0; transform: translateX(8px); } }
 .s3-brain .ev .k { width: 20px; height: 20px; display: grid; place-items: center; } .s3-brain .ev .k i { width: 10px; height: 10px; border-radius: 50%; background: var(--c); border: 2px solid var(--ground); box-shadow: 0 0 0 1px var(--line); }
 .s3-brain .ev.alert .k i { background: var(--critical); animation: s3-burn 1.6s infinite; } .s3-brain .ev.change .k i { background: var(--warning); border-radius: 2px; }
-.s3-brain .ev .th { width: 56px; height: 42px; border-radius: 4px; background: var(--panel); object-fit: cover; border: 1px solid var(--line); display: block; }
+.s3-brain .ev .th { width: 72px; height: 54px; border-radius: 4px; background: var(--panel); object-fit: cover; border: 1px solid var(--line); display: block; }
 .s3-brain .ev .tx { min-width: 0; } .s3-brain .ev .tx .t { font-family: var(--mono); font-size: 11.5px; color: var(--ink-4); }
 .s3-brain .ev .tx p { margin: 1px 0 0; } .s3-brain .ev .tx .note { color: var(--ink-2); font-style: italic; }
-.s3-brain .ev .tx .place { color: var(--ink-3); font-size: 12px; }
+.s3-brain .ev .tx .pending { color: var(--ink-3); }
 .s3-brain .ev .tx .chg { color: var(--warning-ink); font-weight: 500; }
 .s3-brain .s3-empty { color: var(--ink-3); padding: 4px 2px; font-size: 13px; }
 /* the drawer takes the right edge in map mode too */
