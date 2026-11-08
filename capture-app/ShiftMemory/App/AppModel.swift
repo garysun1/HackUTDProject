@@ -41,10 +41,11 @@ final class AppModel {
     diagnostics = DiagnosticsStore(directory: support.appending(path: "Diagnostics"))
     importer = CameraRollImporter()
     pipeline = ImagePipeline()
-    client = IngestClient(endpoint: { [config] in
-      // Read at call time so Settings edits apply to the next request.
-      MainActor.assumeIsolated { config.endpoint }
-    })
+    // Read at call time so Settings edits apply to the next request. The client calls this from the
+    // upload queue's actor, so it must not touch main-actor state (MainActor.assumeIsolated trapped
+    // here with EXC_BREAKPOINT on the first real upload).
+    let endpointSnapshot = config.endpointSnapshot
+    client = IngestClient(endpoint: { endpointSnapshot.value })
     queue = UploadQueue(
       client: client,
       directory: support.appending(path: "UploadQueue"),

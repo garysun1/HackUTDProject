@@ -9,13 +9,24 @@
 
 import Foundation
 import Observation
+import os
+
+/// The backend endpoint as last saved, readable from any thread. The upload queue and ingest client
+/// run off the main actor and read it per request; `AppConfig` itself is main-actor isolated.
+final class EndpointSnapshot: Sendable {
+  private let lock = OSAllocatedUnfairLock(initialState: BackendEndpoint(host: "", database: ""))
+  var value: BackendEndpoint { lock.withLock { $0 } }
+  func set(_ endpoint: BackendEndpoint) { lock.withLock { $0 = endpoint } }
+}
 
 @MainActor
 @Observable
 final class AppConfig {
   // MARK: Backend
-  var host: String { didSet { defaults.set(host, forKey: Keys.host) } }
-  var database: String { didSet { defaults.set(database, forKey: Keys.database) } }
+  var host: String { didSet { defaults.set(host, forKey: Keys.host); endpointSnapshot.set(endpoint) } }
+  var database: String { didSet { defaults.set(database, forKey: Keys.database); endpointSnapshot.set(endpoint) } }
+  /// Thread-safe copy of `endpoint` for callers off the main actor (IngestClient).
+  let endpointSnapshot = EndpointSnapshot()
   var ingestToken: String { didSet { keychain.set(ingestToken, for: Keys.ingestToken) } }
 
   // MARK: Identity (attribution on every event)
@@ -98,6 +109,7 @@ final class AppConfig {
     if storedDeviceId.isEmpty {
       deviceId = AppConfig.defaultDeviceId(wearerName: wearerName)
     }
+    endpointSnapshot.set(endpoint)
   }
 
   /// `edward-iphone` when a wearer name is known, else `phone-3fa9c2`. Readable ids are what the

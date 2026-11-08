@@ -129,6 +129,7 @@ final class GlassesController {
     let resolution: PhotoResolution
     let quality: PhotoQuality
     var firstProgressAt: Date?
+    var lastProgressAt: Date?
     var timeout: Task<Void, Never>?
   }
 
@@ -445,14 +446,23 @@ final class GlassesController {
     lastError = nil
     let id = UUID().uuidString.lowercased()
     var p = PendingCapture(id: id, requestedAt: Date(), resolution: resolution, quality: quality)
-    // The toolkit fails a capture silent for 30 s; give it a little longer before we give up.
+    // The toolkit fails a capture silent for 30 s; give it a little longer before we give up. A
+    // full/high photo can take longer than that over Bluetooth (~45 s observed on 016N), so while
+    // transfer progress keeps arriving we keep waiting, and give up after 20 s without progress.
     p.timeout = Task { [weak self] in
       try? await Task.sleep(for: .seconds(40))
+      while !Task.isCancelled {
+        guard self?.pending?.id == id, let last = self?.pending?.lastProgressAt,
+              Date().timeIntervalSince(last) < 20 else { break }
+        try? await Task.sleep(for: .seconds(5))
+      }
       guard !Task.isCancelled, let self, self.pending?.id == id else { return }
+      self.lastError = self.pending?.firstProgressAt == nil
+        ? "The glasses did not start sending the photo within 40 s."
+        : "The glasses stopped sending the photo (no transfer progress for 20 s)."
       self.pending = nil
       self.transferFraction = nil
       self.transferBytes = nil
-      self.lastError = "The glasses did not deliver the photo within 40 s."
       if self.phase == .capturing { self.phase = .ready }
     }
     pending = p
@@ -540,7 +550,11 @@ final class GlassesController {
   private func transferProgressed(_ progress: PhotoTransferProgress) {
     transferFraction = progress.fraction
     transferBytes = (progress.bytesReceived, progress.totalBytes)
-    if pending != nil, pending?.firstProgressAt == nil { pending?.firstProgressAt = Date() }
+    if pending != nil {
+      let now = Date()
+      if pending?.firstProgressAt == nil { pending?.firstProgressAt = now }
+      pending?.lastProgressAt = now
+    }
   }
 
   private func photoArrived(_ capture: PhotoCaptureData, receivedAt: Date) async {
