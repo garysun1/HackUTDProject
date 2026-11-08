@@ -13,13 +13,11 @@
 <body>
 <header class="top">
   <div class="brand"><span class="mark" aria-hidden="true"></span><h1>Shift Memory</h1>
-    <div class="ws"><button class="ws-btn" id="ws-btn" type="button" aria-haspopup="menu" aria-expanded="false"><span class="ws-name" id="ws-name">Workspace</span><span class="ws-sub" id="ws-sub"></span><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 4.5 6 7.5 9 4.5"/></svg></button>
+    <div class="ws"><button class="ws-btn" id="ws-btn" type="button" aria-haspopup="menu" aria-expanded="false"><span class="ws-name" id="ws-name">Workspace</span><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 4.5 6 7.5 9 4.5"/></svg></button>
       <div class="ws-menu" id="ws-menu" role="menu" hidden></div></div>
     <span class="db" id="db" hidden></span></div>
-  <div class="status" id="conn" data-state="connecting"><span class="dot"></span><span id="conn-text">connecting</span></div>
   <div class="filters">
     <label class="sel">Window <select id="window"><option value="all">all time</option><option value="720">this shift (12 h)</option><option value="60">last 60 min</option><option value="180">last 3 h</option><option value="480">last 8 h</option></select></label>
-    <div class="chips" id="wearers" aria-label="Wearers"></div>
   </div>
 </header>
 <main class="grid">
@@ -31,6 +29,7 @@
   </section>
   <section class="col floor" aria-label="Memory graph">
     <div class="colhead"><h2>Shift</h2><span id="floor-tools" class="floor-tools"></span><span class="legend"><i class="k k-ph"></i>photo <i class="k k-as"></i>equipment <i class="k k-al"></i>issue <i class="k k-chg"></i>change <i class="k k-nt"></i>note</span></div>
+    <div class="chips map-wearers" id="wearers" role="group" aria-label="Wearers: click to show or hide"></div>
     <div id="map" class="map" hidden aria-label="3D site view: the building, where each wearer walked, where each photo was taken, where the problems are"></div>
     <div id="scope-head" class="scope-head" hidden><span id="scope-title"></span><button class="btn ghost" id="scope-close" type="button" aria-label="Close">Close</button></div>
     <canvas id="floor" role="img" aria-label="The shift: photos in time order on a line; equipment and issues above, threading to the photos they appear in; the wearer's notes below; changes as arcs from before to after."></canvas>

@@ -68,7 +68,6 @@ h1 { font-size: 14px; color: var(--ink); } h2 { font-size: 14px; color: var(--in
 .ws { position: relative; }
 .ws-btn { display: inline-flex; align-items: center; gap: 8px; height: 30px; padding: 0 8px 0 10px; border: 1px solid var(--line); border-radius: 7px; background: var(--ground); color: var(--ink); cursor: pointer; font: 500 13px var(--font); }
 .ws-btn:hover { background: var(--hover); } .ws-btn[aria-expanded="true"] { background: var(--panel); border-color: var(--line-strong); }
-.ws-btn .ws-sub { color: var(--ink-3); font-weight: 400; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ws-btn svg { width: 12px; height: 12px; fill: none; stroke: var(--ink-3); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
 .ws-menu { position: absolute; top: 36px; left: 0; min-width: 340px; background: var(--ground); border: 1px solid var(--line-strong); border-radius: 10px; box-shadow: var(--shadow); padding: 6px; z-index: 1200; }
 .ws-menu[hidden] { display: none; }
@@ -83,10 +82,6 @@ h1 { font-size: 14px; color: var(--ink); } h2 { font-size: 14px; color: var(--in
 .ws-item .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--good); display: inline-block; }
 .ws-menu .ws-foot { border-top: 1px solid var(--line-soft); margin-top: 4px; padding: 8px 10px 4px; font-size: 12px; color: var(--ink-3); display: flex; justify-content: space-between; align-items: center; }
 .ws-menu .ws-foot button { font: 12px var(--font); color: var(--link); background: none; border: 0; cursor: pointer; padding: 0; }
-.status { display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--ink-2); }
-.status .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--warning); }
-.status[data-state="live"] .dot { background: var(--good); }
-.status[data-state="error"] .dot { background: var(--critical); }
 .filters { display: flex; align-items: center; gap: 14px; justify-self: end; }
 .sel { color: var(--ink-3); font-size: 13px; display: flex; gap: 8px; align-items: center; }
 select { background: var(--ground); border: 1px solid var(--line-strong); border-radius: var(--r); padding: 4px 8px; font-size: 13px; }
@@ -346,3 +341,13 @@ body[data-conn="connecting"] .col, body[data-conn="error"] .col { opacity: .7; }
 .s3-toast.show { animation: s3-toast 9s ease-out forwards; } .s3-toast[hidden] { display: none; }
 @keyframes s3-toast { 0% { opacity: 0; transform: translate(-50%, -8px); } 6% { opacity: 1; transform: translate(-50%, 0); } 85% { opacity: 1; } 100% { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .s3-toast.show { animation: none; opacity: 1; } .s3-pin.badged em { animation: none; } }
+
+/* wearers: a small legend at the top right of the map, left of the shift-memory panel; click a row to hide or show that wearer */
+.map-wearers { display: none; position: absolute; top: calc(41px + 10px); right: calc(340px + 24px); z-index: 960; flex-direction: column; gap: 2px; padding: 6px; background: var(--glass-bg); backdrop-filter: blur(10px); border: 1px solid var(--line); border-radius: 8px; box-shadow: var(--shadow); max-height: 40%; overflow-y: auto; }
+.floor:has(#map:not([hidden])) .map-wearers:not(:empty) { display: flex; }
+.map-wearers .chip { border: 0; background: transparent; border-radius: 5px; padding: 2px 8px 2px 6px; min-height: 22px; font-size: 12px; gap: 6px; justify-content: flex-start; }
+.map-wearers .chip:hover { background: var(--hover); }
+.map-wearers .chip .n { margin-left: auto; padding-left: 10px; }
+.map-wearers .chip[aria-pressed="false"] { border: 0; background: transparent; }
+@media (max-width: 1100px) { .map-wearers { right: calc(300px + 24px); } }
+.floor:has(.drawer:not([hidden])) .map-wearers { right: 12px; }

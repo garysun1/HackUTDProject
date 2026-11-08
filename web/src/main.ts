@@ -10,7 +10,6 @@ import { view, setMode, onView } from './view';
 
 setUserViewSource(() => (view.mode === 'map' ? mapUserView() : floorUserView()));
 const dbEl = document.getElementById('db')!;
-const conn = document.getElementById('conn')!; const connText = document.getElementById('conn-text')!;
 const windowSel = document.getElementById('window') as HTMLSelectElement;
 const wearersEl = document.getElementById('wearers')!;
 
@@ -37,7 +36,7 @@ wearersEl.addEventListener('click', e => { const b = (e.target as HTMLElement).c
 
 // ---- workspace switcher: swaps the dataset client-side; the words follow the workspace ----
 const wsBtn = document.getElementById('ws-btn') as HTMLButtonElement; const wsMenu = document.getElementById('ws-menu') as HTMLElement;
-const wsName = document.getElementById('ws-name')!; const wsSub = document.getElementById('ws-sub')!;
+const wsName = document.getElementById('ws-name')!;
 const counts = new Map<string, number>(); const overlayCounts = new Map<string, number>(); let countsAt = 0;
 async function refreshCounts() {
   if (Date.now() - countsAt < 30_000) return; countsAt = Date.now();
@@ -52,7 +51,7 @@ function renderMenu() {
   wsMenu.innerHTML = `<div class="ws-head">Workspaces</div>` + WORKSPACES.map(w => `<button type="button" class="ws-item" role="menuitemradio" aria-checked="${w.id === cur.id}" data-ws="${w.id}" data-db="${w.db}"><span class="n">${w.id === cur.id ? '<i class="dot"></i>' : ''}${w.name}${w.sample ? '<span class="tag">sample</span>' : w.tag ? `<span class="tag us">${w.tag}</span>` : ''}</span><span class="s">${w.subtitle}</span><span class="c">${w.overlay ? (overlayCounts.has(w.id) ? `${overlayCounts.get(w.id)} photos` : '') : counts.has(w.db) ? `${counts.get(w.db)} photo${counts.get(w.db) === 1 ? '' : 's'}` : ''}</span></button>`).join('') +
     `<div class="ws-foot"><span>${dbChosen() ? 'Chosen here' : 'Following the server default'}</span>${dbChosen() ? '<button type="button" data-follow>Follow server default</button>' : ''}</div>`;
 }
-function renderWorkspace() { const w = current(); wsName.textContent = w.name; wsSub.textContent = w.subtitle; wsBtn.title = `${w.name} · ${w.db}`; dbEl.textContent = DB;
+function renderWorkspace() { const w = current(); wsName.textContent = w.name; wsBtn.title = `${w.name} · ${w.subtitle} · ${w.db}`; dbEl.textContent = DB;
   const h2 = document.querySelector('.floor .colhead h2'); if (h2) h2.textContent = vocab().session;
   const lg = document.querySelector('.floor .legend'); if (lg && view.mode === 'map') { lg.innerHTML = ''; }
   else if (lg) { const v = vocab(); lg.innerHTML = `<i class="k k-ph"></i>photo <i class="k k-as"></i>${v.tracked.toLowerCase()} <i class="k k-al"></i>${v.flag.toLowerCase()} <i class="k k-chg"></i>change <i class="k k-nt"></i>${v.note.toLowerCase()}${state.questions.size ? ' <i class="k k-q"></i>question' : ''}`; }
@@ -97,8 +96,7 @@ setInterval(() => { if (visibleEvents().length) { renderFloor(); renderMap(); re
 { const wsParam = new URLSearchParams(location.search).get('ws'); const w = wsParam && WORKSPACES.find(w => w.id === wsParam); if (w) setWorkspace(w.db, w.id); }
 const stale = document.getElementById('stale')!;
 connect((s, msg) => {
-  conn.dataset.state = s; document.body.dataset.conn = s;
-  connText.textContent = s === 'live' ? 'live' : msg || s;
+  document.body.dataset.conn = s; // the stale banner shows when the connection drops
   if (s !== 'live') { const last = [...state.events.values()].sort((a, b) => (a.tMicros < b.tMicros ? 1 : -1))[0]; stale.textContent = `${s === 'error' ? 'Connection error' : 'Reconnecting'} · showing data as of ${last ? fmtTime(last.tMicros) : 'page load'}`; }
 });
 // honest empty states: say why the list is empty and offer the way out
