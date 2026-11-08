@@ -2,7 +2,6 @@ import { connect, onChange, state, visibleEvents, wearerColor, wearerName, notif
 import './overlay'; // registers the overlay loader with the store
 import { WORKSPACES, current, vocab } from './workspaces';
 import { sessionShifts, inSession } from './brain';
-import { renderTimeline } from './timeline';
 import { renderFloor, floorUserView } from './floor';
 import { renderRail } from './rail';
 import { renderMap, mapUserView } from './map';
@@ -68,30 +67,12 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape' && !wsMenu.hi
 onChange(() => {
   if (!view.modeChosen && state.locations.size && view.mode !== 'map') setMode('map', false); // the first positioned photo brings the map up
   renderWorkspace(); // follows the dataset switch
-  renderChips(); renderTimeline(); renderRail(); // detail panel first: it changes the canvas width
+  renderChips(); renderRail(); // detail panel first: it changes the canvas width
   renderTools(); renderMap(); renderFloor();
 });
 
-// Timeline collapse: the floor takes the width. Remembered per browser.
-const grid = document.querySelector('.grid') as HTMLElement; const tlToggle = document.getElementById('tl-toggle') as HTMLButtonElement;
-function setTimeline(open: boolean, remember = true) {
-  grid.dataset.tl = open ? 'open' : 'collapsed';
-  tlToggle.setAttribute('aria-expanded', String(open)); tlToggle.title = open ? 'Hide timeline' : 'Show timeline';
-  if (remember) { try { localStorage.setItem('wm.timeline', open ? 'open' : 'collapsed'); } catch { /* private mode */ } }
-  renderFloor(); renderMap();
-}
-// One list on screen: the map carries the shift-memory panel with its own event feed, so the
-// console's timeline folds away while the map is up and comes back when you leave (not remembered).
-let autoFolded = false; let lastMode = view.mode;
-function foldForMode() {
-  if (view.mode === 'map' && grid.dataset.tl !== 'collapsed') { autoFolded = true; setTimeline(false, false); }
-  else if (view.mode !== 'map' && autoFolded) { autoFolded = false; setTimeline(true, false); }
-}
-onView(() => { if (view.mode !== lastMode) { lastMode = view.mode; foldForMode(); renderWorkspace(); } });
-tlToggle.addEventListener('click', () => { autoFolded = false; setTimeline(grid.dataset.tl === 'collapsed'); });
-grid.addEventListener('transitionend', e => { if (e.propertyName === 'grid-template-columns') { renderFloor(); renderMap(); } });
-try { if (localStorage.getItem('wm.timeline') === 'collapsed') setTimeline(false); } catch { /* ignore */ }
-foldForMode(); // after the remembered state, so a preference-collapsed timeline is not mistaken for an auto-fold
+let lastMode = view.mode;
+onView(() => { if (view.mode !== lastMode) { lastMode = view.mode; renderWorkspace(); } });
 document.addEventListener('select', () => notify());
 setInterval(() => { if (visibleEvents().length) { renderFloor(); renderMap(); renderRail(); } }, 15000); // "now" advances: time axis and ages
 
@@ -103,7 +84,7 @@ connect((s, msg) => {
   if (s !== 'live') { const last = [...state.events.values()].sort((a, b) => (a.tMicros < b.tMicros ? 1 : -1))[0]; stale.textContent = `${s === 'error' ? 'Connection error' : 'Reconnecting'} · showing data as of ${last ? fmtTime(last.tMicros) : 'page load'}`; }
 });
 // honest empty states: say why the list is empty and offer the way out
-const tlEmpty = document.getElementById('timeline-empty')!; const flEmpty = document.getElementById('floor-empty')!;
+const flEmpty = document.getElementById('floor-empty')!;
 function emptyCopy() {
   const total = state.events.size; const shown = visibleEvents().length;
   if (shown || !total) return;
@@ -111,8 +92,7 @@ function emptyCopy() {
   if (state.hiddenWearers.size) reasons.push(`${state.hiddenWearers.size} wearer${state.hiddenWearers.size > 1 ? 's' : ''} hidden`);
   if (state.assetFilter) reasons.push(`showing only ${state.entities.get(state.assetFilter)?.canonicalName ?? 'one asset'}`);
   const why = reasons.join(', ');
-  tlEmpty.innerHTML = `No events match: ${why}. <a id="clear-filters" role="button" tabindex="0">Show everything</a>`;
-  flEmpty.textContent = `Nothing to draw with the current filters.`;
-  tlEmpty.querySelector('#clear-filters')!.addEventListener('click', () => { state.hiddenWearers.clear(); state.assetFilter = null; notify(); });
+  flEmpty.innerHTML = `No events match: ${why}. <a id="clear-filters" role="button" tabindex="0">Show everything</a>`;
+  flEmpty.querySelector('#clear-filters')!.addEventListener('click', () => { state.hiddenWearers.clear(); state.assetFilter = null; notify(); });
 }
 onChange(emptyCopy);
