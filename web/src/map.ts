@@ -9,9 +9,9 @@ import { view, onView, clock as viewClock, jumpTo, shownEvents, togglePlay, stop
 import { photoCard, showTip, hideTip } from './card';
 import { fitRequested } from './tools';
 import { current } from './workspaces';
-import { SiteScene, type PinSpec, type SiteData } from './site3d/scene';
-import { pointInRing, centroid, haversineM } from './site3d/geo';
-import ecsw from './site3d/data/ecsw.json';
+import { SiteScene, type PinSpec } from './site3d/scene';
+import { centroid } from './site3d/geo';
+import { siteFor, locateIn, type KnownSite } from './site3d/sites';
 import { shifts, positionAt, renderBrain, openAt, shiftEnd, type Shift } from './brain';
 
 const host = document.getElementById('map') as HTMLElement;
@@ -24,7 +24,7 @@ function ensureScene(): SiteScene {
     <div class="s3-ctl"><span class="seg" role="group" aria-label="Camera"><button type="button" data-cam="3d" aria-pressed="true">3D</button><button type="button" data-cam="2d" aria-pressed="false">Top-down</button></span><button type="button" class="btn ghost" data-follow aria-pressed="false" title="Keep the camera on the wearer (F)">Follow</button></div>
     <aside class="s3-brain" aria-label="Shift memory"><div class="bh"><h2>Shift memory</h2></div><div class="s3-brain-body"></div></aside>
     <div class="s3-replay" role="group" aria-label="Replay"><button type="button" data-play aria-label="Play">▶</button><button type="button" data-live class="on">Live</button><div class="speeds" role="group" aria-label="Speed">${[1, 10, 60, 300].map(v => `<button type="button" data-speed="${v}">${v}×</button>`).join('')}</div><div class="scrub"><input type="range" min="0" max="1000" value="1000" data-scrub aria-label="Time" /><div class="s3-marks"></div></div><span class="clock mono" data-clock>—</span></div>
-    <div class="s3-legend"><span><i class="sw trail"></i>walk</span><span><i class="sw heat"></i>time spent</span><span><i class="sw photo"></i>photo</span><span><i class="sw alert"></i>open issue</span><span class="attr">Imagery © Esri · Building © OpenStreetMap contributors</span></div>`;
+    <div class="s3-legend"><span><i class="sw trail"></i>walk</span><span><i class="sw heat"></i>time spent</span><span><i class="sw photo"></i>photo</span><span><i class="sw alert"></i>open issue</span><span class="attr">Imagery © Esri · ECSW © OpenStreetMap contributors · sample sites generated</span></div>`;
   const canvas = host.querySelector('canvas')!; const labels = host.querySelector('.s3-labels') as HTMLElement;
   scene = new SiteScene(canvas, labels, host); (window as any).__scene = scene;
   brainEl = host.querySelector('.s3-brain-body') as HTMLElement; followBtn = host.querySelector('[data-follow]') as HTMLButtonElement;
@@ -44,9 +44,10 @@ function ensureScene(): SiteScene {
 }
 
 // ---------- site ----------
-type Site = { kind: 'ecsw' | 'generic'; rooms: { name: string; ring: [number, number][] }[]; outer: [number, number][] | null; builtFor: string };
+// The known site the data sits in (ECSW for the venue capture, a generated plant for each sample
+// workspace, decision 0032), else a generic glass box around the walk.
+type Site = { kind: 'known' | 'generic'; known: KnownSite | null; builtFor: string };
 let site: Site | null = null;
-const ECSW_CENTER = ecsw.center as [number, number];
 function dataCentroid(): [number, number] | null {
   const pts: [number, number][] = [];
   for (const p of state.track.values()) if (p.kind === 'point') pts.push([p.lon, p.lat]);
@@ -54,27 +55,24 @@ function dataCentroid(): [number, number] | null {
   return pts.length ? centroid(pts) : null;
 }
 function ensureSite(sc: SiteScene) {
-  const c = dataCentroid(); const nearEcsw = !c || haversineM(c[1], c[0], ECSW_CENTER[1], ECSW_CENTER[0]) < 400;
-  const key = nearEcsw ? 'ecsw' : `generic:${current().db}`;
+  const c = dataCentroid(); const k = siteFor(c);
+  const key = k ? k.key : `generic:${current().db}`;
   if (site && site.builtFor === key) return;
-  if (nearEcsw) {
-    const d: SiteData = { center: ECSW_CENTER, main: { name: ecsw.ecsw.name, levels: ecsw.ecsw.levels, height: ecsw.ecsw.height, outer: ecsw.ecsw.outer as any, inner: ecsw.ecsw.inner as any }, indoor: ecsw.indoor as any, neighbors: ecsw.neighbors as any, paths: ecsw.paths as any, tileRadius: 4 };
-    sc.buildSite(d);
-    site = { kind: 'ecsw', outer: ecsw.ecsw.outer as any, rooms: (ecsw.indoor as any[]).filter(r => r.name && r.pts.length >= 3).map(r => ({ name: r.name, ring: r.pts })), builtFor: key };
+  if (k) {
+    sc.buildSite(k.data);
+    site = { kind: 'known', known: k, builtFor: key };
   } else {
     sc.buildSite({ center: c!, tileRadius: 3 });
     const xs: [number, number][] = []; for (const p of state.track.values()) if (p.kind === 'point') xs.push(sc.proj.toXZ(p.lon, p.lat)); for (const l of state.locations.values()) xs.push(sc.proj.toXZ(l.lon, l.lat));
     const minX = Math.min(...xs.map(p => p[0])) - 10, maxX = Math.max(...xs.map(p => p[0])) + 10, minZ = Math.min(...xs.map(p => p[1])) - 10, maxZ = Math.max(...xs.map(p => p[1])) + 10;
     sc.buildHall(minX, maxX, minZ, maxZ, current().name);
-    site = { kind: 'generic', outer: null, rooms: [], builtFor: key };
+    site = { kind: 'generic', known: null, builtFor: key };
   }
   resetHeat();
 }
-function locate(lat: number, lon: number): string | undefined {
-  if (!site) return; const pt: [number, number] = [lon, lat];
-  for (const r of site.rooms) if (pointInRing(pt, r.ring)) return r.name;
-  if (site.outer && pointInRing(pt, site.outer)) return 'inside ECSW';
-  return site.kind === 'ecsw' ? 'outside the building' : undefined;
+function locate(lat: number, lon: number, floor?: number | null): string | undefined {
+  if (!site?.known) return;
+  return locateIn(site.known, lat, lon, floor);
 }
 
 // ---------- heat (incremental over the clock) ----------
@@ -115,7 +113,7 @@ function frameBody() {
       const pos = positionAt(s, clock); if (!pos) continue;
       const [x, z] = sc.proj.toXZ(pos.lon, pos.lat); const y = (pos.floor ?? 0) * sc.floorH + 1.1;
       const trail: number[] = []; for (let i = 0; i <= pos.i; i++) { const q = s.smooth[i]; const [tx, tz] = sc.proj.toXZ(q.lon, q.lat); trail.push(tx, (q.floor ?? 0) * sc.floorH + 0.6, tz); } trail.push(x, y - 0.5, z);
-      const where = locate(pos.lat, pos.lon); const last = s.smooth[pos.i]; const stale = clock - last.tMs > 90_000;
+      const where = locate(pos.lat, pos.lon, pos.floor); const last = s.smooth[pos.i]; const stale = clock - last.tMs > 90_000;
       sc.setWearer(dev, { color: wearerColor(dev), name: wearerName(dev), sub: where ? where : stale ? `last fix ${fmtTime(BigInt(Math.round(last.tMs)) * 1000n)}` : 'on site', pos: [x, y, z], trail });
       drawn = true; break;
     }

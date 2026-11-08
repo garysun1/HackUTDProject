@@ -91,7 +91,7 @@ export function snapshot(clock: number): Snapshot {
 
 // ---------- render ----------
 const seen = new Set<string>(); let lastSig = '';
-export type BrainCtx = { clock: number; locate: (lat: number, lon: number) => string | undefined; onSelect: (id: string) => void; onJump: (ms: number) => void };
+export type BrainCtx = { clock: number; locate: (lat: number, lon: number, floor?: number | null) => string | undefined; onSelect: (id: string) => void; onJump: (ms: number) => void };
 const fmt = (t: number) => fmtTime(BigInt(Math.round(t)) * 1000n);
 
 export function renderBrain(el: HTMLElement, ctx: BrainCtx): Snapshot {
@@ -100,7 +100,7 @@ export function renderBrain(el: HTMLElement, ctx: BrainCtx): Snapshot {
   if (sig === lastSig) return snap; lastSig = sig;
   const parts: string[] = [];
   const who = (s: Shift, live: boolean) => {
-    const pos = positionAt(s, ctx.clock); const where = pos ? (ctx.locate(pos.lat, pos.lon) ?? 'on site') : (live ? 'no fix yet' : `last seen ${fmt(s.lastMs)}`);
+    const pos = positionAt(s, ctx.clock); const where = pos ? (ctx.locate(pos.lat, pos.lon, pos.floor) ?? 'on site') : (live ? 'no fix yet' : `last seen ${fmt(s.lastMs)}`);
     const since = live ? `on ${session} since ${fmt(s.startMs)}` : `${session} ${fmt(s.startMs)}–${fmt(shiftEnd(s))}`;
     return `<div class="who${live ? '' : ' idle'}" style="--c:${wearerColor(s.deviceId)}"><i class="sw"></i><div><b>${esc(wearerName(s.deviceId))}</b><br><span>${since}</span></div><span class="where">${esc(where)}</span></div>`;
   };

@@ -171,16 +171,18 @@ export class SiteScene {
       }
       const el = document.createElement('div'); el.className = 's3-lbl bld'; el.textContent = M.name;
       const [cx, cy] = centroid(M.outer); const [x, z] = this.proj.toXZ(cx, cy); const lo = new CSS2DObject(el); lo.position.set(x, M.height + 4, z); this.site.add(lo); this.bldLabels.push(lo);
-      // rooms on the ground floor
+      // rooms, by level
       const roomMat = this.mat(new THREE.LineBasicMaterial({ transparent: true, opacity: 0.5 }), 'room');
       for (const r of data.indoor ?? []) {
         if (r.pts.length < 3) continue;
-        const pts = r.pts.map(([lon, lat]) => { const [x, z] = this.proj.toXZ(lon, lat); return new THREE.Vector3(x, 0.12, z); });
-        this.site.add(new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(pts), roomMat));
+        // rooms on upper floors (generated sites) sit on their slab and hide in top-down, like the floors
+        const lv = /^\d+$/.test(String(r.level ?? '')) ? Number(r.level) : 0; const ry = lv * this.floorH;
+        const pts = r.pts.map(([lon, lat]) => { const [x, z] = this.proj.toXZ(lon, lat); return new THREE.Vector3(x, ry + 0.12, z); });
+        const loop = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(pts), roomMat); this.site.add(loop); if (lv > 0) this.upper.push(loop);
         if (r.name) {
           const [cx, cy] = centroid(r.pts); const [x, z] = this.proj.toXZ(cx, cy);
           const el = document.createElement('div'); el.className = 's3-lbl'; el.textContent = r.name;
-          const lo = new CSS2DObject(el); lo.position.set(x, 0.6, z); this.site.add(lo); this.roomLabels.push(lo);
+          const lo = new CSS2DObject(el); lo.position.set(x, ry + 0.6, z); lo.userData.level = lv; this.site.add(lo); this.roomLabels.push(lo);
         }
       }
       // heat layer over the footprint
@@ -312,7 +314,7 @@ export class SiteScene {
       (w.beam.material as THREE.MeshBasicMaterial).opacity = 0.16 + 0.06 * Math.sin(t / 400);
     }
     const dist = this.mode === '3d' ? this.persp.position.distanceTo(this.ctrl3d.target) : 420 / this.ortho.zoom;
-    const near = dist < 230; for (const l of this.roomLabels) l.visible = near;
+    const near = dist < 230; for (const l of this.roomLabels) l.visible = near && (this.mode === '3d' || !l.userData.level);
     const mid = dist < 520; for (const l of this.bldLabels) l.visible = mid;
     this.heat?.flush();
     this.renderer.render(this.scene, this.camera); this.labels.render(this.scene, this.camera);
