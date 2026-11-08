@@ -198,3 +198,32 @@ test('recovery and fixed-note signals (#23)', () => {
   assert.match(withIssues, /Work order WO-1 open: CRAC-2 high return temp \(CRAC unit 2, opened by Dana\)/);
   assert.match(withIssues, /Work order WO-2 resolved: PDU A breaker tripped, reset \[event:e3\]/);
 });
+
+import { takenMicros, keepAttention } from '../spacetimedb/src/rules.ts';
+
+test('takenMicros uses the capture time unless it is a week off the receive time', () => {
+  const recv = 1794150000000000n; // the next morning, when a replay uploaded it
+  assert.equal(takenMicros('2026-11-07T22:00:00-06:00', recv), 1794110400000000n);
+  assert.equal(takenMicros('', recv), recv);
+  assert.equal(takenMicros('2025-01-01T00:00:00Z', recv), recv); // phone clock wrong
+});
+
+test('keepAttention refuses "none" while something is open, keeps the rest of the model text', () => {
+  const model = ['NEEDS ATTENTION', 'none', '', 'WHAT CHANGED', 'PDU A status: OK to FAULT [event:e2]', '', 'ROUNDS', 'Maria: Cold Aisle 3 [event:e1]'];
+  const out = keepAttention(model, snap);
+  assert.deepEqual(out.slice(0, 2), ['NEEDS ATTENTION', 'PDU A (Rack R12): PSU2 FAULT (22:30 CT, Maria) [event:e2]']);
+  assert.deepEqual(out.slice(2), model.slice(2));
+  const ok = ['NEEDS ATTENTION', 'PDU A: PSU2 FAULT [event:e2]', '', 'WHAT CHANGED', 'none'];
+  assert.deepEqual(keepAttention(ok, snap), ok);
+  const quiet = { ...snap, alerts: snap.alerts.map(a => ({ ...a, open: false })) };
+  assert.deepEqual(keepAttention(model, quiet), model);
+});
+
+test('keepAttention drops a NEEDS ATTENTION line that only cites a resolved alert', () => {
+  const model = ['NEEDS ATTENTION', 'CRAC unit 2: OVERTEMP, open since 22:00 [event:e0]', 'PDU A: PSU2 FAULT [event:e2]', '', 'ROUNDS', 'none'];
+  assert.deepEqual(keepAttention(model, snap).slice(0, 3), ['NEEDS ATTENTION', 'PDU A: PSU2 FAULT [event:e2]', '']);
+  const onlyStale = ['NEEDS ATTENTION', 'CRAC unit 2: OVERTEMP [event:e0]', '', 'ROUNDS', 'none'];
+  assert.deepEqual(keepAttention(onlyStale, snap).slice(0, 2), ['NEEDS ATTENTION', 'PDU A (Rack R12): PSU2 FAULT (22:30 CT, Maria) [event:e2]']);
+  const allQuiet = { ...snap, alerts: snap.alerts.map(a => ({ ...a, open: false })) };
+  assert.deepEqual(keepAttention(onlyStale, allQuiet).slice(0, 2), ['NEEDS ATTENTION', 'none']);
+});

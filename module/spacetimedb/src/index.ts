@@ -17,6 +17,8 @@ import {
   summarizeFindings,
   clockCT,
   microsFromIso,
+  takenMicros,
+  keepAttention,
   parseSinceArg,
   groundModelSections,
   graphSections,
@@ -1148,9 +1150,10 @@ const HANDOFF_PROMPT =
   'WHAT CHANGED (state changes asset by asset; alerts and work orders marked resolved belong here, not above), ' +
   'ROUNDS (which assets and areas were checked, by whom, in time order, at most one line per wearer). ' +
   'Do not write a notes or quiet section; the system adds those from the record. ' +
-  'Line formats to follow: NEEDS ATTENTION line "PDU A (Rack R12), Cold Aisle 3: PSU2 FAULT, open since 22:42, seen by Maria [event:<id>]"; ' +
-  'WHAT CHANGED line "PDU A (Rack R12) status: PSU2 OK to PSU2 FAULT at 22:42 [event:<id>]"; ' +
-  'ROUNDS line "Maria: Cold Aisle 3, Rack R12, PDU A, CRAC-2 between 22:00 and 22:47 [event:<first id>] [event:<last id>]".';
+  'Line templates (fill every <...> from the log; the templates contain no facts, never copy their words): ' +
+  'NEEDS ATTENTION line "<asset> (<where>): <what is wrong>, open since <HH:MM>, seen by <wearer> [event:<id>]", or for a work order "<asset>: work order <id> <status>, <title> [wo:<id>]"; ' +
+  'WHAT CHANGED line "<asset> <attribute>: <before> to <after> at <HH:MM> [event:<id>]"; ' +
+  'ROUNDS line "<wearer>: <areas and assets, in order> between <HH:MM> and <HH:MM> [event:<first id>] [event:<last id>]".';
 
 // Shift handoff for the incoming shift: text with a [event:<id>] citation on every line,
 // cached in the handoff table. Called by the console (Generate) and the MCP server.
@@ -1192,12 +1195,14 @@ export const handoff = spacetimedb.procedure({ since: t.string() }, t.string(), 
           changes.push(`${entName(x.toId)}${p.attr ? ' ' + p.attr : ''}: ${p.from ?? ''} -> ${p.to ?? ''}`);
         }
       }
-      return { id: e.eventId, t: e.tMicros, wearer: nameOf(e.deviceId), assets, place, summary: e.summary, note: e.note ?? '', label: e.label ?? '', changes };
+      return { id: e.eventId, t: takenMicros(e.clientT, e.tMicros), wearer: nameOf(e.deviceId), assets, place, summary: e.summary, note: e.note ?? '', label: e.label ?? '', changes };
     });
+    events.sort((a, b) => (a.t < b.t ? -1 : a.t > b.t ? 1 : 0));
+    const takenOf = new Map(events.map(e => [e.id, e.t]));
     const alerts: HAlert[] = [...tx.db.alert.iter()]
       .filter(a => !a.acked || a.tMicros >= sinceMicros) // anything still open needs attention, however old
       .sort((a, b) => (a.tMicros < b.tMicros ? -1 : a.tMicros > b.tMicros ? 1 : 0))
-      .map(a => ({ t: a.tMicros, open: !a.acked, asset: a.entityName || a.entityId || 'unassigned', text: a.text, eventId: a.eventId, wearer: a.wearerName || nameOf(a.deviceId) }));
+      .map(a => ({ t: takenOf.get(a.eventId) ?? a.tMicros, open: !a.acked, asset: a.entityName || a.entityId || 'unassigned', text: a.text, eventId: a.eventId, wearer: a.wearerName || nameOf(a.deviceId) }));
     const assetName = (id: string) => tx.db.asset.assetId.find(id)?.name || id;
     const issues: HIssue[] = [...tx.db.issue.iter()]
       .filter(i => i.status !== 'resolved' || (i.resolvedMicros ?? 0n) >= sinceMicros)
@@ -1234,7 +1239,7 @@ export const handoff = spacetimedb.procedure({ since: t.string() }, t.string(), 
   const grounded = r.text ? groundModelSections(r.text, known, new Set((snap.issues ?? []).map(i => i.id))) : null;
   if (r.text && !grounded) console.warn('handoff: model text rejected, using graph sections');
   const model = grounded ? r.model : 'graph';
-  const text = assembleHandoff(grounded ?? graphSections(snap), snap) + `\n\n${snap.events.length} photos since ${snap.anchor}, written ${clockCT(now)} by ${model}.`;
+  const text = assembleHandoff(grounded ? keepAttention(grounded, snap) : graphSections(snap), snap) + `\n\n${snap.events.length} photos since ${snap.anchor}, written ${clockCT(now)} by ${model}.`;
 
   // 3. cache, and post to the channel when configured
   ctx.withTx(tx => {

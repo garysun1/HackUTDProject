@@ -226,6 +226,19 @@ export function clockCT(micros: bigint): string {
   return `${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')} CT`;
 }
 
+/**
+ * When a photo was taken: its client_t, unless that is missing or more than 7 days from the
+ * server's receive time (a wrong phone clock), then the receive time. The console does the same,
+ * so a replayed shift reads at the hours it happened, not the minutes it was uploaded.
+ */
+export function takenMicros(clientT: string, tMicros: bigint): bigint {
+  const ms = Date.parse(clientT);
+  if (!Number.isFinite(ms)) return tMicros;
+  const c = BigInt(Math.round(ms)) * 1000n;
+  const d = c > tMicros ? c - tMicros : tMicros - c;
+  return d > 7n * 86_400_000_000n ? tMicros : c;
+}
+
 export function microsFromIso(s: string): bigint | null {
   const ms = Date.parse(s);
   return Number.isFinite(ms) ? BigInt(Math.round(ms)) * 1000n : null;
@@ -409,6 +422,36 @@ export function groundModelSections(text: string, known: Set<string>, knownWorkO
 }
 
 /** Full handoff text: model sections (or graph sections), then notes and quiet from the graph. */
+/**
+ * NEEDS ATTENTION must match the record. A line whose only citations are resolved alerts or
+ * resolved work orders is dropped (the model restating a fixed fault as open), and if the
+ * section is then empty or "none" while alerts or work orders are open, the graph's own list
+ * replaces it. The rest of the model text is kept.
+ */
+export function keepAttention(sections: string[], snap: HandoffSnap): string[] {
+  const issues = snap.issues ?? [];
+  const open = snap.alerts.some(a => a.open) || issues.some(i => i.status !== 'resolved');
+  const i = sections.indexOf('NEEDS ATTENTION');
+  if (i < 0) return sections;
+  let j = i + 1;
+  while (j < sections.length && sections[j] !== '' && !(MODEL_SECTIONS as readonly string[]).includes(sections[j])) j++;
+  const openEvents = new Set(snap.alerts.filter(a => a.open).map(a => a.eventId));
+  const closedEvents = new Set(snap.alerts.filter(a => !a.open && !openEvents.has(a.eventId)).map(a => a.eventId));
+  const closedWo = new Set(issues.filter(x => x.status === 'resolved').map(x => x.id));
+  const stale = (line: string) => {
+    const evs = [...line.matchAll(/\[event:([^\]]+)\]/g)].map(m => m[1]);
+    const wos = [...line.matchAll(/\[wo:([^\]]+)\]/g)].map(m => m[1]);
+    const cites = evs.length + wos.length;
+    return cites > 0 && evs.every(e => closedEvents.has(e)) && wos.every(w => closedWo.has(w));
+  };
+  const body = sections.slice(i + 1, j).filter(l => !stale(l));
+  const empty = !body.length || (body.length === 1 && body[0] === 'none');
+  if (!empty || !open) return [...sections.slice(0, i + 1), ...(body.length ? body : ['none']), ...sections.slice(j)];
+  const g = graphSections(snap); const gi = g.indexOf('NEEDS ATTENTION'); let gj = gi + 1;
+  while (gj < g.length && g[gj] !== '') gj++;
+  return [...sections.slice(0, i + 1), ...g.slice(gi + 1, gj), ...sections.slice(j)];
+}
+
 export function assembleHandoff(sections: string[], snap: HandoffSnap): string {
   return [...sections, '', 'NOTES FROM THE SHIFT', ...notesLines(snap), '', 'QUIET', ...quietLines(snap)].join('\n');
 }
