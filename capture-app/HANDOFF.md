@@ -1,0 +1,369 @@
+# Floor calibration build (Claude, 2026-11-08 ~01:30 CST) — branch `capture/floor-detection`
+
+On top of the barometric floor below. Edward walks a calibration route through ECSW; this build records the data to
+tune the step size and cross-checks every floor change. No module / web / schema change; `floor` stays an Int32
+relative to the shift start.
+
+- **`Application Support/calibration.csv`** (`Location/CalibrationLogger.swift`): one row per second while a shift is
+  live. Columns: `t, shift_id, rel_alt_m, pressure_kpa, floors_up, floors_down, activity, activity_conf, lat, lon,
+  h_acc_m, alt_m, v_acc_m, fix_age_s, bssid, ssid, floor, baseline_m, decision, note`. `floors_up/down` are CMPedometer
+  floors since Start shift; `activity` is CMMotionActivity; `bssid/ssid` from `NEHotspotNetwork.fetchCurrent` (blank
+  when iOS does not give them); `floor` is what the fusion outputs; `note` is the text typed on a photo, in the row
+  after the capture (the ground truth: "CAL L1 east stairs"). Pull it with
+  ```sh
+  xcrun devicectl device copy from --device 00008150-00020DD43E40C01C --domain-type appDataContainer \
+    --domain-identifier com.edwardkim.hackutd.shiftmemory --source "Library/Application Support/calibration.csv" --destination ./calibration.csv
+  ```
+- **Fusion** (`Location/FloorFusion.swift`, in front of `FloorQuantizer`; 17 tests in `FloorFusionTests`):
+  (a) a barometer step changes the floor only if the pedometer floor count changed in the last 60 s — **except
+  within 20 m of an elevator**, where the pedometer never counts (`Config.pedometerRequiredNearElevator = true` turns
+  the exception off); (b) the last GPS fix must be within 20 m of a stair or elevator in `Location/FloorSites.swift`
+  (`FloorSites.bySite["ecsw"]`, 3 stairs + 3 elevators from OSM; add a building there), or there must be no fix;
+  (c) while stationary (CMMotionActivity, ≥ medium confidence) and away from any site, drift under half a floor moves
+  the altitude baseline (`baseline_m`) instead of the floor. Every accept / reject / re-zero is logged to `debug.log`
+  as `[Floor] floor 0 -> 1 at 3.2 m relative; accepted: east stairs north at 6 m, pedometer floors changed 4 s ago`
+  (a persisting rejection is logged once). `Location/ShiftMotion.swift` runs the pedometer and activity updates.
+- Settings → Location shows floor, drift-corrected altitude, pedometer floors, activity and the last decision.
+
+**Device build:** `xcodebuild … -destination 'generic/platform=iOS' -derivedDataPath /tmp/sm-floor-dev
+-allowProvisioningUpdates build` succeeded (signed, team GBYFS3GAPJ) at `/tmp/sm-floor-dev/Build/Products/Debug-iphoneos/ShiftMemory.app`,
+but the iPhone was **not connected** (devicectl: unavailable), so it is **not installed**. With the phone on a USB-C
+data cable:
+```sh
+xcrun devicectl device install app --device 00008150-00020DD43E40C01C /tmp/sm-floor-dev/Build/Products/Debug-iphoneos/ShiftMemory.app
+xcrun devicectl device process launch --terminate-existing --device 00008150-00020DD43E40C01C com.edwardkim.hackutd.shiftmemory
+```
+(or rebuild with the device commands in the 18:00 section). First Start shift asks for Motion & Fitness: allow it.
+
+**Edward's calibration walk** (Settings → Location → Floor height left at 4.00 m; type each note in the Capture
+note field before taking the photo): Start shift on the ground floor in the Axxess Atrium, stand still 30 s, photo
+with note `CAL L0 atrium`; walk the ground-floor loop west to the Wood Shop and back; take the east stairs up one
+floor, 30 s still, photo `CAL L1 east stairs`; up again, photo `CAL L2`; up again, photo `CAL L3`; elevator down to
+the ground floor, photo `CAL L0 elevator`; End shift. Then pull `calibration.csv` and `debug.log`. The walk
+determines: the real metres per floor at ECSW (`rel_alt_m` at each `CAL L*` note; expected ~5.65), whether the
+pedometer counts each flight within 60 s of the barometer step (rule a), whether GPS indoors stays within 20 m of
+the stairs or drops out (rule b: a fix 40 m off would block every change — if so widen `siteRadiusM` or ignore fixes
+with `h_acc_m` > 30), how much the baseline drifts over the 30 s stills (rule c), and whether the elevator ride is
+accepted. Set `FloorQuantizer.Config.defaultFloorHeightM` from the result.
+
+---
+
+# Barometric floor (Claude, 2026-11-08 ~00:45 CST) — branch `capture/floor-detection`, on top of `capture/1-photo-button`
+
+Issue #19 follow-up for the 3D site view (PR #25): `CLFloor` is nil at ECSW, so every track point and photo sat on
+the ground floor. Now the iPhone barometer fills `location.floor` (contract v3.1 unchanged; no module change):
+
+- `Location/FloorQuantizer.swift` — pure: relative altitude → floor. Floor f is the band [(f−0.5)h, (f+0.5)h); to
+  change, the altitude must overshoot a band edge by `hysteresis` (0.25 floor = 1 m at h = 4 m). Multi-floor jumps
+  snap to the nearest floor. `FloorQuantizer.resolve(venueFloor:barometricFloor:)` prefers `CLFloor.level`.
+  15 tests in `ShiftMemoryTests/FloorQuantizerTests.swift`.
+- `Location/AltimeterFloorTracker.swift` — `CMAltimeter.startRelativeAltitudeUpdates` (checks
+  `isRelativeAltitudeAvailable`), restarted on every shift start so **floor 0 = where the wearer stood at Start
+  shift**; stopped at End shift (floor nil between shifts). Logs `[Floor] floor 0 -> 1 at 3.2 m relative` to
+  `debug.log`, plus a line every 300 samples. Needs the new `NSMotionUsageDescription` (Info.plist); the first shift
+  shows the Motion & Fitness prompt. Denied/unavailable → floor stays nil unless Core Location has one.
+- Plumbing: `LocationTracker.barometricFloor` hook stamps every fix in `handleFixes` (CLFloor wins), so `latest`,
+  the sampler, `TrackStore`, `TrackUploader` (`floor` key already in its point key list) and the photo's
+  `event_json.location.floor` (`EventEnvelope` via `LocationFix.contractObject`) all carry it with no other change.
+- `AppConfig.floorHeightM` (UserDefaults `location.floorHeightM`, default **4.0 m**, clamped 2.5–8). Settings →
+  Location shows the live floor / relative altitude and a 0.25 m stepper; a change mid-shift keeps the current
+  floor and applies the new step from the next sample. `AppModel.altimeter` is wired in `startLocation()`.
+- Known limits: relative altitude drifts with weather (~8 m per hPa, slowly); a relaunch mid-shift re-zeroes at the
+  wearer's current floor (logged). Floors are relative to the shift start, not building levels.
+
+**Needs a hardware run (Edward, phone on USB-C):** build/install with the device commands below, Start shift on the
+ECSW ground floor, walk the stairs to the top and back, End shift, pull `debug.log` and check the `[Floor]` lines:
+expect `0 -> 1 -> 2 -> 3` going up, `3 -> 2 -> 1 -> 0` coming down, no flicker on landings. If the 4.0 m default
+over- or under-counts (ECSW is 22.6 m / 4 levels = **5.65 m** floor to floor), set Settings → Location → Floor
+height to 5.65 and repeat; then make that the default in `FloorQuantizer.Config.defaultFloorHeightM`. Simulator:
+`CMAltimeter.isRelativeAltitudeAvailable()` is false, so Settings shows "no barometer" and floor is omitted.
+```sh
+cd ~/HackUTDProject/capture-app   # or the worktree ~/HackUTDProject-floor/capture-app
+xcodebuild -project ShiftMemory.xcodeproj -scheme ShiftMemory -destination 'id=00008150-00020DD43E40C01C' \
+  -derivedDataPath /tmp/sm-dev -allowProvisioningUpdates build
+xcrun devicectl device install app --device 00008150-00020DD43E40C01C /tmp/sm-dev/Build/Products/Debug-iphoneos/ShiftMemory.app
+xcrun devicectl device process launch --terminate-existing --device 00008150-00020DD43E40C01C com.edwardkim.hackutd.shiftmemory
+xcrun devicectl device copy from --device 00008150-00020DD43E40C01C --domain-type appDataContainer \
+  --domain-identifier com.edwardkim.hackutd.shiftmemory --source "Library/Application Support/debug.log" --destination ./debug.log
+```
+
+---
+
+# Spoken briefing check (Devin, 2026-11-07 ~20:40–23:30 CST) — on top of the 19:00 state below
+
+**State at 23:30 CST (Edward resuming with Claude):** everything is pushed; `capture/1-photo-button` = origin =
+`faf4183`, PR #18 body current, issue #22 has the write-up, `#log` has the `[DONE]` post (ts `1794114571.434919`).
+Installed on Edward's iPhone 17 (`faf4183`, NVIDIA key seeded from the gitignored `Config/Config.plist`).
+
+Hardware run (debug.log, 05:10 UTC): Nemotron wrote a 41-word briefing from the live tables; Magpie read it over the
+Ray-Ban HFP route (~20 s from script to listening — TTS fetch + playback; consider pre-fetching the re-prompt lines
+while the script plays). The wearer's "Yes" was recognized as a partial, then on-device recognition returned an
+**empty final result** that wiped it, so the check re-asked — fixed in `faf4183` (`VoiceNarrator.ingest` keeps the
+partial when the final is empty). **Edward has not yet confirmed the fixed build end-to-end**; first thing to do is
+Start shift → say "yes" → expect "Good, Edward. You're up to speed." and the sheet closing, then pull
+`debug.log` (command in the 19:00 section) and check the `[Briefing] prompt 1 heard: … → yes` line.
+
+Open: ElevenLabs path untested (no key); Magpie voice/speed tuning (`NvidiaClient.defaultVoice`, Aria; `Jason`,
+`Mia` and `.Calm` variants exist); Gary's answer on a `briefing_ack` row vs the note; #10 measurements 2/4/5.
+
+
+Edward's ask: "some sort of AI needs to synthesize the info, the voice can't be so bad, it all has to be
+automated, and it has to get confirmation that they understand" — then simplified: confirmation is the wearer
+**saying yes** ("yes / makes sense / got it"); if they don't, pause a few seconds and re-prompt. No grading.
+Phone-only, no module/web/schema change:
+
+- `Briefing/NvidiaClient.swift` — Nemotron (`nvidia/nemotron-3.5-lightning-30b-a3b`, thinking off) on
+  integrate.api.nvidia.com writes the script from the briefing's fact sheet; Magpie TTS (hosted NIM on nvcf,
+  `/v1/audio/synthesize`, multipart → WAV, 202+poll handled) is the second-choice voice. Verified live from the
+  VM with Edward's key: chat 200 (JSON back), `list_voices` 200, synthesize 200 `audio/wav`.
+- `Briefing/ElevenLabsClient.swift` — **preferred voice** when its key is set (`eleven_flash_v2_5`, MP3,
+  default voice George `JBFqnCBsd6RMkjVDRZzb`, voice id editable in Settings). Not yet exercised (no key).
+- `Briefing/SpokenBriefing.swift` — pure: fact sheet, Nemotron prompt + tolerant parser, template fallback,
+  every script ends "Does that make sense?", `answer(_:)` yes/no/unclear detector, re-prompt lines, pass line,
+  `Briefing ack:` note. `SpokenBriefingTests`.
+- `Briefing/BriefingSpeaker.swift` — plays cloud audio (cached per text), system voice fallback; `speakAndWait`.
+- `Briefing/BriefingCheck.swift` — write → read → listen 12 s → yes? pass : wait 3 s → re-prompt → listen …
+  (6 prompts max, then the sheet stays for manual check-off with "Listen again" / "Read it again"). A pass
+  auto-acknowledges and sets `config.pendingNotePrefix` to the ack note, so the shift's first photo carries
+  "Briefing ack: Edward heard the shift briefing (2 open issues) and confirmed it at 8:41 PM. Said: “yes”".
+- Keys: `AppConfig.nvidiaApiKey` / `elevenLabsApiKey` (Keychain, snapshots for off-main reads),
+  `elevenLabsVoiceId`. Settings → Voice and briefing. The gitignored `Config/Config.plist` seeds
+  `NVIDIA_API_KEY`, `ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID` **on every launch when the Keychain lacks them**
+  (the old first-launch-only seeding would have skipped a phone that was already installed). Edward's Mac has the
+  NVIDIA key in that plist; Devin also holds it as a user-scoped secret `NVIDIA_API_KEY`.
+- Voice order: ElevenLabs → Magpie → best installed system voice. Script: Nemotron → template.
+
+---
+
+# Handoff: Shift Memory capture app — current state (2026-11-07 ~19:00 CST)
+
+> Latest section first. The 18:00 section below it is history (its blocker is fixed); the original
+> 17:00 handoff at the bottom is still the source for rules and decisions.
+
+## Where things stand (Claude, Edward's agent, 18:20–19:00 CST)
+Branch `capture/1-photo-button`, PR #18. Commits since 18:20: `d53e495` `f6a4cde` `5ca1d48` `9266b9f` `c10dde4`
+(+ the docs commit carrying this file). Verified on Edward's iPhone 17 (iOS 26) + Ray-Ban Meta "016N",
+DAT 1.0.1, with Gary's ingest token in the Keychain (device id in Settings → Identity is `edward-iphone`,
+which already matches a row in Gary's `wearer` table):
+
+- **#1 is done on hardware.** App Capture `d1044a8d` and five shutter photos (`b640d072` `62cb95ad` `c464866e`
+  `67619eb8` `fd70df44`) went glasses → phone → `ingest_photo` → `accepted` → `in_graph` with Nemotron summaries,
+  4–6 s from upload to `in_graph`. Session start ~90 ms, Photo child up in 1.7–2.5 s via the ignition stream.
+- **Shutter photos do not arrive on `photoDataPublisher` by themselves** on this unit (contrary to the camera
+  guide): session up, Photo `.started`, a minute of pressing, zero bytes. Fixed in `9266b9f` the way Meta's
+  BirdSpotter sample does it: attach the experimental **`MWDATInputs`** capability after Photo starts, receive
+  `InputEvent.capture(.shortPress, source: .captureButton)`, call `capturePhoto` ourselves, tag it
+  `shutter_button`. Double-press debounce (known SDK issue), Inputs re-attached when it goes `inactive`.
+  Unsolicited photos on the publisher are still accepted and tagged shutter.
+- **#10 measurement 1 (backgrounded shutter): 4 of 5** presses with the phone locked produced a photo that reached
+  `in_graph` (the 5th hit the one-capture-in-flight limit; presses are now queued, `c10dde4`). Table filled in
+  `MEASUREMENTS.md`. **Camera-roll import stays OFF**; the shutter path is the bulk path.
+- Bugs fixed on the way: `UploadQueue.load()` used `URL.path()` (percent-encoded "Application%20Support"), so
+  nothing persisted was ever reloaded after a relaunch (`5ca1d48`); token edits now kick the queue; camera/Photo
+  revival after a live stop or pause (BirdSpotter port); diagnostics rows get `acceptedAt`/`inGraphAt`.
+- **Shutter chime** (`c10dde4`, Edward's request): a synthesized C6→E6 bell plays on the phone the instant the
+  press event arrives (and on the Capture tap), with a haptic. `.playback` session + `audio` background mode so it
+  plays locked/silent. Settings → Capture → Shutter sound. **Not yet installed on the phone** (Edward asked for a
+  pause on installs); the build is green. Edward should listen to the chime and say if he wants it tuned.
+- **Logging:** NSLog and `Logger` output from this process reach `idevicesyslog` redacted (`<private>`) or not at
+  all on this phone. Everything now also goes to `Application Support/debug.log`; pull it (and the Diagnostics /
+  Events / UploadQueue folders) with
+  `xcrun devicectl device copy from --device 00008150-00020DD43E40C01C --domain-type appDataContainer --domain-identifier com.edwardkim.hackutd.shiftmemory --source "Library/Application Support/debug.log" --destination ./debug.log`.
+  No AirDrop/CSV step needed for #10.
+- Not done: #10 measurements 2 (latency at medium/medium), 4 (10 cold starts), 5 (battery day). Full/high
+  shutter transfers take 38–48 s over Bluetooth; medium/medium is the sensible default for a day of button
+  photos. Slack `[DONE]` for #1 and the measurement-1 post are being sent now; PR #18 to be marked ready.
+- Known orphan: event `556129ee` (first real photo, 18:11) was mis-tagged `shutter_button` before `f6a4cde` and
+  is on the server as `in_graph` but is not in the app's event list (the store never saw it).
+
+---
+
+# Previous state (2026-11-07 ~18:00 CST) — blocker below is FIXED (`d53e495`)
+
+## Where things stand (Devin, Edward's agent, 15:00–18:00 CST)
+All code for #1/#2/#10 and the #11 drafts is on branch `capture/1-photo-button`, pushed, draft
+[PR #18](https://github.com/garysun1/HackUTDProject/pull/18) description is current. Commits
+`1f3ad54 … 5db8da0`. Nothing is uncommitted. (Edward's Mac has `git stash@{0}` with the old
+untracked workflow files — identical to what is committed; safe to `git stash drop`.)
+
+- Simulator build + `xcodebuild test` green: **32/32 unit tests** (CameraRollImporter, DiagnosticsStore, IngestClient).
+- Signed **device build installed and running on Edward's iPhone 17** (UDID `00008150-00020DD43E40C01C`,
+  team `GBYFS3GAPJ`, Xcode 27.2 on the Mac, derived data `/tmp/sm-dev`). Install/launch commands:
+  ```sh
+  cd ~/HackUTDProject/capture-app
+  xcodebuild -project ShiftMemory.xcodeproj -scheme ShiftMemory -destination 'id=00008150-00020DD43E40C01C' \
+    -derivedDataPath /tmp/sm-dev -allowProvisioningUpdates build
+  xcrun devicectl device install app --device 00008150-00020DD43E40C01C /tmp/sm-dev/Build/Products/Debug-iphoneos/ShiftMemory.app
+  xcrun devicectl device process launch --terminate-existing --device 00008150-00020DD43E40C01C com.edwardkim.hackutd.shiftmemory
+  ```
+  The phone must be on USB-C (a data cable; Wi-Fi debugging is not enabled and the campus network blocks Bonjour).
+- Verified against the live module from the client: `ping` 200, `sql` 200, `ingest_photo` with a bogus token → `invalid_token`.
+- Slack: reply posted in Gary's #general thread (ts `1794094460.509159`, parent `1794092446.681629`) answering his
+  4 questions. Not yet posted: `[DONE]` in `#log` (only after a real photo reaches `in_graph`), the device id
+  for `demo/wearers.csv`, and the #10 backgrounded-shutter answer.
+
+## Contract findings (already handled in `IngestClient`, flagged to Gary; CONTRACT.md not edited — Gary's file)
+- The HTTP `/call` endpoint returns a procedure's result as a **positional JSON array**, not an object:
+  `ping` → `["2026-11-07T23:27:32.279Z","1794094052279619"]`, so `ingest_photo` → `[eventId, serverT, status]`.
+  `IngestClient.jsonObject(_:positional:)` zips arrays onto the module's field order and still accepts objects.
+- `SenderError('invalid_token')` surfaces as **HTTP 500** with body
+  `The module instance encountered a fatal error: invalid_token` (same for `missing_*`, `invalid_event_json`,
+  `missing_photo`). `IngestClient.failure(status:body:)` classifies by body text, not status. The older note
+  below saying "HTTP 4xx" is wrong.
+
+## CURRENT BLOCKER — "Capture setup failed" on real glasses
+Edward tapped **Start shift** on the phone with his Ray-Ban Meta glasses and got the error
+**"Capture setup failed"**. That string is the DAT SDK's localized description of
+`PhotoError.sessionSetupFailed(underlying:)` (`MWDATCamera/en.lproj/CameraErrors.strings`,
+`dat_error_capture_setup_failed`), documented as "The session could not be started due to a transport setup
+failure" / Android: "the glasses did not activate the capability". So: the DAT **device session started**
+(we got past `waitForSessionStarted`), the camera was added, but the standalone **Photo child** did not reach
+`.started` — `GlassesController.startPhotoChild()` already retries once with a fresh `Camera`, so it failed twice.
+
+Relevant code: `ShiftMemory/Capture/GlassesController.swift` — `startShift()`, `startPhotoChild()`,
+`photoError(_:)` (the `.sessionSetupFailed` branch), `waitForPhotoStarted`. The error text reaches the UI via
+`lastError`; the raw `underlying` error is currently **not logged** — first thing to add is
+`NSLog("[Glasses] photo error: \(error) underlying: \(String(describing: underlying))")` in `photoError` and in
+the photo-state listener, rebuild, reinstall, reproduce.
+
+Things we do **not** know yet (check in this order):
+1. Is the glasses' camera permission actually granted for Shift Memory in the Meta AI app?
+   `ensureCameraPermission()` passed, but confirm in Meta AI → Devices → (glasses) → connected apps.
+   Permission denial normally surfaces as `.permissionDenied`, not setup-failed, but verify.
+2. Was the Meta AI app (or another DAT app) holding a stream/photo session at the same time? Stream and Photo
+   compete for the camera; the toolkit does not arbitrate. Force-quit Meta AI, retry.
+3. Glasses state: on the face / unfolded, awake, battery not critical (`.deviceHealthCritical` would be its own
+   case, but low battery can make setup flaky), firmware up to date (Meta AI → Devices → update). Also
+   `needsGlassesAppUpdate` / `.datAppOnTheGlassesUpdateRequired` is handled on `session.start()` only — check
+   whether a glasses-side update prompt appears in Meta AI.
+4. Standalone photo capture is **beta / dev-channel only** in DAT 1.0 ("Dev and beta only" on the PhotoError
+   page). Confirm Edward's Meta developer account has the glasses enrolled in the developer/beta channel and that
+   the app is registered in the Meta Wearables developer portal with the camera capability
+   (`Wearables.configure()` succeeded, Info.plist has the `MWDAT*` keys — see `ShiftMemory/Info.plist`).
+5. Timing: `waitForPhotoStarted` gives 20 s. Check the state listener actually sees `.starting`; if the state
+   stream never fires, suspect the listener-before-start ordering or that `camera.photo` must be started only
+   after the camera itself reports ready (re-read the iOS "camera-capture" guide:
+   https://wearables.developer.meta.com/docs/develop/dat/camera-capture/ and the `Photo` / `PhotoError` reference).
+6. Fallback if photo-child startup cannot be fixed quickly: the glasses' own shutter photos land in the Meta AI
+   app → iOS camera roll. `CameraRollImporter` (#2) is built: Settings → Camera roll import → on → **Scan now**
+   uploads them as `camera_roll` events with their original timestamps. That unblocks Gary's demo even without
+   the live session. Edward has already shot many photos with the glasses this way.
+
+Logs: the Mac may still be running two background tails started by Devin —
+`idevicesyslog -u 00008150-…` → `/tmp/sm-syslog.log` (whole phone syslog; grep `ShiftMemory|MWDAT|dat_error`)
+and `xcrun devicectl … launch --console` → `/tmp/sm-console.log` (stdout only; was empty). `pkill -f idevicesyslog`
+when done. `NSLog` output appears in the syslog, not the console file.
+
+## Remaining after the blocker
+- First real photo → `in_graph` → post `[DONE] (Claude) #1 …` top-level in `#log` and the device id
+  (Settings → Identity → Copy) in Gary's #general thread for `demo/wearers.csv`.
+- Paste Gary's `INGEST_TOKEN` in Settings → Backend → Test connection (Keychain; never commit it, never paste it in
+  Slack or git). Until then every upload shows `failed: invalid_token` and retries after the token is set.
+- Run `capture-app/MEASUREMENTS.md` (#10): backgrounded-shutter delivery first — it decides whether #2 stays on
+  by default. Report in `#log`.
+- Mark PR #18 ready for review when a real photo has gone through.
+
+---
+
+# Handoff: finish the Shift Memory capture app (issues #1, #2, #10, #11)
+
+Paste this file's contents (or "read capture-app/HANDOFF.md and continue") into a fresh Claude Code
+session started in `~/HackUTDProject` on branch `capture/1-photo-button`. Written 2026-11-07 ~17:00 CST
+by Edward's previous agent session when its usage ran out.
+
+## Who you are and the rules
+You are Edward Kim's coding agent on the HackUTD 2026 team repo github.com/garysun1/HackUTDProject
+("Working Memory for the Physical World"). Edward owns capture + the iOS app; Gary owns `module/`, `web/`,
+`docs/`. Read `CLAUDE.md`, `docs/DESIGN.md` §4/§10, `docs/CONTRACT.md`, the Slack `#log` channel
+(id `C0CFWBVEE9J`), and this file before writing code. Rules Edward set this session:
+- **Ask Edward before any executive decision not already laid out** (below or in the docs). Routine
+  implementation choices inside the capture app are yours.
+- Never guess Meta SDK API names. Ground truth is the SDK's public swiftinterface: in a scratch dir
+  `git clone --depth 1 https://github.com/facebook/meta-wearables-dat-ios && git fetch --depth 1 origin tag 1.0.1`,
+  then `git show 1.0.1:MWDATCamera.xcframework/ios-arm64/MWDATCamera.framework/Modules/MWDATCamera.swiftmodule/arm64-apple-ios.swiftinterface`
+  (same for MWDATCore, MWDATMockDevice). The main branch has no Package.swift; tags do.
+- Never commit secrets. `Config.plist` is gitignored; the ingest token lives in the Keychain.
+- Don't touch `module/`, `web/`, `docs/`, or `CONTRACT.md`. Post `[DONE] (Claude) …` in `#log` from Edward's
+  Slack account when a piece is verifiably done (details in a thread), update the draft PR, close issues via the PR.
+
+## Decisions already made with Edward (do not re-ask)
+- Fresh SwiftUI app **"Shift Memory"** in `capture-app/`, bundle `com.edwardkim.hackutd.shiftmemory`, URL scheme
+  `shiftmemory://`, team `GBYFS3GAPJ`, iOS 17.2+, Swift 6 strict + Approachable Concurrency, DAT **1.0.1** via SPM.
+- Scope: #1 capture app; #2 camera-roll import behind a Settings toggle; #10 instrumentation (Diagnostics screen +
+  `capture-app/MEASUREMENTS.md`, Edward runs the hardware tests); #11 drafts `demo/DEMO_SCRIPT.md`, `demo/REHEARSAL.md`,
+  `demo/SUBMISSION.md` marked DRAFT for Gary.
+- Delivery: branch `capture/1-photo-button` → draft PR to `main` (already open; update it, mark ready when green).
+- Comms: issues #1 #2 #10 #11 are assigned to eedwardkim; `[CLAIMED]` was posted in `#log`
+  (message ts `1794090783.805329`; reply in that thread for progress, top-level only for `[DONE]`/`[BLOCKED]`).
+
+## Backend facts you will code against (verified in module/spacetimedb/src/index.ts)
+- DB `wm-physical` on Maincloud. `POST https://maincloud.spacetimedb.com/v1/database/wm-physical/call/ingest_photo`
+  with body `["<event_json>", "<photo_b64>"]`; reply **camelCase** `{eventId, serverT, status}` (contract doc shows
+  snake_case; accept both). Statuses: `accepted | in_graph | failed | duplicate` (no `perceived` step exists).
+  Validation errors are `SenderError('invalid_token' | 'missing_<field>' | 'invalid_event_json' | 'missing_photo')`
+  → HTTP 4xx with the message in the body. `ping` → `{serverT, tMicros}`. Reducers `set_label`/`set_note` take
+  `["<event_id>", "<value>"]`. Status poll: `POST …/sql` (text/plain) `SELECT status, summary FROM event WHERE event_id = '…'`
+  → `[{schema, rows: [[status, summary]]}]`. The ingest token comes privately from Gary (asked in #log).
+
+## State of the code (all on the branch)
+Builds green on the iOS Simulator as of the last commit? **Only the scaffold did** (`ShiftMemoryApp`, placeholders,
+contracts). Since then real files were added without an integrated build. Run the build first (commands below).
+- `capture-app/ShiftMemory.xcodeproj` — hand-written, objectVersion 77, synced folders `ShiftMemory/` and
+  `ShiftMemoryTests/`, Info.plist exception set, DAT package exactVersion 1.0.1 (MWDATCore, MWDATCamera, MWDATMockDevice
+  on both targets), shared scheme. `ShiftMemory/Info.plist` has the MWDAT dict, URL type, background modes,
+  external-accessory protocol, Bonjour, usage strings, analytics/crash opt-out. Entitlements: Hotspot + wifi-info.
+- Contracts (compiled by every module): `Upload/CaptureEvent.swift` (CaptureSource, EventStage, CaptureEvent),
+  `Upload/EventEnvelope.swift` (exact `event_json` builder), `Upload/IngestContracts.swift` (IngestClientProtocol with
+  ping/ingest/status/setLabel/setNote, IngestError + isRetryable, BackendEndpoint), `Pipeline/PipelineContracts.swift`
+  (ImagePipelineProtocol, PreparedPhoto, ImageFormat.sniff), `Diagnostics/DiagnosticsModels.swift`,
+  `Import/ImportContracts.swift`, `UI/Theme.swift` (tokens mirrored from web/src/styles.css + Surface/PanelHead/StatusPill/InkButtonStyle).
+- Done and typechecked: `Config/AppConfig.swift`, `Config/Keychain.swift`, `Capture/GlassesController.swift`
+  (registration, permission, session, camera.photo start with one retry, capture with 40 s timeout, shutter-vs-app
+  tagging, DEBUG `debugSimulateShutterPress()`, lifecycle events).
+- Written, NOT yet compiled (depend on the modules below): `Upload/EventStore.swift`, `Capture/CaptureCoordinator.swift`,
+  `App/AppModel.swift`. `UI/RootView.swift` is a placeholder.
+- A background Workflow (`shift-memory-modules`) was implementing, reviewing and fixing in parallel:
+  `Pipeline/ImagePipeline.swift`, `Upload/IngestClient.swift`, `Upload/UploadQueue.swift`, `Import/CameraRollImporter.swift`,
+  `Diagnostics/DiagnosticsStore.swift`, `capture-app/MEASUREMENTS.md`, `demo/DEMO_SCRIPT.md`, `demo/REHEARSAL.md`,
+  `demo/SUBMISSION.md`, plus tests in `ShiftMemoryTests/`. It may have finished after the last commit: run `git status`
+  and read whatever landed; verify each file against its brief in the workflow script
+  `~/.claude/projects/-Users-edwardkim/5786fb63-d1e9-4be3-a020-f550e1f2858e/workflows/scripts/shift-memory-modules-wf_15df67db-291.js`
+  (the briefs there are the spec for each module's public API, which AppModel/CaptureCoordinator already call).
+  If a file is missing or partial, implement it to that brief.
+
+APIs AppModel/CaptureCoordinator expect (match these or adjust the callers):
+`ImagePipeline()` + `@concurrent prepare(_:options:) async throws(PipelineError) -> PreparedPhoto`;
+`IngestClient(endpoint: @Sendable () -> BackendEndpoint)`; `actor UploadQueue(client:directory:configuration:)` with
+`Configuration{ingestToken, appVersion}`, `nonisolated let updates: AsyncStream<Update>`, `Update = .stage(eventId:stage:serverT:error:attempts:) | .polled(eventId:status:summary:) | .depth(pending:)`,
+`enqueue(_:jpeg:)`, `start()`, `kick()`, `startPolling(eventId:)`; `CameraRollImporter()` with `onlyGlassesPhotos`, `onPhoto`,
+`isEnabled`, `setEnabled(_:) async`, `scanNow() async`; `DiagnosticsStore(directory:)` with `begin(id:source:)`, `update(id:_:)`,
+`rename(id:to:)`, `recordBattery(glasses:phone:)`, `noteSessionStart(success:ms:error:)`, `notePhotoStart(success:ms:)`,
+`noteShutterArrival(foreground:)`, `exportCSV()`, `summary`.
+
+## What is left, in order (acceptance criteria in parentheses)
+1. Integrate and build: `cd capture-app && xcodebuild -project ShiftMemory.xcodeproj -scheme ShiftMemory -destination 'platform=iOS Simulator,id=A31C14F7-1EC0-4D60-9807-F3DD037D4A1E' -derivedDataPath /tmp/sm-dd build`
+   then `… test`. (Zero errors; unit tests green.) Fast per-file check: `Tools/typecheck.sh <files>` / `--tests`.
+2. UI (replace `UI/RootView.swift`): one NavigationStack. Home: brand + backend pill (db, reachable dot) + Settings; glasses
+   card (device name, battery, phase pill, one primary action per phase: Connect / Start shift / End shift / Restart, error line,
+   firmware/glasses-app update buttons when flagged); capture card (ink Capture button ≥56 pt, label + note fields, transfer
+   progress); recent events list (thumbnail, mono time, source SF Symbol, summary or "Reading the photo…", StatusPill per stage);
+   pending-uploads banner with Retry (`queue.kick()`); photo picker for `manual_upload`. Event detail: full photo, fields,
+   provenance, add note/label via `model.setNote/setLabel`. Settings (grouped list): backend host/db/token (secure) + Test
+   connection (ping, shows offset), wearer name, device id with copy ("give this to Gary for demo/wearers.csv"), capture
+   resolution/quality, blur faces, keep session in background, camera-roll import toggles + counts + Scan now, Diagnostics link,
+   About. Diagnostics screen: summary (medians by profile, failure rates, backgrounded shutter count, drain/hour), rows, Export CSV
+   (ShareLink), Reset. DEBUG-only Debug menu: MockDeviceKit enable/pair `.rayBanMeta`/powerOn/unfold/don/setBatteryLevel, set
+   captured photo from bundled `Resources/Fixtures/rack-panel-fault.jpg` / `-ok.jpg`, `simulateCaptureFailure()`,
+   `glasses.debugSimulateShutterPress()`. Follow `.claude/skills/impeccable/reference/ios.md` (native controls, Dynamic Type,
+   SF Symbols, 44 pt targets, system materials) and `craft-floor.md`; palette/type/density from `UI/Theme.swift` so it reads as
+   one product with the web console (`web/DESIGN.md`). (Looks like the console's sibling; passes the iOS slop test.)
+3. Run in the Simulator with MockDeviceKit end to end: pair → Start shift → set fixture → Capture → event shows
+   queued → uploading → (with no token) failed "invalid token" or, with Edward's token, accepted → in_graph with the module's
+   summary. Screenshot light + dark (`xcrun simctl io <udid> screenshot`). (Screenshots attached to the PR.)
+4. `capture-app/README.md`: build/run (Xcode 27.2, team, Developer Mode in Meta AI: Settings > App Info > tap version 5×, Connect),
+   Config.plist, screens, how stages map to module statuses, limits (dev builds only, photo capture is beta, backgrounded delivery
+   unknown until #10), pointer to MEASUREMENTS.md.
+5. Device build for Edward: `xcodebuild … -destination 'generic/platform=iOS' -allowProvisioningUpdates build` or Xcode ⌘R on
+   his iPhone 17 (UDID 00008150-00020DD43E40C01C). He runs MEASUREMENTS.md on real glasses and reports in #log.
+6. PR: update description, mark ready for review, `Closes #1`, references #2 #10 #11; post `[DONE] (Claude)` in #log with what
+   is verified and what is not (hardware), ask Gary to seed `demo/wearers.csv` with the device id shown in Settings.

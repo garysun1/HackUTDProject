@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Merged with the keys Xcode generates (GENERATE_INFOPLIST_FILE = YES). Keys here win. -->
+
+	<!-- URL scheme the Meta AI app calls back after registration and permission flows. -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>shiftmemory</string>
+			</array>
+		</dict>
+	</array>
+
+	<!-- Meta Wearables Device Access Toolkit. In Developer Mode the unexpanded MetaAppID
+	     placeholder means "no app id" and attestation is skipped; TeamID is read from signing. -->
+	<key>MWDAT</key>
+	<dict>
+		<key>AppLinkURLScheme</key>
+		<string>shiftmemory://</string>
+		<key>MetaAppID</key>
+		<string>$(META_APP_ID)</string>
+		<key>ClientToken</key>
+		<string>$(CLIENT_TOKEN)</string>
+		<key>TeamID</key>
+		<string>$(DEVELOPMENT_TEAM)</string>
+		<!-- Enterprise privacy posture: the toolkit's own analytics and crash upload are off.
+		     The app keeps its own diagnostics on the device (see Diagnostics screen). -->
+		<key>Analytics</key>
+		<dict>
+			<key>OptOut</key>
+			<true/>
+		</dict>
+		<key>CrashReporting</key>
+		<dict>
+			<key>OptOut</key>
+			<true/>
+		</dict>
+	</dict>
+
+	<!-- Every transport the toolkit may use must be declared or it silently cannot use it. -->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>audio</string>
+		<string>location</string>
+		<string>processing</string>
+		<string>bluetooth-central</string>
+		<string>bluetooth-peripheral</string>
+		<string>external-accessory</string>
+	</array>
+	<key>UISupportedExternalAccessoryProtocols</key>
+	<array>
+		<string>com.meta.ar.wearable</string>
+	</array>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Shift Memory records where each photo was taken and, while a shift is running, the path you walk, so the team's console can show the work on a map. Nothing is recorded between shifts.</string>
+	<key>NSMotionUsageDescription</key>
+	<string>During a shift, Shift Memory reads the iPhone's barometer to tell which floor you are on, so photos and your path appear on the right level of the site map. No motion data is stored or uploaded; only the floor number is.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>After you take a photo, Shift Memory listens for a few seconds so you can say what is going on. Only the text is attached to the photo; no audio is stored or uploaded.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Your spoken context is transcribed on this iPhone and attached to the photo as a note for the next shift.</string>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>Shift Memory connects to your Meta glasses over Bluetooth to receive the photos you take.</string>
+	<key>NSBluetoothPeripheralUsageDescription</key>
+	<string>Shift Memory connects to your Meta glasses over Bluetooth to receive the photos you take.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Full-resolution photos transfer from the glasses over a direct Wi-Fi link.</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_bonjour._tcp</string>
+	</array>
+
+	<!-- Camera-roll import (fallback path, off by default). -->
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>When camera-roll import is on, Shift Memory uploads new glasses photos that the Meta AI app saved to your library. Nothing else is read.</string>
+
+	<key>UIRequiredDeviceCapabilities</key>
+	<array>
+		<string>arm64</string>
+	</array>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+</dict>
+</plist>
