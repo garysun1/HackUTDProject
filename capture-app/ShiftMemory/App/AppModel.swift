@@ -372,11 +372,9 @@ final class AppModel {
       myName: config.wearerName.isEmpty ? "you" : config.wearerName,
       since: since, now: Date(), handoffText: handoffText
     )
-    let first = briefing == nil
     briefing = built
-    if first, briefingMode == .shiftStart, briefingPresented, config.spokenBriefingCheck {
-      briefingCheck.run(built, wearer: config.wearerName)
-    }
+    // Nothing is spoken on its own at shift start or resume: the briefing is read on screen. Speech
+    // only happens when the wearer taps "Read it" (rerunBriefingCheck / briefingListenAgain below).
   }
 
   /// The spoken check again, from the top (the Read-it button while a check is on).
