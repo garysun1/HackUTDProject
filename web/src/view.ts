@@ -28,8 +28,13 @@ export function setMode(m: Mode, byUser = true) {
 export function setScope(ids: Set<string> | null, label = '') { view.scope = ids; view.scopeLabel = label; emitView(); }
 
 // ---------- replay clock ----------
-/** The span a replay covers: a minute before the first track point or photo in the window, to now. */
+/** The map's shift logic owns the range when there is a tracked shift (see brain.sessionRange). */
+let rangeSource: (() => [number, number] | null) | null = null;
+export function setRangeSource(fn: () => [number, number] | null) { rangeSource = fn; }
+/** The span a replay covers: the tracked shift from just before its first fix to its real end
+ *  (or now while it is live); without a track, a minute before the first photo in the window, to now. */
 export function replayRange(): [number, number] {
+  const r = rangeSource?.(); if (r) return r;
   let lo = Infinity, hi = -Infinity;
   const cutoff = state.windowMin ? BigInt(Date.now() - state.windowMin * 60_000) * 1000n : 0n;
   for (const p of state.track.values()) { if (p.tMicros < cutoff || state.hiddenWearers.has(p.deviceId)) continue; const ms = Number(p.tMicros) / 1000; if (ms < lo) lo = ms; if (ms > hi) hi = ms; }
@@ -50,6 +55,8 @@ export function startReplay() {
 export function stopReplay() { view.replay.on = false; view.replay.playing = false; view.replay.progress = 1; emitView(); }
 export function togglePlay() {
   if (!view.replay.on) { startReplay(); return; }
+  const [t0, t1] = replayRange();
+  if (!view.replay.playing && view.replay.clockMs >= t1 - 1) { view.replay.clockMs = t0; view.replay.progress = 0; rangeT0 = t0; } // play again from the start
   view.replay.playing = !view.replay.playing; lastTick = performance.now(); if (view.replay.playing && !raf) raf = requestAnimationFrame(tick); emitView();
 }
 export function setSpeed(s: number) { view.replay.speed = s; emitView(); }
@@ -69,7 +76,8 @@ function tick(now: number) {
   const [t0, t1] = replayRange();
   if (t0 !== rangeT0) { view.replay.clockMs += t0 - rangeT0; rangeT0 = t0; } // rows that arrive after Replay was pressed move the start; the clock moves with it
   view.replay.clockMs += dt * 1000 * view.replay.speed; view.replay.progress = (view.replay.clockMs - t0) / Math.max(1, t1 - t0);
-  if (view.replay.clockMs >= Date.now()) { stopReplay(); return; }
+  // a live shift hands back to the live clock; a finished one stops at its end
+  if (view.replay.clockMs >= t1) { if (t1 >= Date.now() - 1000) { stopReplay(); return; } view.replay.clockMs = t1; view.replay.progress = 1; view.replay.playing = false; emitView(); return; }
   emitView();
   raf = requestAnimationFrame(tick);
 }
