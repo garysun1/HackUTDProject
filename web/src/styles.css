@@ -117,8 +117,8 @@ body[data-conn="connecting"] .col, body[data-conn="error"] .col { opacity: .7; }
 /* floor */
 .floor { position: relative; background: var(--ground); }
 .floor canvas { flex: 1; width: 100%; height: 100%; display: block; }
-.floor:has(.drawer:not([hidden])) canvas, .floor:has(.drawer:not([hidden])) .map { width: calc(100% - 380px); }
-.floor[data-mode="map"]:has(.drawer:not([hidden])) canvas { width: min(760px, 62%); }
+/* in the Shift view the drawer takes the right edge; on the map it takes the memory panel's place instead (below), so the map never resizes */
+.floor:has(#map[hidden]):has(.drawer:not([hidden])) canvas { width: calc(100% - 380px); }
 .floor-tools { display: inline-flex; gap: 8px; align-items: center; margin-left: auto; margin-right: 16px; }
 .floor-tools:empty { display: none; }
 .pill { font: 500 12px var(--font); color: var(--ink); background: var(--panel); border: 1px solid var(--line-strong); border-radius: 999px; padding: 3px 10px; min-height: 26px; cursor: pointer; }
@@ -266,8 +266,6 @@ body[data-conn="connecting"] .col, body[data-conn="error"] .col { opacity: .7; }
 .s3-brain .ev .tx .pending { color: var(--ink-3); }
 .s3-brain .ev .tx .chg { color: var(--warning-ink); font-weight: 500; }
 .s3-brain .s3-empty { color: var(--ink-3); padding: 4px 2px; font-size: 13px; }
-/* the drawer takes the right edge in map mode too */
-.floor:has(.drawer:not([hidden])) .map { width: calc(100% - 380px); }
 /* replay bar in the column head */
 .floor-tools .replay { display: inline-flex; align-items: center; gap: 6px; }
 .floor-tools .play { width: 30px; padding: 4px 0; text-align: center; }
@@ -323,5 +321,8 @@ body[data-conn="connecting"] .col, body[data-conn="error"] .col { opacity: .7; }
 .map-wearers .chip .n { margin-left: auto; padding-left: 10px; }
 .map-wearers .chip[aria-pressed="false"] { border: 0; background: transparent; }
 @media (max-width: 1100px) { .map-wearers { right: calc(300px + 24px); } }
-.floor:has(.drawer:not([hidden])) .map-wearers { right: 12px; }
 .s3-brain .s3-credit { flex: 0 0 auto; padding: 5px 14px; border-top: 1px solid var(--line-soft); color: var(--ink-4); font-size: 10.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* on the map, a clicked photo opens in the memory panel's own card: same place, same size, the map and
+   the walk stay exactly where they were (the panel comes back when the photo is closed) */
+.floor:has(#map:not([hidden])) .drawer { top: calc(41px + 10px); right: 12px; bottom: 10px; width: 340px; border: 1px solid var(--line); border-radius: 8px; box-shadow: var(--shadow); animation: none; z-index: 960; }
+@media (max-width: 1100px) { .floor:has(#map:not([hidden])) .drawer { width: 300px; } }
