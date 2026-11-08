@@ -86,7 +86,8 @@
       "prompt": "Looking down a cold aisle between two rows of black server racks with perforated floor tiles; a large blue sign hanging from the ceiling reads \"COLD AISLE 3\" in bold white letters.",
       "read": [
         "COLD AISLE 3"
-      ]
+      ],
+      "room": "Data hall A"
     },
     {
       "id": "02-rack-r12",
@@ -95,7 +96,8 @@
       "prompt": "Front of a black server rack with glass door, rows of 1U servers with green status LEDs; a large white label at the top of the rack door reads \"R12\" in black block letters.",
       "read": [
         "R12"
-      ]
+      ],
+      "room": "Data hall A"
     },
     {
       "id": "03-pdu-a-ok",
@@ -106,7 +108,8 @@
       "read": [
         "PDU-A",
         "OK"
-      ]
+      ],
+      "room": "Data hall A"
     },
     {
       "id": "04-crac-2",
@@ -115,7 +118,8 @@
       "prompt": "Control panel of a large precision cooling unit at the end of the row; a metal plate reads \"CRAC-2\"; the LCD shows \"SUPPLY 18.2C\" and \"RETURN 27.5C\".",
       "read": [
         "CRAC-2"
-      ]
+      ],
+      "room": "Data hall B"
     },
     {
       "id": "05-cable-work",
@@ -124,7 +128,8 @@
       "prompt": "A gloved hand holding a yellow single-mode fiber patch cable plugged into a dense patch panel; a white printed cable tag on the cable reads \"P24\" in large black text.",
       "read": [
         "P24"
-      ]
+      ],
+      "room": "Data hall C"
     },
     {
       "id": "06-core-switch",
@@ -133,7 +138,8 @@
       "prompt": "Front of a network core switch in a rack with many blinking amber and green port LEDs and neatly dressed blue cables; a large white label on the chassis reads \"SW-CORE-1\".",
       "read": [
         "SW-CORE-1"
-      ]
+      ],
+      "room": "Data hall A"
     },
     {
       "id": "07-pdu-a-fault",
@@ -146,7 +152,8 @@
         "FAULT"
       ],
       "expect": "alert",
-      "edit": "change only the small backlit LCD so it reads \"11.8 kW\" and \"PSU2 FAULT\", and make its status light red instead of green."
+      "edit": "change only the small backlit LCD so it reads \"11.8 kW\" and \"PSU2 FAULT\", and make its status light red instead of green.",
+      "room": "Data hall A"
     },
     {
       "id": "08-ticket-note",
@@ -155,7 +162,8 @@
       "prompt": "A yellow sticky note taped to a server rack door, handwritten in black marker: \"INC-4821 PSU2 swap pending\".",
       "read": [
         "INC-4821"
-      ]
+      ],
+      "room": "Data hall A"
     },
     {
       "id": "09-ups-1",
@@ -165,7 +173,8 @@
       "read": [
         "UPS-1",
         "ONLINE"
-      ]
+      ],
+      "room": "UPS room"
     },
     {
       "id": "10-pdu-a-fixed",
@@ -179,7 +188,8 @@
         "OK"
       ],
       "note": "Swapped PSU2 under INC-4821; PDU-A back to normal, load steady at 10.9 kW.",
-      "expect": "resolves alert"
+      "expect": "resolves alert",
+      "room": "Data hall A"
     }
   ],
   "issues": [
@@ -206,10 +216,11 @@
     }
   ],
   "site": {
-    "lat": 32.979,
-    "lon": -96.7061,
-    "radius_m": 60,
-    "label": "Richardson, TX colocation hall (synthetic placement)",
+    "scene": "nmc2",
+    "lat": 32.97888,
+    "lon": -96.706169,
+    "radius_m": 80,
+    "label": "Northstar Data Center, Richardson TX (real building footprint, generated interior)",
     "synthetic": true
   }
 }
