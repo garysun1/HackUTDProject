@@ -152,8 +152,49 @@ const perceiveJob = table(
   }
 );
 
+// #20: where a photo was taken (from event_json.location, contract v3.1). A separate table, not new
+// columns on `event`, because adding columns to a populated table is not an automatic migration.
+const eventLocation = table(
+  { name: 'event_location', public: true },
+  {
+    eventId: t.string().primaryKey(),
+    deviceId: t.string().index('btree'),
+    shiftId: t.string(),
+    tMicros: t.u64().index('btree'), // the event's server receive time, for time-ordered joins
+    lat: t.f64(),
+    lon: t.f64(),
+    accuracyM: t.f32(),
+    altM: t.option(t.f64()),
+    floor: t.option(t.i32()),
+    speedMps: t.option(t.f32()),
+    courseDeg: t.option(t.f32()),
+    fixT: t.string(), // when the fix was taken (phone clock, ISO)
+    ageMs: t.option(t.u32()),
+  }
+);
+
+// #20: the wearer's walking track, batched from the phone by ingest_track. Idempotent on (device, t).
+const trackPoint = table(
+  { name: 'track_point', public: true, indexes: [{ accessor: 'by_device_t', algorithm: 'btree', columns: ['deviceId', 'tMicros'] }] },
+  {
+    pointId: t.u64().primaryKey().autoInc(),
+    deviceId: t.string(),
+    shiftId: t.string().index('btree'),
+    tMicros: t.u64(), // phone clock of the fix, micros since epoch
+    t: t.string(),
+    kind: t.string(), // point | shift_start | shift_end
+    lat: t.f64(),
+    lon: t.f64(),
+    accuracyM: t.f32(),
+    altM: t.option(t.f64()),
+    floor: t.option(t.i32()),
+    speedMps: t.option(t.f32()),
+    courseDeg: t.option(t.f32()),
+  }
+);
+
 const spacetimedb = schema(
-  { event, photo, entity, edge, episode, handoff, alert, asset, wearer, perceiveJob },
+  { event, photo, entity, edge, episode, handoff, alert, asset, wearer, perceiveJob, eventLocation, trackPoint },
   {
     // #14: secrets live in the database's environment, set with
     //   spacetime publish wm-physical --env-only --server maincloud  (see module/README.md)
@@ -181,6 +222,30 @@ const IngestResult = t.object('IngestResult', {
   status: t.string(),
 });
 const Pong = t.object('Pong', { serverT: t.string(), tMicros: t.string() });
+const TrackResult = t.object('TrackResult', { accepted: t.u32(), duplicates: t.u32() });
+
+/** Contract v3.1 location object → event_location/track_point columns, or null when unusable. */
+function readFix(loc: any) {
+  if (!loc || typeof loc !== 'object') return null;
+  const lat = Number(loc.lat), lon = Number(loc.lon);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) return null;
+  const num = (v: any) => (typeof v === 'number' && Number.isFinite(v) ? v : undefined);
+  return {
+    lat,
+    lon,
+    accuracyM: num(loc.accuracy_m) ?? 0,
+    altM: num(loc.alt_m),
+    floor: typeof loc.floor === 'number' && Number.isFinite(loc.floor) ? Math.round(loc.floor) : undefined,
+    speedMps: num(loc.speed_mps),
+    courseDeg: num(loc.course_deg),
+    fixT: typeof loc.t === 'string' ? loc.t : '',
+    ageMs: num(loc.age_ms) !== undefined ? Math.max(0, Math.round(loc.age_ms)) : undefined,
+  };
+}
+function microsFromIso(s: string): bigint | null {
+  const ms = Date.parse(s);
+  return Number.isFinite(ms) ? BigInt(Math.round(ms)) * 1000n : null;
+}
 const SlackTestResult = t.object('SlackTestResult', { status: t.string() });
 
 const DEFAULT_VL_MODEL = 'nvidia/nemotron-3.5-super-vl-120b-a12b';
@@ -300,6 +365,16 @@ export const ingestPhoto = spacetimedb.procedure(
         mime: ev.photo && typeof ev.photo.mime === 'string' ? ev.photo.mime : 'image/jpeg',
         jpegB64: photoB64,
       });
+      const fix = readFix(ev.location);
+      if (fix) {
+        tx.db.eventLocation.insert({
+          eventId: ev.event_id,
+          deviceId: ev.device_id,
+          shiftId: typeof ev.shift_id === 'string' ? ev.shift_id : '',
+          tMicros: nowMicros,
+          ...fix,
+        });
+      }
       tx.db.perceiveJob.insert({
         scheduledId: 0n,
         scheduledAt: ScheduleAt.time(nowMicros),
@@ -309,6 +384,76 @@ export const ingestPhoto = spacetimedb.procedure(
     });
   }
 );
+
+// #20: the phone batches its shift track every 30 s: {device_id, shift_id, ingest_token, points[], marks[]}.
+// Idempotent on (device_id, t) so the phone can retry a batch until it gets a reply.
+export const ingestTrack = spacetimedb.procedure(
+  { trackJson: t.string() },
+  TrackResult,
+  (ctx, { trackJson }) => {
+    let tr: any;
+    try {
+      tr = JSON.parse(trackJson);
+    } catch {
+      throw new SenderError('invalid_track_json');
+    }
+    if (typeof tr.ingest_token !== 'string' || tr.ingest_token !== ctx.env.INGEST_TOKEN) {
+      throw new SenderError('invalid_token');
+    }
+    if (typeof tr.device_id !== 'string' || !tr.device_id) throw new SenderError('missing_device_id');
+    const shiftId = typeof tr.shift_id === 'string' ? tr.shift_id : '';
+    const points: any[] = Array.isArray(tr.points) ? tr.points : [];
+    const marks: any[] = Array.isArray(tr.marks) ? tr.marks : [];
+    if (points.length + marks.length > 1000) throw new SenderError('batch_too_large');
+
+    type Row = { tMicros: bigint; t: string; kind: string; fix: NonNullable<ReturnType<typeof readFix>> };
+    const rows: Row[] = [];
+    for (const p of points) {
+      const fix = readFix(p);
+      const tm = typeof p?.t === 'string' ? microsFromIso(p.t) : null;
+      if (fix && tm !== null) rows.push({ tMicros: tm, t: p.t, kind: 'point', fix });
+    }
+    for (const m of marks) {
+      const tm = typeof m?.t === 'string' ? microsFromIso(m.t) : null;
+      const kind = m?.kind === 'shift_start' || m?.kind === 'shift_end' ? m.kind : null;
+      if (tm === null || !kind) continue;
+      // a mark carries no fix of its own; borrow the nearest point's position in this batch, else 0/0 is refused
+      const near = rows.length ? rows.reduce((a, b) => (abs(b.tMicros - tm) < abs(a.tMicros - tm) ? b : a)) : null;
+      if (near) rows.push({ tMicros: tm, t: m.t, kind, fix: { ...near.fix, fixT: m.t } });
+    }
+
+    return ctx.withTx(tx => {
+      let accepted = 0, duplicates = 0;
+      for (const r of rows) {
+        const dup = [...tx.db.trackPoint.by_device_t.filter([tr.device_id, r.tMicros])].some(x => x.kind === r.kind);
+        if (dup) {
+          duplicates++;
+          continue;
+        }
+        tx.db.trackPoint.insert({
+          pointId: 0n,
+          deviceId: tr.device_id,
+          shiftId,
+          tMicros: r.tMicros,
+          t: r.t,
+          kind: r.kind,
+          lat: r.fix.lat,
+          lon: r.fix.lon,
+          accuracyM: r.fix.accuracyM,
+          altM: r.fix.altM,
+          floor: r.fix.floor,
+          speedMps: r.fix.speedMps,
+          courseDeg: r.fix.courseDeg,
+        });
+        accepted++;
+      }
+      return { accepted, duplicates };
+    });
+  }
+);
+function abs(x: bigint): bigint {
+  return x < 0n ? -x : x;
+}
 
 // Scheduled: one job per ingested photo. Network I/O happens outside transactions:
 // read → embed (Azure Vision) → perceive (Nemotron VL, Azure gpt-4o fallback) → write graph

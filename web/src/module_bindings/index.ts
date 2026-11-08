@@ -44,6 +44,7 @@ import UpsertWearerReducer from "./upsert_wearer_reducer";
 
 // Import all procedure arg schemas
 import * as IngestPhotoProcedure from "./ingest_photo_procedure";
+import * as IngestTrackProcedure from "./ingest_track_procedure";
 import * as PingProcedure from "./ping_procedure";
 import * as SlackTestProcedure from "./slack_test_procedure";
 
@@ -54,8 +55,10 @@ import EdgeRow from "./edge_table";
 import EntityRow from "./entity_table";
 import EpisodeRow from "./episode_table";
 import EventRow from "./event_table";
+import EventLocationRow from "./event_location_table";
 import HandoffRow from "./handoff_table";
 import PhotoRow from "./photo_table";
+import TrackPointRow from "./track_point_table";
 import WearerRow from "./wearer_table";
 
 /** Type-only namespace exports for generated type groups. */
@@ -149,6 +152,23 @@ const tablesSchema = __schema({
       { name: 'event_event_id_key', constraint: 'unique', columns: ['eventId'] },
     ],
   }, EventRow),
+  eventLocation: __table({
+    name: 'event_location',
+    indexes: [
+      { accessor: 'deviceId', name: 'event_location_device_id_idx_btree', algorithm: 'btree', columns: [
+        'deviceId',
+      ] },
+      { accessor: 'eventId', name: 'event_location_event_id_idx_btree', algorithm: 'btree', columns: [
+        'eventId',
+      ] },
+      { accessor: 'tMicros', name: 'event_location_t_micros_idx_btree', algorithm: 'btree', columns: [
+        'tMicros',
+      ] },
+    ],
+    constraints: [
+      { name: 'event_location_event_id_key', constraint: 'unique', columns: ['eventId'] },
+    ],
+  }, EventLocationRow),
   handoff: __table({
     name: 'handoff',
     indexes: [
@@ -171,6 +191,24 @@ const tablesSchema = __schema({
       { name: 'photo_event_id_key', constraint: 'unique', columns: ['eventId'] },
     ],
   }, PhotoRow),
+  trackPoint: __table({
+    name: 'track_point',
+    indexes: [
+      { accessor: 'by_device_t', name: 'track_point_device_id_t_micros_idx_btree', algorithm: 'btree', columns: [
+        'deviceId',
+        'tMicros',
+      ] },
+      { accessor: 'pointId', name: 'track_point_point_id_idx_btree', algorithm: 'btree', columns: [
+        'pointId',
+      ] },
+      { accessor: 'shiftId', name: 'track_point_shift_id_idx_btree', algorithm: 'btree', columns: [
+        'shiftId',
+      ] },
+    ],
+    constraints: [
+      { name: 'track_point_point_id_key', constraint: 'unique', columns: ['pointId'] },
+    ],
+  }, TrackPointRow),
   wearer: __table({
     name: 'wearer',
     indexes: [
@@ -198,6 +236,7 @@ const reducersSchema = __reducers(
 /** The schema information for all procedures in this module. This is defined the same way as the procedures would have been defined in the server. */
 const proceduresSchema = __procedures(
   __procedureSchema("ingest_photo", IngestPhotoProcedure.params, IngestPhotoProcedure.returnType),
+  __procedureSchema("ingest_track", IngestTrackProcedure.params, IngestTrackProcedure.returnType),
   __procedureSchema("ping", PingProcedure.params, PingProcedure.returnType),
   __procedureSchema("slack_test", SlackTestProcedure.params, SlackTestProcedure.returnType),
 );

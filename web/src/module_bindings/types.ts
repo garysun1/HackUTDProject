@@ -88,6 +88,23 @@ export const Event = __t.object("Event", {
 });
 export type Event = __Infer<typeof Event>;
 
+export const EventLocation = __t.object("EventLocation", {
+  eventId: __t.string(),
+  deviceId: __t.string(),
+  shiftId: __t.string(),
+  tMicros: __t.u64(),
+  lat: __t.f64(),
+  lon: __t.f64(),
+  accuracyM: __t.f32(),
+  altM: __t.option(__t.f64()),
+  floor: __t.option(__t.i32()),
+  speedMps: __t.option(__t.f32()),
+  courseDeg: __t.option(__t.f32()),
+  fixT: __t.string(),
+  ageMs: __t.option(__t.u32()),
+});
+export type EventLocation = __Infer<typeof EventLocation>;
+
 export const Handoff = __t.object("Handoff", {
   handoffId: __t.u64(),
   sinceMicros: __t.u64(),
@@ -128,6 +145,29 @@ export const SlackTestResult = __t.object("SlackTestResult", {
   status: __t.string(),
 });
 export type SlackTestResult = __Infer<typeof SlackTestResult>;
+
+export const TrackPoint = __t.object("TrackPoint", {
+  pointId: __t.u64(),
+  deviceId: __t.string(),
+  shiftId: __t.string(),
+  tMicros: __t.u64(),
+  t: __t.string(),
+  kind: __t.string(),
+  lat: __t.f64(),
+  lon: __t.f64(),
+  accuracyM: __t.f32(),
+  altM: __t.option(__t.f64()),
+  floor: __t.option(__t.i32()),
+  speedMps: __t.option(__t.f32()),
+  courseDeg: __t.option(__t.f32()),
+});
+export type TrackPoint = __Infer<typeof TrackPoint>;
+
+export const TrackResult = __t.object("TrackResult", {
+  accepted: __t.u32(),
+  duplicates: __t.u32(),
+});
+export type TrackResult = __Infer<typeof TrackResult>;
 
 export const Wearer = __t.object("Wearer", {
   deviceId: __t.string(),
