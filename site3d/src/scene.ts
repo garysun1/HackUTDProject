@@ -246,7 +246,7 @@ export class SiteScene {
       w.geom.setPositions(spec.trail); w.geom.setColors(cols);
     }
   }
-  hideWearer(id: string) { const w = this.wearers.get(id); if (!w) return; for (const o of [w.head, w.ring, w.beam, w.light, w.label]) o.visible = false; }
+  hideWearer(id: string) { const w = this.wearers.get(id); if (!w) return; for (const o of [w.head, w.ring, w.beam, w.light, w.label, w.line]) o.visible = false; }
 
   // ---------- pins ----------
   setPins(list: PinSpec[]) {

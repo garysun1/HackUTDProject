@@ -117,6 +117,7 @@ h1, h2, h3 { margin: 0; font-weight: 600; letter-spacing: -0.005em; font-size: 1
 .feed { position: relative; } .feed::before { content: ""; position: absolute; left: 9px; top: 6px; bottom: 6px; width: 2px; background: var(--line); }
 .ev { position: relative; display: grid; grid-template-columns: 20px 56px 1fr; gap: 8px; align-items: start; padding: 5px 0; animation: arrive .35s ease-out; cursor: pointer; border-radius: var(--r); }
 .ev:hover { background: var(--hover); } .ev.sel { background: var(--panel); }
+.ev.cur { background: var(--panel); box-shadow: inset 3px 0 0 var(--c); }
 @keyframes arrive { from { opacity: 0; transform: translateX(8px); } }
 .ev .k { width: 20px; height: 20px; display: grid; place-items: center; } .ev .k i { width: 10px; height: 10px; border-radius: 50%; background: var(--c); border: 2px solid var(--ground); box-shadow: 0 0 0 1px var(--line); }
 .ev.alert .k i { background: var(--critical); animation: burn 1.6s infinite; } .ev.change .k i { background: var(--warning); border-radius: 2px; }
@@ -157,7 +158,7 @@ h1, h2, h3 { margin: 0; font-weight: 600; letter-spacing: -0.005em; font-size: 1
 .pin b { position: absolute; left: 0; right: 0; bottom: 0; font: 9.5px/1 var(--mono); background: var(--glass-bg); color: var(--ink-2); text-align: center; padding: 2px 0; font-weight: 500; }
 .pin:hover, .pin.sel { transform: translate(0, -24px) scale(1.25); z-index: 5; }
 .pin.alert { border-color: var(--critical); animation: burn 1.6s infinite; }
-.pin.arrive { animation: drop .5s ease-out; } @keyframes drop { from { transform: translate(0, -60px); opacity: 0; } }
+.pin.arrive { animation: pop .55s cubic-bezier(.2, 1.4, .4, 1); } @keyframes pop { from { transform: translate(0, -24px) scale(.1); opacity: 0; } 60% { transform: translate(0, -24px) scale(1.35); opacity: 1; } to { transform: translate(0, -24px) scale(1); } }
 #tip { position: absolute; z-index: 20; max-width: 280px; background: var(--ground); border: 1px solid var(--line); border-radius: var(--r); box-shadow: var(--shadow); padding: 8px 10px; pointer-events: none; font-size: 12.5px; }
 #tip .t { font-family: var(--mono); font-size: 11px; color: var(--ink-4); } #tip p { margin: 2px 0 0; }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }

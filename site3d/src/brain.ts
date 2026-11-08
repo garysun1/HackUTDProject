@@ -32,6 +32,12 @@ export function shifts(): Shift[] {
   out.sort((a, b) => a.startMs - b.startMs);
   shiftCache = { v: state.version, db: state.db, shifts: out }; return out;
 }
+/** A photo belongs to the session when a tracked shift of its wearer covers it (or its fix names the shift). */
+export function inSession(e: Ev, all: Shift[] = shifts()): boolean {
+  const loc = state.locations.get(e.eventId);
+  if (loc && all.some(s => s.shiftId === loc.shiftId && s.deviceId === loc.deviceId)) return true;
+  return all.some(s => s.deviceId === e.deviceId && e.tMs >= s.startMs - 120_000 && e.tMs <= shiftEnd(s) + 120_000);
+}
 export function shiftLive(s: Shift, clock: number) { return clock >= s.startMs && (s.endMs !== null ? clock <= s.endMs + 60_000 : clock <= s.lastMs + TEN_MIN); }
 export function shiftEnd(s: Shift) { return s.endMs ?? s.lastMs; }
 export function resolvedAt(a: Alert) { return a.acked ? (a.ackedMs ?? a.tMs) : Infinity; }
@@ -61,7 +67,7 @@ export function snapshot(clock: number): Snapshot {
   const latestIdle = active.length ? null : (past.length ? past[past.length - 1] : null);
   const open = state.alerts.filter(a => openAt(a, clock)).sort((a, b) => b.tMs - a.tMs);
   const resolvedRecently = state.alerts.filter(a => a.tMs <= clock && resolvedAt(a) <= clock).sort((a, b) => resolvedAt(b) - resolvedAt(a)).slice(0, 3);
-  const events = [...state.events.values()].filter(e => e.tMs <= clock).sort((a, b) => b.tMs - a.tMs).slice(0, 60);
+  const events = [...state.events.values()].filter(e => e.tMs <= clock && inSession(e, all)).sort((a, b) => a.tMs - b.tMs).slice(-200);
   // the most recent shift transition at or before the clock
   let handoff: HandoffCard | null = null;
   for (let i = all.length - 1; i >= 0; i--) {
@@ -79,7 +85,8 @@ export function snapshot(clock: number): Snapshot {
 
 // ---------- render ----------
 const esc = (s: string) => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!));
-const seen = new Set<string>(); let lastSig = '';
+const seen = new Set<string>(); let lastSig = ''; let lastCur = ''; let userScrollAt = 0;
+function watchScroll(el: HTMLElement) { if ((el as any).__watched) return; (el as any).__watched = true; for (const ev of ['wheel', 'touchmove', 'pointerdown']) el.addEventListener(ev, () => { userScrollAt = performance.now(); }, { passive: true }); }
 export type BrainCtx = { clock: number; selected: string | null; locate: (lat: number, lon: number) => string | undefined; onSelect: (id: string) => void; onJump: (ms: number) => void };
 
 export function renderBrain(el: HTMLElement, ctx: BrainCtx): Snapshot {
@@ -112,6 +119,7 @@ export function renderBrain(el: HTMLElement, ctx: BrainCtx): Snapshot {
       h.said.map(s => `<div class="said">“${esc(s)}”</div>`).join('') + (h.text ? `<pre>${esc(h.text.slice(0, 700))}${h.text.length > 700 ? '…' : ''}</pre>` : '') + `</div></section>`);
   }
   // what happened
+  let curId = '';
   const evHtml = (e: Ev) => {
     const open = alertsFor(e.eventId).some(a => openAt(a, ctx.clock)); const chg = changesTo(e.eventId);
     const url = state.photos.get(e.eventId); if (!url) loadPhoto(e.eventId);
@@ -119,12 +127,17 @@ export function renderBrain(el: HTMLElement, ctx: BrainCtx): Snapshot {
     const place = placeOf(e.eventId) || e.locationGuess;
     const fresh = !seen.has(e.eventId); seen.add(e.eventId);
     const pending = e.status !== 'in_graph' && !e.summary;
-    return `<div class="ev${open ? ' alert' : ''}${chg.length ? ' change' : ''}${ctx.selected === e.eventId ? ' sel' : ''}${fresh ? ' arrive' : ''}" data-ev="${e.eventId}" style="--c:${wearerColor(e.deviceId)}"><span class="k"><i></i></span>${url ? `<img class="th" src="${url}" alt="">` : '<span class="th"></span>'}<div class="tx"><div class="t">${fmtTime(e.tMs)} · ${esc(wearerName(e.deviceId))}${e.source === 'shutter_button' ? ' · shutter' : ''}</div>` +
+    const cur = e.eventId === curId;
+    return `<div class="ev${open ? ' alert' : ''}${chg.length ? ' change' : ''}${ctx.selected === e.eventId ? ' sel' : ''}${fresh ? ' arrive' : ''}${cur ? ' cur' : ''}" data-ev="${e.eventId}" style="--c:${wearerColor(e.deviceId)}"><span class="k"><i></i></span>${url ? `<img class="th" src="${url}" alt="">` : '<span class="th"></span>'}<div class="tx"><div class="t">${fmtTime(e.tMs)} · ${esc(wearerName(e.deviceId))}${e.source === 'shutter_button' ? ' · shutter' : ''}</div>` +
       (isAck ? `<p class="note">Briefing confirmed. ${esc(e.note!.replace(/^briefing ack:\s*/i, ''))}</p>` : `<p>${pending ? '<span class="place">Reading the photo…</span>' : esc(e.summary || e.scene || '')}</p>`) +
       (place && !isAck ? `<div class="place">${esc(place)}</div>` : '') + (e.note && !isAck ? `<p class="note">“${esc(e.note)}”</p>` : '') + chg.map(c => `<p class="chg">Changed: ${esc(c.text)}</p>`).join('') + `</div></div>`;
   };
+  curId = snap.events.length ? snap.events[snap.events.length - 1].eventId : '';
   parts.push(`<section class="sec"><h3>What happened <span class="n">${snap.events.length}</span></h3><div class="feed">${snap.events.length ? snap.events.map(evHtml).join('') : '<div class="empty">No photos yet at this time.</div>'}</div></section>`);
-  el.innerHTML = parts.join('');
+  watchScroll(el);
+  const keepTop = el.scrollTop; el.innerHTML = parts.join(''); el.scrollTop = keepTop;
+  // the feed follows the replay: when the dot reaches a photo, that photo slides into view
+  if (curId && curId !== lastCur) { lastCur = curId; if (performance.now() - userScrollAt > 6000) el.querySelector('.ev.cur')?.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
   el.querySelectorAll<HTMLElement>('[data-ev]').forEach(n => n.addEventListener('click', () => ctx.onSelect(n.dataset.ev!)));
   el.querySelectorAll<HTMLElement>('[data-jump]').forEach(n => n.addEventListener('click', () => ctx.onJump(Number(n.dataset.jump))));
   return snap;
