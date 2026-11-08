@@ -31,9 +31,9 @@ hand against the Photos library's timestamps and GPS. The workspace subtitle and
 **Before the talk (T-60).** Rebuild the overlay with the latest photos and the demo slot as the badge
 threshold: set `badgeAfter` in `manifest.json` to ten minutes before the slot, run
 `node demo/weekend/src/build.mjs`, then `cd web && npm run build`, commit, push to `main`; Vercel
-redeploys reflection.vercel.app. (Without the rebuild everything still works; photos taken earlier
+redeploys reflection-console.vercel.app. (Without the rebuild everything still works; photos taken earlier
 that day would just get the badge too.) On the projector laptop open
-`https://reflection.vercel.app/?ws=weekend` once (the choice is remembered in that browser;
+`https://reflection-console.vercel.app/?ws=weekend` once (the choice is remembered in that browser;
 "Follow server default" in the switcher undoes it), press **Map**, confirm the campus loads and
 Replay at 3600× runs through the weekend. Switch back to the data center workspace for beat 1.
 
