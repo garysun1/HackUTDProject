@@ -11,19 +11,23 @@ const wearersEl = document.getElementById('wearers')!;
 windowSel.addEventListener('change', () => { state.windowMin = Number(windowSel.value === 'all' ? 0 : windowSel.value); notify(); });
 
 function renderChips() {
-  const ids = [...new Set([...state.events.values()].map(e => e.deviceId))];
+  // one chip per wearer name; a wearer with two devices (phone + glasses) is still one person
+  const byName = new Map<string, string[]>();
+  for (const id of new Set([...state.events.values()].map(e => e.deviceId))) { const n = wearerName(id); (byName.get(n) ?? byName.set(n, []).get(n)!).push(id); }
   const focused = (document.activeElement as HTMLElement | null)?.dataset?.id;
-  for (const id of ids) {
-    let b = wearersEl.querySelector(`[data-id="${CSS.escape(id)}"]`) as HTMLButtonElement | null;
-    if (!b) { b = document.createElement('button'); b.className = 'chip'; b.type = 'button'; b.dataset.id = id; wearersEl.appendChild(b); }
-    b.setAttribute('aria-pressed', String(!state.hiddenWearers.has(id)));
+  for (const [name, ids] of byName) {
+    const key = ids.join(',');
+    let b = wearersEl.querySelector(`[data-id="${CSS.escape(key)}"]`) as HTMLButtonElement | null;
+    if (!b) { b = document.createElement('button'); b.className = 'chip'; b.type = 'button'; b.dataset.id = key; wearersEl.appendChild(b); }
+    b.setAttribute('aria-pressed', String(!ids.every(id => state.hiddenWearers.has(id))));
     const cutoff = state.windowMin ? BigInt(Date.now() - state.windowMin * 60_000) * 1000n : 0n;
-    const n = [...state.events.values()].filter(e => e.deviceId === id && e.tMicros >= cutoff).length;
-    b.innerHTML = `<i style="background:${wearerColor(id)}"></i>${wearerName(id)}<span class="n">${n}</span>`;
+    const n = [...state.events.values()].filter(e => ids.includes(e.deviceId) && e.tMicros >= cutoff).length;
+    b.innerHTML = `<i style="background:${wearerColor(ids[0])}"></i>${name}<span class="n">${n}</span>`;
   }
+  for (const b of [...wearersEl.children] as HTMLElement[]) if (![...byName.values()].some(ids => ids.join(',') === b.dataset.id)) b.remove();
   if (focused) (wearersEl.querySelector(`[data-id="${CSS.escape(focused)}"]`) as HTMLElement | null)?.focus();
 }
-wearersEl.addEventListener('click', e => { const b = (e.target as HTMLElement).closest('.chip') as HTMLElement | null; if (!b) return; const id = b.dataset.id!; if (state.hiddenWearers.has(id)) state.hiddenWearers.delete(id); else state.hiddenWearers.add(id); notify(); });
+wearersEl.addEventListener('click', e => { const b = (e.target as HTMLElement).closest('.chip') as HTMLElement | null; if (!b) return; const ids = b.dataset.id!.split(','); const hidden = ids.every(id => state.hiddenWearers.has(id)); for (const id of ids) { if (hidden) state.hiddenWearers.delete(id); else state.hiddenWearers.add(id); } notify(); });
 
 onChange(() => { renderChips(); renderTimeline(); renderRail(); renderFloor(); }); // detail panel first: it changes the canvas width
 
