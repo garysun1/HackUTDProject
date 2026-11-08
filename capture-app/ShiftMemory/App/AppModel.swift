@@ -106,20 +106,29 @@ final class AppModel {
     tasks.append(Task { [weak self] in
       for await _ in NotificationCenter.default.notifications(named: UIApplication.didEnterBackgroundNotification) {
         guard let self else { return }
+        glassesLog("app: didEnterBackground (phase=\(self.glasses.phase), keepSessionInBackground=\(self.config.keepSessionInBackground))")
         if !self.config.keepSessionInBackground { self.glasses.endShift(reason: "Ended when the app went to the background.") }
       }
     })
     tasks.append(Task { [weak self] in
       for await _ in NotificationCenter.default.notifications(named: UIApplication.willEnterForegroundNotification) {
         guard let self else { return }
+        glassesLog("app: willEnterForeground (phase=\(self.glasses.phase))")
         await self.queue.kick()
         await self.ping()
         if self.config.cameraRollImportEnabled { await self.importer.scanNow() }
       }
     })
 
+    syncShutterSettings()
     await ping()
     if config.cameraRollImportEnabled { await importer.setEnabled(true) }
+  }
+
+  /// Shutter-initiated captures use the same Settings as the Capture button.
+  func syncShutterSettings() {
+    glasses.shutterResolution = PhotoResolution(rawValue: config.captureResolution) ?? .full
+    glasses.shutterQuality = PhotoQuality(rawValue: config.captureQuality) ?? .high
   }
 
   // MARK: - Intents
@@ -128,6 +137,7 @@ final class AppModel {
   func capture() {
     let resolution = PhotoResolution(rawValue: config.captureResolution) ?? .full
     let quality = PhotoQuality(rawValue: config.captureQuality) ?? .high
+    syncShutterSettings()
     if let id = glasses.capture(resolution: resolution, quality: quality) {
       _ = diagnostics.begin(id: id, source: .sdkCapture)
       diagnostics.update(id: id) { m in

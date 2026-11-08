@@ -10,6 +10,7 @@
 		5A1F7E000000000000000101 /* MWDATCore in Frameworks */ = {isa = PBXBuildFile; productRef = 5A1F7E000000000000000201 /* MWDATCore */; };
 		5A1F7E000000000000000102 /* MWDATCamera in Frameworks */ = {isa = PBXBuildFile; productRef = 5A1F7E000000000000000202 /* MWDATCamera */; };
 		5A1F7E000000000000000103 /* MWDATMockDevice in Frameworks */ = {isa = PBXBuildFile; productRef = 5A1F7E000000000000000203 /* MWDATMockDevice */; };
+		5A1F7E000000000000000107 /* MWDATInputs in Frameworks */ = {isa = PBXBuildFile; productRef = 5A1F7E000000000000000207 /* MWDATInputs */; };
 		5A1F7E000000000000000104 /* MWDATCore in Frameworks */ = {isa = PBXBuildFile; productRef = 5A1F7E000000000000000204 /* MWDATCore */; };
 		5A1F7E000000000000000105 /* MWDATCamera in Frameworks */ = {isa = PBXBuildFile; productRef = 5A1F7E000000000000000205 /* MWDATCamera */; };
 		5A1F7E000000000000000106 /* MWDATMockDevice in Frameworks */ = {isa = PBXBuildFile; productRef = 5A1F7E000000000000000206 /* MWDATMockDevice */; };
@@ -66,6 +67,7 @@
 				5A1F7E000000000000000101 /* MWDATCore in Frameworks */,
 				5A1F7E000000000000000102 /* MWDATCamera in Frameworks */,
 				5A1F7E000000000000000103 /* MWDATMockDevice in Frameworks */,
+				5A1F7E000000000000000107 /* MWDATInputs in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -125,6 +127,7 @@
 				5A1F7E000000000000000201 /* MWDATCore */,
 				5A1F7E000000000000000202 /* MWDATCamera */,
 				5A1F7E000000000000000203 /* MWDATMockDevice */,
+				5A1F7E000000000000000207 /* MWDATInputs */,
 			);
 			productName = ShiftMemory;
 			productReference = 5A1F7E000000000000000301 /* ShiftMemory.app */;
@@ -486,6 +489,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 5A1F7E000000000000000C01 /* XCRemoteSwiftPackageReference "meta-wearables-dat-ios" */;
 			productName = MWDATMockDevice;
+		};
+		5A1F7E000000000000000207 /* MWDATInputs */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 5A1F7E000000000000000C01 /* XCRemoteSwiftPackageReference "meta-wearables-dat-ios" */;
+			productName = MWDATInputs;
 		};
 		5A1F7E000000000000000204 /* MWDATCore */ = {
 			isa = XCSwiftPackageProductDependency;

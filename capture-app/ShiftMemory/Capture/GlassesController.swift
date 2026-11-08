@@ -6,8 +6,14 @@
 // registration with the Meta AI app, the camera permission, one DeviceSession with a Camera whose
 // standalone Photo child is started, and the two ways a photo arrives on that child's listener:
 // the wearer pressing the shutter button on the glasses, or this app calling capturePhoto. Both
-// land in `onPhoto`; the controller tags which one it was by whether an app capture was in flight,
-// since the toolkit's publisher carries no request id (keep one capture in flight at a time).
+// land in `onPhoto`; the controller tags which one it was by what started the capture, since the
+// toolkit's publisher carries no request id (keep one capture in flight at a time).
+//
+// On Edward's Ray-Ban Meta (firmware of 2026-11-07) a shutter press under a live session delivered
+// nothing on `photoDataPublisher` by itself, contrary to the camera-capture guide. Meta's own DAT
+// 1.0.1 sample (BirdSpotter) instead attaches the experimental `Inputs` capability, receives the
+// press as `InputEvent.capture(.shortPress, source: .captureButton)` and calls `capturePhoto`
+// itself; this controller does the same (`shutterPressed`), and still accepts unsolicited photos.
 //
 // API names are taken from the SDK's public swiftinterface (MWDATCore, MWDATCamera 1.0.1), never
 // guessed. Session and photo lifecycles are observed, not assumed; the device decides transitions.
@@ -16,6 +22,7 @@
 import Foundation
 import MWDATCamera
 import MWDATCore
+import MWDATInputs
 import Observation
 import UIKit
 
@@ -127,9 +134,21 @@ final class GlassesController {
   private var cameraHasStarted = false
   /// The in-flight revival (see `revive(reason:)`); one at a time.
   private var revival: Task<Void, Never>?
+  /// The glasses' buttons (experimental `MWDATInputs`), attached once Photo is up.
+  private var inputs: Inputs?
+  private var inputsDrain: Task<Void, Never>?
+  private var inputsHasActivated = false
+  private var inputsRevival: Task<Void, Never>?
+  /// A short press waits a beat for the double-press the SDK sends after it (known issue), then fires.
+  private var shutterDebounce: Task<Void, Never>?
+  /// Resolution/quality for shutter-initiated captures; the composition root mirrors Settings here.
+  var shutterResolution: PhotoResolution = .medium
+  var shutterQuality: PhotoQuality = .medium
 
   private struct PendingCapture {
     let id: String
+    /// False for a capture this controller fired on the wearer's shutter press.
+    let isAppRequested: Bool
     let requestedAt: Date
     let resolution: PhotoResolution
     let quality: PhotoQuality
@@ -423,6 +442,117 @@ final class GlassesController {
     retriedSetupOnce = false
     onEvent?(.photoStartSucceeded(ms: Int(Date().timeIntervalSince(t0) * 1000)))
     phase = .ready
+    attachInputsIfNeeded()
+  }
+
+  // MARK: - Shutter button (Inputs capability)
+
+  /// Attach the buttons once per session. Sources follow BirdSpotter: the temple touchpad and both
+  /// buttons, not the Neural Band. Asked for `captureButton` alone the capability has been seen to
+  /// report `active` and deliver nothing, so the set stays wide and other events are logged.
+  private func attachInputsIfNeeded() {
+    guard inputs == nil, let session else { return }
+    let configuration = InputsConfiguration(sources: [.captouch, .captureButton, .actionButton], consumeBack: true)
+    let attached: Inputs?
+    do {
+      attached = try session.addInputs(configuration: configuration)
+    } catch {
+      glassesLog("inputs: addInputs threw \(String(reflecting: error)) — \(error.description); shutter presses will not reach the app")
+      return
+    }
+    guard let attached else {
+      glassesLog("inputs: this pair reports no inputs (addInputs returned nil)")
+      return
+    }
+    inputs = attached
+    inputsHasActivated = false
+    glassesLog("inputs: attached; state=\(attached.state)")
+    inputsDrain = Task { [weak self] in
+      for await event in attached.events {
+        guard let self, self.inputs === attached else { return }
+        self.inputEvent(event)
+      }
+      glassesLog("inputs: event stream ended")
+    }
+    attached.statePublisher.listen { [weak self] state in
+      glassesLog("inputs state -> \(state)")
+      Task { @MainActor in
+        guard let self, self.inputs === attached else { return }
+        switch state {
+        case .active: self.inputsHasActivated = true
+        case .inactive:
+          // The state the capability is born in is `inactive` too; only one that was listening and
+          // went quiet (a still transfer takes it down, per BirdSpotter) is attached again.
+          guard self.inputsHasActivated else { return }
+          self.reviveInputs()
+        default: break
+        }
+      }
+    }.store(in: sessionTokens)
+    attached.errorPublisher.listen { error in
+      glassesLog("inputs error: \(String(reflecting: error)) — \(error.description)")
+    }.store(in: sessionTokens)
+  }
+
+  /// `Inputs` has no start of its own: a dead one is removed and a fresh one attached.
+  private func reviveInputs() {
+    guard inputsRevival == nil, inputs != nil, session != nil else { return }
+    inputsRevival = Task { [weak self] in
+      try? await Task.sleep(for: .milliseconds(750))
+      guard let self, !Task.isCancelled, self.phase.isLive, let session = self.session else { self?.inputsRevival = nil; return }
+      glassesLog("inputs: went quiet; attaching again")
+      self.detachInputs(from: session)
+      self.attachInputsIfNeeded()
+      self.inputsRevival = nil
+    }
+  }
+
+  private func detachInputs(from session: DeviceSession) {
+    inputsDrain?.cancel()
+    inputsDrain = nil
+    if inputs != nil {
+      do { try session.removeInputs() } catch { glassesLog("inputs: removeInputs threw \(error.description)") }
+    }
+    inputs = nil
+    inputsHasActivated = false
+  }
+
+  private func inputEvent(_ event: InputEvent) {
+    switch event {
+    case let .capture(press, source, _):
+      glassesLog("input: capture \(press) from \(source) (phase=\(phase) pending=\(pending != nil))")
+      guard source == .captureButton else { return }
+      switch press {
+      case .shortPress:
+        // Known issue: a double press arrives as shortPress then doublePress. Wait a beat.
+        shutterDebounce?.cancel()
+        shutterDebounce = Task { [weak self] in
+          try? await Task.sleep(for: .milliseconds(350))
+          guard let self, !Task.isCancelled else { return }
+          self.shutterDebounce = nil
+          self.shutterPressed()
+        }
+      case .doublePress:
+        shutterDebounce?.cancel()
+        shutterDebounce = nil
+        shutterPressed()   // one photo for a double press too; the wearer meant "capture"
+      case .hold:
+        break   // video on the glasses; not ours
+      @unknown default:
+        break
+      }
+    default:
+      glassesLog("input: ignored \(event)")
+    }
+  }
+
+  /// The wearer pressed the shutter: take the photo through our Photo child, tagged as theirs.
+  func shutterPressed() {
+    guard phase == .ready, pending == nil, let photo, photoState == .started else {
+      glassesLog("shutter press ignored: phase=\(phase) pending=\(pending != nil) photoState=\(photoState.map { "\($0)" } ?? "nil")")
+      return
+    }
+    _ = startCapture(resolution: shutterResolution, quality: shutterQuality, appRequested: false, photo: photo)
   }
 
   /// Stop the camera (cascades to Photo) and the session. Safe to call at any time.
@@ -431,6 +561,11 @@ final class GlassesController {
     pending = nil
     revival?.cancel()
     revival = nil
+    inputsRevival?.cancel()
+    inputsRevival = nil
+    shutterDebounce?.cancel()
+    shutterDebounce = nil
+    if let session { detachInputs(from: session) }
     camera?.stop()
     session?.stop()
     camera = nil
@@ -459,8 +594,12 @@ final class GlassesController {
       return nil
     }
     lastError = nil
+    return startCapture(resolution: resolution, quality: quality, appRequested: true, photo: photo)
+  }
+
+  private func startCapture(resolution: PhotoResolution, quality: PhotoQuality, appRequested: Bool, photo: Photo) -> String {
     let id = UUID().uuidString.lowercased()
-    var p = PendingCapture(id: id, requestedAt: Date(), resolution: resolution, quality: quality)
+    var p = PendingCapture(id: id, isAppRequested: appRequested, requestedAt: Date(), resolution: resolution, quality: quality)
     // The toolkit fails a capture silent for 30 s; give it a little longer before we give up. A
     // full/high photo can take longer than that over Bluetooth (~45 s observed on 016N), so while
     // transfer progress keeps arriving we keep waiting, and give up after 20 s without progress.
@@ -484,6 +623,7 @@ final class GlassesController {
     phase = .capturing
     transferFraction = nil
     transferBytes = nil
+    glassesLog("capturePhoto(\(resolution), \(quality)) \(appRequested ? "app" : "shutter") id=\(id)")
     photo.capturePhoto(resolution: resolution, quality: quality)
     return id
   }
@@ -653,8 +793,12 @@ final class GlassesController {
   }
 
   private func transferProgressed(_ progress: PhotoTransferProgress) {
+    let previous = transferFraction ?? -1
     transferFraction = progress.fraction
     transferBytes = (progress.bytesReceived, progress.totalBytes)
+    if previous < 0 || Int(previous * 4) != Int(progress.fraction * 4) || progress.fraction >= 1 {
+      glassesLog("transfer \(progress.bytesReceived)/\(progress.totalBytes) (\(Int(progress.fraction * 100))%) pending=\(pending?.id ?? "none")")
+    }
     if pending != nil {
       let now = Date()
       if pending?.firstProgressAt == nil { pending?.firstProgressAt = now }
@@ -675,13 +819,14 @@ final class GlassesController {
     transferFraction = nil
     transferBytes = nil
     if phase == .capturing { phase = .ready }
+    glassesLog("photo arrived: \(capture.imageData.count) bytes, metadata \(capture.metadata?.count ?? 0) B, appState=\(appState), pending=\(p.map { "\($0.id) \($0.isAppRequested ? "app" : "shutter") after \(Int(receivedAt.timeIntervalSince($0.requestedAt) * 1000)) ms" } ?? "none (unsolicited)")")
     let photo = GlassesPhoto(
       data: capture.imageData,
       metadata: capture.metadata,
       deliveredAt: capture.timestamp,
       receivedAt: receivedAt,
       appState: appState,
-      isAppRequested: p != nil,
+      isAppRequested: p?.isAppRequested ?? false,
       captureId: p?.id,
       requestedResolution: p?.resolution.rawValue,
       requestedQuality: p?.quality.rawValue,
