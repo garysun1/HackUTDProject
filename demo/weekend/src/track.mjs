@@ -21,7 +21,7 @@ const WALK_SPEED = 1.35; // m/s nominal
 const MAX_SPEED = 2.2; // m/s when late
 const WANDER_SPEED = 1.0; // m/s for coffee/bathroom loops
 const SNAP_M = 60; // snap-to-node radius
-const SAME_BUILDING_M = 60; // both ends within this = indoor walk
+const SAME_BUILDING_M = 140; // both indoor ends within this = a walk inside one building (ECSW is about 120 m long)
 const EMIT_DIST_M = 5;
 const EMIT_SECS = 30;
 const WALKABLE = new Set([
@@ -324,8 +324,12 @@ function main() {
       arrival = next.tSec;
       continue;
     }
-    const { line, len } = route(graph, wp, next, routeCache);
+    // Two indoor points in the same building: walk straight between them. OSM has no indoor
+    // corridors, so routing would snap both ends to footways outside and zig-zag around the block.
     const sameBuilding = wp.indoor && next.indoor && haversine(wp.lat, wp.lon, next.lat, next.lon) <= SAME_BUILDING_M;
+    const { line, len } = sameBuilding
+      ? { line: [{ lat: wp.lat, lon: wp.lon }, { lat: next.lat, lon: next.lon }], len: haversine(wp.lat, wp.lon, next.lat, next.lon) }
+      : route(graph, wp, next, routeCache);
 
     // Timing: leave at the end of the dwell, or last-minute if that would make us late.
     const base = WALK_SPEED * uni(rng, 0.95, 1.05);
