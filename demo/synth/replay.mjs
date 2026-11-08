@@ -6,6 +6,7 @@
 //   INGEST_TOKEN=... ADMIN_TOKEN=... node demo/synth/replay.mjs <scenario-id> [--db wm-nmc2] [--gap 10] [--no-seed] [--no-location] [--reset] [--dry out.json]
 //
 // SPACETIME_HOST defaults to Maincloud. ADMIN_TOKEN defaults to INGEST_TOKEN.
+// Each photo is sent once the previous one has been perceived, then --gap seconds later.
 // Every event is marked synthetic: event_id "synth-<scenario>-<shot>", device_id
 // "synth-<scenario>-<wearer>", source "manual_upload". Re-running is safe: ingest_photo is
 // idempotent on event_id. Prefer a separate database for synthetic data so it never mixes
@@ -184,6 +185,16 @@ for (const [i, shot] of shots.entries()) {
   const r = await call('ingest_photo', [JSON.stringify(event), b64]);
   console.log(`${String(i + 1).padStart(2)}/${shots.length} ${shot.id} @ ${clientT.slice(11, 16)}${shot.room ? ` in ${shot.room}` : ''} -> ${r}`);
   if (site) await sendTrack(shot.t, i === shots.length - 1);
+  // wait until this photo is perceived before sending the next: the alert and fix rules compare
+  // each photo with the ones before it, and a slow model call (a fallback after a timeout) must
+  // not let a later photo be perceived first
+  if (!dry) {
+    for (let k = 0; k < 60; k++) {
+      const st = (await sql(`SELECT status FROM event WHERE event_id = '${event.event_id}'`))[0]?.[0];
+      if (st && st !== 'accepted') break;
+      await new Promise(res => setTimeout(res, 2000));
+    }
+  }
   if (i < shots.length - 1 && !dry) await new Promise(res => setTimeout(res, gapS * 1000));
 }
 if (site) await sendTrack(Infinity, true);
