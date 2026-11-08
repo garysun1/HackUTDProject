@@ -172,6 +172,7 @@ type OnState = (s: 'connecting' | 'live' | 'error', msg?: string) => void;
 let generation = 0; let dataConn: any = null;
 function resetState() {
   state.events.clear(); state.entities.clear(); state.edges = []; state.episodes.clear(); state.handoffs = []; state.alerts.clear();
+  wearerIndex.clear(); // colours are per workspace: its first wearer is always blue, whatever was visited before
   state.wearers.clear(); state.assets.clear(); state.photos.clear(); state.locations.clear(); state.track.clear(); state.questions.clear(); state.issues.clear(); state.resolutions.clear();
   state.selected = null; state.fresh.clear(); state.assetFilter = null; state.hiddenWearers.clear();
   state.overlay = null; state.staticPhotos.clear(); state.badges.clear(); photoRetry.clear();
