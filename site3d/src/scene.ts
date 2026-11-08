@@ -19,8 +19,21 @@ export type SiteData = {
   indoor?: Room[];
   neighbors?: Building[];
   paths?: { highway: string; pts: LonLat[] }[];
+  details?: Detail[];
   tileRadius?: number;
 };
+/** Site furniture drawn opaque around the translucent main building: structure and yard detail per typology. */
+export type Detail =
+  | { kind: 'columns'; pts: LonLat[]; bayM?: number; height: number }            // column grid filling a footprint
+  | { kind: 'roof_monitor' | 'sawtooth'; pts: LonLat[]; height: number; rise?: number; bays?: number }
+  | { kind: 'dock_doors'; a: LonLat; b: LonLat; n: number; height: number }       // doors along a wall a->b
+  | { kind: 'trailer' | 'truck'; a: LonLat; b: LonLat }                           // a trailer body from a to b
+  | { kind: 'transformer' | 'tank' | 'generator' | 'cooler' | 'control_house' | 'guard' | 'canopy' | 'box'; pts: LonLat[]; height: number; name?: string; lift?: number /* metres above ground, e.g. rooftop plant */ }
+  | { kind: 'bus'; pts: LonLat[]; height: number }                                // lattice bus / gantry along a line
+  | { kind: 'fence'; pts: LonLat[]; height?: number }
+  | { kind: 'parking'; pts: LonLat[]; a: LonLat; b: LonLat; n: number }           // bay lines along a->b inside a lot
+  | { kind: 'helipad'; at: LonLat; r: number }
+  | { kind: 'stack' | 'mast'; at: LonLat; height: number; r?: number; lift?: number };
 export type IssueSpec = { id: string; x: number; y: number; z: number; open: boolean; title: string; lift: number /* stacking order when several issues share a spot */ };
 export type PinSpec = { id: string; x: number; y: number; z: number; color: string; time: string; alert: boolean; thumb?: string; selected: boolean; title: string };
 export type WearerSpec = { color: string; name: string; sub: string; pos: [number, number, number] | null; trail: number[] /* flat xyz */; acc?: number /* metres of GPS uncertainty, drawn as a ring */ };
@@ -148,6 +161,7 @@ export class SiteScene {
         const lo = new CSS2DObject(el); lo.position.set(x, b.height + 2, z); this.site.add(lo); this.bldLabels.push(lo);
       }
     }
+    for (const d of data.details ?? []) this.detail(d, bldMat, edgeMat);
     // main building
     if (data.main) {
       const M = data.main; this.floorH = M.height / M.levels; this.beamH = M.height + 3; this.levels = M.levels;
@@ -201,6 +215,70 @@ export class SiteScene {
     if (this.heat) { this.scene.remove(this.heat.mesh); } this.heat = new HeatLayer(minX - 20, maxX + 20, minZ - 20, maxZ + 20, cssVar('--heat') || '#eb6834'); this.scene.add(this.heat.mesh);
     this.ctrl3d.target.set(m.position.x, 3, m.position.z); this.persp.position.set(m.position.x + 90, 70, m.position.z + 110); this.ctrl2d.target.set(m.position.x, 0, m.position.z); this.ortho.position.set(m.position.x, 600, m.position.z + 0.001);
   }
+  // ---------- site detail ----------
+  private xz(p: LonLat) { const [x, z] = this.proj.toXZ(p[0], p[1]); return new THREE.Vector3(x, 0, z); }
+  private boxAt(pts: LonLat[], h: number, mat: THREE.Material, edge: THREE.Material, into: THREE.Object3D = this.site) {
+    const shape = this.shape(pts); if (!shape) return;
+    const g = new THREE.ExtrudeGeometry(shape, { depth: h, bevelEnabled: false });
+    const m = rot(new THREE.Mesh(g, mat)); m.castShadow = true; m.receiveShadow = true; into.add(m);
+    const e = rot(new THREE.LineSegments(new THREE.EdgesGeometry(g, 25), edge)); into.add(e);
+  }
+  private steelMat() { return this.mat(new THREE.MeshStandardMaterial({ roughness: 0.6, metalness: 0.5, color: 0x8a8d90 }), 'steel'); }
+  private detail(d: Detail, bld: THREE.Material, edge: THREE.Material) {
+    const steel = this.steelMat(); const lift = 'lift' in d && d.lift ? d.lift : 0;
+    const grp = new THREE.Group(); grp.position.y = lift; this.site.add(grp); if (lift > 2) this.upper.push(grp);
+    const into = { add: (o: THREE.Object3D) => grp.add(o) };
+    switch (d.kind) {
+      case 'columns': {
+        const ps = d.pts.map(p => this.xz(p)); const minX = Math.min(...ps.map(p => p.x)), maxX = Math.max(...ps.map(p => p.x)), minZ = Math.min(...ps.map(p => p.z)), maxZ = Math.max(...ps.map(p => p.z));
+        const bay = d.bayM ?? 9; const g = new THREE.BoxGeometry(0.5, d.height, 0.5); const cols: THREE.Vector3[] = [];
+        for (let x = minX + bay / 2; x < maxX; x += bay) for (let z = minZ + bay / 2; z < maxZ; z += bay) cols.push(new THREE.Vector3(x, d.height / 2, z));
+        const inst = new THREE.InstancedMesh(g, steel, cols.length); const m4 = new THREE.Matrix4(); cols.forEach((c, i) => inst.setMatrixAt(i, m4.makeTranslation(c.x, c.y, c.z))); inst.castShadow = true; into.add(inst); this.upper.push(inst); break;
+      }
+      case 'roof_monitor': case 'sawtooth': {
+        const ps = d.pts.map(p => this.xz(p)); const minX = Math.min(...ps.map(p => p.x)), maxX = Math.max(...ps.map(p => p.x)), minZ = Math.min(...ps.map(p => p.z)), maxZ = Math.max(...ps.map(p => p.z));
+        const n = d.bays ?? 4; const w = (maxX - minX) / n; const rise = d.rise ?? 2.2;
+        for (let i = 0; i < n; i++) {
+          const x0 = minX + i * w; const prof = new THREE.Shape(); // triangular/monitor profile extruded along z
+          if (d.kind === 'sawtooth') { prof.moveTo(x0, 0); prof.lineTo(x0 + w, 0); prof.lineTo(x0 + w * 0.35, rise); prof.lineTo(x0, rise); }
+          else { const m0 = x0 + w * 0.3, m1 = x0 + w * 0.7; prof.moveTo(m0, 0); prof.lineTo(m1, 0); prof.lineTo(m1, rise); prof.lineTo(m0, rise); }
+          const g = new THREE.ExtrudeGeometry(prof, { depth: maxZ - minZ, bevelEnabled: false });
+          const m = new THREE.Mesh(g, bld); m.position.set(0, d.height, minZ); m.castShadow = true; into.add(m); this.upper.push(m);
+          const e = new THREE.LineSegments(new THREE.EdgesGeometry(g, 20), edge); e.position.copy(m.position); into.add(e); this.upper.push(e);
+        }
+        break;
+      }
+      case 'dock_doors': {
+        const a = this.xz(d.a), b = this.xz(d.b); const dir = b.clone().sub(a); const len = dir.length(); dir.normalize(); const nrm = new THREE.Vector3(-dir.z, 0, dir.x);
+        const doorMat = this.mat(new THREE.MeshStandardMaterial({ color: 0x3b3f45, roughness: 0.8 }), 'door'); const bumper = new THREE.BoxGeometry(2.6, 0.3, 0.5);
+        for (let i = 0; i < d.n; i++) {
+          const t = (i + 0.5) / d.n; const c = a.clone().addScaledVector(dir, t * len);
+          const door = new THREE.Mesh(new THREE.BoxGeometry(2.8, d.height, 0.25), doorMat); door.position.set(c.x, d.height / 2 + 1.2, c.z); door.lookAt(door.position.clone().add(nrm)); into.add(door);
+          const bm = new THREE.Mesh(bumper, steel); bm.position.set(c.x, 1.2, c.z).addScaledVector(nrm, 0.4); bm.lookAt(bm.position.clone().add(nrm)); into.add(bm);
+        }
+        // raised dock apron edge
+        const apron = new THREE.Mesh(new THREE.BoxGeometry(len, 1.2, 1.2), bld); apron.position.copy(a.clone().addScaledVector(dir, len / 2)).addScaledVector(nrm, 0.6); apron.position.y = 0.6; apron.lookAt(apron.position.clone().add(nrm)); into.add(apron);
+        break;
+      }
+      case 'trailer': case 'truck': {
+        const a = this.xz(d.a), b = this.xz(d.b); const len = a.distanceTo(b); const mid = a.clone().add(b).multiplyScalar(0.5);
+        const body = new THREE.Mesh(new THREE.BoxGeometry(2.5, 2.7, len), this.mat(new THREE.MeshStandardMaterial({ color: 0xdedfe2, roughness: 0.7 }), 'trailer')); body.position.set(mid.x, 1.35 + 1.1, mid.z); body.lookAt(b.x, body.position.y, b.z); body.castShadow = true; into.add(body);
+        const wheels = new THREE.Mesh(new THREE.BoxGeometry(2.3, 1.1, len * 0.9), this.mat(new THREE.MeshStandardMaterial({ color: 0x2a2a2a, roughness: 0.9 }), 'tyre')); wheels.position.set(mid.x, 0.55, mid.z); wheels.lookAt(b.x, 0.55, b.z); into.add(wheels);
+        break;
+      }
+      case 'transformer': { this.boxAt(d.pts, d.height, steel, edge, grp); const [cx, cy] = centroid(d.pts); const c = this.xz([cx, cy]); for (let i = -1; i <= 1; i++) { const bush = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.25, 1.6, 10), this.mat(new THREE.MeshStandardMaterial({ color: 0xb9b2a3, roughness: 0.6 }), 'porcelain')); bush.position.set(c.x + i * 1.4, d.height + 0.8, c.z); into.add(bush); } const rad = new THREE.Mesh(new THREE.BoxGeometry(0.6, d.height * 0.8, Math.max(2, d.height)), steel); rad.position.set(c.x - 2.6, d.height * 0.45, c.z); into.add(rad); this.label(d.name, c, lift + d.height + 2.6); break; }
+      case 'tank': { const [cx, cy] = centroid(d.pts); const c = this.xz([cx, cy]); const ps = d.pts.map(p => this.xz(p)); const r = Math.max(1.5, Math.max(...ps.map(p => p.distanceTo(c))) * 0.8); const t = new THREE.Mesh(new THREE.CylinderGeometry(r, r, d.height, 32), this.mat(new THREE.MeshStandardMaterial({ color: 0xe8e8e4, roughness: 0.5, metalness: 0.2 }), 'tank')); t.position.set(c.x, d.height / 2, c.z); t.castShadow = true; into.add(t); const e = new THREE.LineSegments(new THREE.EdgesGeometry(t.geometry, 60), edge); e.position.copy(t.position); into.add(e); this.label(d.name, c, lift + d.height + 2); break; }
+      case 'generator': case 'cooler': { this.boxAt(d.pts, d.height, steel, edge, grp); const [cx, cy] = centroid(d.pts); const c = this.xz([cx, cy]); const ps = d.pts.map(p => this.xz(p)); const w = Math.max(...ps.map(p => p.x)) - Math.min(...ps.map(p => p.x)); const n = Math.max(1, Math.round(w / 2.2)); for (let i = 0; i < n; i++) { const fan = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 0.8, 0.25, 16), this.mat(new THREE.MeshStandardMaterial({ color: 0x3a3d40, roughness: 0.8 }), 'fan')); fan.position.set(c.x - w / 2 + (i + 0.5) * (w / n), d.height + 0.15, c.z); into.add(fan); } if (d.kind === 'generator') { const ex = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 2.2, 10), steel); ex.position.set(c.x + w / 2 - 0.6, d.height + 1.1, c.z); into.add(ex); } this.label(d.name, c, lift + d.height + 2); break; }
+      case 'control_house': case 'guard': case 'canopy': case 'box': { if (d.kind === 'canopy') { const shape = this.shape(d.pts); if (!shape) break; const g = new THREE.ExtrudeGeometry(shape, { depth: 0.4, bevelEnabled: false }); const m = rot(new THREE.Mesh(g, bld)); m.position.y = d.height; m.castShadow = true; into.add(m); const ps = d.pts.map(p => this.xz(p)); for (const p of ps) { const post = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, d.height, 8), steel); post.position.set(p.x, d.height / 2, p.z); into.add(post); } } else this.boxAt(d.pts, d.height, bld, edge, grp); const [cx, cy] = centroid(d.pts); this.label(d.name, this.xz([cx, cy]), lift + d.height + 2); break; }
+      case 'bus': { const ps = d.pts.map(p => this.xz(p)); for (let i = 1; i < ps.length; i++) { const a = ps[i - 1], b = ps[i]; const len = a.distanceTo(b); const mid = a.clone().add(b).multiplyScalar(0.5); const beam = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.35, len), steel); beam.position.set(mid.x, d.height, mid.z); beam.lookAt(b.x, d.height, b.z); into.add(beam); const n = Math.max(2, Math.round(len / 12)); for (let k = 0; k <= n; k++) { const t = k / n; const c = a.clone().lerp(b, t); const post = new THREE.Mesh(new THREE.BoxGeometry(0.3, d.height, 0.3), steel); post.position.set(c.x, d.height / 2, c.z); into.add(post); for (let w = -1; w <= 1; w += 2) { const wire = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, len, 6), steel); wire.position.set(mid.x, d.height - 1.2, mid.z); wire.lookAt(b.x, d.height - 1.2, b.z); wire.rotateX(Math.PI / 2); wire.translateX(w * 0.9); into.add(wire); } } } break; }
+      case 'fence': { const ps = d.pts.map(p => this.xz(p)); const h = d.height ?? 2.4; const mesh = this.mat(new THREE.MeshStandardMaterial({ color: 0x9a9d9f, transparent: true, opacity: 0.35, side: THREE.DoubleSide, depthWrite: false }), 'fence'); for (let i = 1; i < ps.length; i++) { const a = ps[i - 1], b = ps[i]; const len = a.distanceTo(b); const mid = a.clone().add(b).multiplyScalar(0.5); const panel = new THREE.Mesh(new THREE.PlaneGeometry(len, h), mesh); panel.position.set(mid.x, h / 2, mid.z); panel.lookAt(panel.position.clone().add(new THREE.Vector3(-(b.z - a.z), 0, b.x - a.x))); into.add(panel); const n = Math.max(1, Math.round(len / 3)); for (let k = 0; k <= n; k++) { const c = a.clone().lerp(b, k / n); const post = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, h + 0.3, 6), steel); post.position.set(c.x, (h + 0.3) / 2, c.z); into.add(post); } } break; }
+      case 'parking': { const lot = this.shape(d.pts); if (lot) { const m = rot(new THREE.Mesh(new THREE.ShapeGeometry(lot), this.mat(new THREE.MeshStandardMaterial({ color: 0x6e6f70, roughness: 1 }), 'asphalt'))); m.position.y = 0.03; m.receiveShadow = true; into.add(m); } const a = this.xz(d.a), b = this.xz(d.b); const dir = b.clone().sub(a); const len = dir.length(); dir.normalize(); const nrm = new THREE.Vector3(-dir.z, 0, dir.x); const lineMat = this.mat(new THREE.LineBasicMaterial({ color: 0xe8e8e8, transparent: true, opacity: 0.8 }), 'paint'); for (let i = 0; i <= d.n; i++) { const c = a.clone().addScaledVector(dir, (i / d.n) * len); const g = new THREE.BufferGeometry().setFromPoints([c.clone().setY(0.06), c.clone().addScaledVector(nrm, 5).setY(0.06)]); into.add(new THREE.Line(g, lineMat)); } break; }
+      case 'helipad': { const c = this.xz(d.at); const pad = rot(new THREE.Mesh(new THREE.CircleGeometry(d.r, 40), this.mat(new THREE.MeshStandardMaterial({ color: 0x55585c, roughness: 1 }), 'asphalt'))); pad.position.set(c.x, 0.05, c.z); into.add(pad); const ring = rot(new THREE.Mesh(new THREE.RingGeometry(d.r * 0.82, d.r * 0.92, 40), this.mat(new THREE.MeshBasicMaterial({ color: 0xf2f2f2 }), 'paint'))); ring.position.set(c.x, 0.07, c.z); into.add(ring); const el = document.createElement('div'); el.className = 'lbl'; el.textContent = 'H'; const lo = new CSS2DObject(el); lo.position.set(c.x, 0.5, c.z); into.add(lo); this.roomLabels.push(lo); break; }
+      case 'stack': case 'mast': { const c = this.xz(d.at); const r = d.r ?? (d.kind === 'stack' ? 1.2 : 0.25); const m = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.8, r, d.height, 14), steel); m.position.set(c.x, d.height / 2, c.z); m.castShadow = true; into.add(m); break; }
+    }
+  }
+  private label(name: string | undefined, at: THREE.Vector3, y: number) { if (!name) return; const el = document.createElement('div'); el.className = 'lbl'; el.textContent = name; const lo = new CSS2DObject(el); lo.position.set(at.x, y, at.z); this.site.add(lo); this.roomLabels.push(lo); }
+
   private shape(outer: LonLat[], holes: LonLat[][] = []): THREE.Shape | null {
     if (outer.length < 3) return null;
     const s = new THREE.Shape(outer.map(([lon, lat]) => new THREE.Vector2(...this.proj.toShape(lon, lat))));
