@@ -250,7 +250,35 @@ export function parseSinceArg(s: string, now: bigint): bigint | null {
     const unit = { m: 60n, h: 3600n, d: 86400n }[rel[2].toLowerCase() as 'm' | 'h' | 'd'];
     return now - BigInt(rel[1]) * unit * 1_000_000n;
   }
-  return microsFromIso(v);
+  return microsFromIso(withVenueOffset(v));
+}
+
+/** ISO input without a zone is read in the venue's zone (CST, UTC-6), the zone clockCT prints. */
+export function withVenueOffset(iso: string): string {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) return `${iso}T00:00:00-06:00`;
+  if (/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/.test(iso)) return `${iso.replace(' ', 'T')}-06:00`;
+  return iso;
+}
+
+/** A cited id: exact, or the one known id that starts with it (8+ chars), since models shorten UUIDs. */
+export function resolveCitedId(id: string, known: Set<string>): string | null {
+  if (known.has(id)) return id;
+  if (id.length < 8) return null;
+  let hit: string | null = null;
+  for (const k of known) {
+    if (!k.startsWith(id)) continue;
+    if (hit) return null;
+    hit = k;
+  }
+  return hit;
+}
+
+/** Short name for the footer: which model wrote the summary. */
+export function modelLabel(model: string): string {
+  if (!model || model === 'graph') return 'the record';
+  if (/nemotron/i.test(model)) return 'Nemotron';
+  if (model.startsWith('azure/')) return `${model.slice(6)} (fallback)`;
+  return model;
 }
 
 // ---------- handoff text ----------
@@ -265,6 +293,7 @@ export interface HEvent {
   note: string;
   label: string;
   changes: string[];
+  changedAssets?: string[]; // canonical names of the entities the changes are about
 }
 export interface HAlert {
   t: bigint;
@@ -291,6 +320,8 @@ export interface HandoffSnap {
   alerts: HAlert[];
   total: number;
   issues?: HIssue[]; // work orders: open ones however old, resolved ones in the window
+  now?: bigint; // for ages of old alerts
+  pending?: number; // photos in the window still being perceived
 }
 
 export const cite = (id: string) => `[event:${id}]`;
@@ -306,7 +337,7 @@ export function notesLines(snap: HandoffSnap): string[] {
 
 /** Assets seen in the window with no open alert and no recorded change. */
 export function quietLines(snap: HandoffSnap): string[] {
-  const flagged = new Set<string>([...snap.alerts.filter(a => a.open).map(a => a.asset), ...snap.events.filter(e => e.changes.length).flatMap(e => e.assets)]);
+  const flagged = new Set<string>([...snap.alerts.filter(a => a.open).map(a => a.asset), ...snap.events.flatMap(e => e.changedAssets ?? (e.changes.length ? e.assets : []))]);
   const quiet: string[] = [];
   for (const e of snap.events) for (const a of e.assets) if (!flagged.has(a) && !quiet.includes(a)) quiet.push(a);
   if (!quiet.length) return ['none'];
@@ -315,11 +346,23 @@ export function quietLines(snap: HandoffSnap): string[] {
 }
 
 /** NEEDS ATTENTION from the graph: open alerts, then work orders still open or in progress. */
+const MAX_ATTENTION_ALERTS = 12;
+
+/** "2 d ago" / "14 h ago" for an alert older than half a day, else ''. */
+function ageSuffix(t: bigint, now?: bigint): string {
+  if (!now || now <= t) return '';
+  const hours = Number((now - t) / 3_600_000_000n);
+  if (hours < 12) return '';
+  return hours < 48 ? `, ${hours} h ago` : `, ${Math.floor(hours / 24)} d ago`;
+}
+
 export function attentionLines(snap: HandoffSnap): string[] {
-  const open = snap.alerts.filter(a => a.open);
+  const open = snap.alerts.filter(a => a.open).sort((x, y) => (x.t > y.t ? -1 : x.t < y.t ? 1 : 0)); // newest first
   const openIssues = (snap.issues ?? []).filter(i => i.status !== 'resolved');
+  const shown = open.slice(0, MAX_ATTENTION_ALERTS);
   const lines = [
-    ...open.map(a => `${a.asset}: ${a.text} (${clockCT(a.t)}, ${a.wearer}) ${cite(a.eventId)}`),
+    ...shown.map(a => `${a.asset}: ${a.text} (${clockCT(a.t)}${ageSuffix(a.t, snap.now)}, ${a.wearer}) ${cite(a.eventId)}`),
+    ...(open.length > shown.length ? [`and ${open.length - shown.length} more open alerts`] : []),
     ...openIssues.map(i => `Work order ${i.id} ${i.status.replace('_', ' ')}: ${i.title} (${i.asset}, opened by ${i.openedBy}) [wo:${i.id}]`),
   ];
   return lines.length ? lines : ['none'];
@@ -373,7 +416,7 @@ export function plainSummary(snap: HandoffSnap): string[] {
   const open = snap.alerts.filter(a => a.open).length;
   const wo = (snap.issues ?? []).filter(i => i.status !== 'resolved').length;
   const fixed = snap.alerts.filter(a => !a.open).length + (snap.issues ?? []).filter(i => i.status === 'resolved').length;
-  return [`${snap.events.length} photos since ${snap.anchor}; ${open} open alert${open === 1 ? '' : 's'}, ${wo} work order${wo === 1 ? '' : 's'} outstanding, ${fixed} resolved.`];
+  return [`${snap.total} photos since ${snap.anchor}; ${open} open alert${open === 1 ? '' : 's'}, ${wo} work order${wo === 1 ? '' : 's'} outstanding, ${fixed} resolved.${snap.pending ? ` ${snap.pending} photo${snap.pending === 1 ? '' : 's'} still being read.` : ''}`];
 }
 
 /** Kept for callers that want the whole handoff from the graph alone. */
@@ -479,7 +522,8 @@ export function groundSummary(text: string, known: Set<string>, knownWorkOrders:
         for (const raw of inner.split(/[\s,]+/)) {
           const id = raw.replace(/^(event|wo):/i, '');
           if (!id) continue;
-          if (known.has(id)) parts.push(cite(id));
+          const ev = resolveCitedId(id, known);
+          if (ev) parts.push(cite(ev));
           else if (woUpper.has(id.toUpperCase())) parts.push(`[wo:${woUpper.get(id.toUpperCase())}]`);
           else continue;
           ok++;
