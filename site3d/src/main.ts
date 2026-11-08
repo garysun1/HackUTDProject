@@ -2,45 +2,42 @@ import './styles.css';
 import { state, start, onChange, wearerColor, wearerName, fmtTime, fmtTimeS, alertsFor, loadPhoto, placeOf, type Alert } from './store';
 import { SiteScene, type PinSpec, type IssueSpec, type SiteData } from './scene';
 import { sessionShifts, shifts, positionAt, shiftEnd, shiftLive, resolvedAt, renderBrain, inSession, type Shift } from './brain';
-import { pointInRing, centroid, haversineM } from './geo';
-import ecsw from './data/ecsw.json';
+import { centroid } from './geo';
+import { siteFor, locateIn, type KnownSite } from './sites';
 
 const $ = <T extends HTMLElement>(s: string) => document.querySelector<T>(s)!;
 const scene = new SiteScene($('#gl'), $('#labels'));
 
 // ---------- site ----------
-type Site = { kind: 'ecsw' | 'generic'; center: [number, number]; rooms: { name: string; ring: [number, number][] }[]; outer: [number, number][] | null; builtFor: string };
+// The known site the data sits in (ECSW from OpenStreetMap, or a generated sample site, decision 0032), else a box.
+type Site = { kind: 'known' | 'generic'; known: KnownSite | null; center: [number, number]; builtFor: string };
 let site: Site | null = null;
-const ECSW_CENTER = ecsw.center as [number, number];
 function dataCentroid(): [number, number] | null {
   const pts = [...state.track.filter(p => p.kind === 'point').map(p => [p.lon, p.lat] as [number, number]), ...[...state.locations.values()].map(l => [l.lon, l.lat] as [number, number])];
   return pts.length ? centroid(pts) : null;
 }
 function ensureSite() {
-  const c = dataCentroid(); const nearEcsw = !c || haversineM(c[1], c[0], ECSW_CENTER[1], ECSW_CENTER[0]) < 400;
-  const key = nearEcsw ? 'ecsw' : `generic:${state.db}`;
+  const c = dataCentroid(); const k = siteFor(c);
+  const key = k ? k.key : `generic:${state.db}`;
   if (site && site.builtFor === key) return;
-  if (nearEcsw) {
-    const d: SiteData = { center: ECSW_CENTER, main: { name: ecsw.ecsw.name, levels: ecsw.ecsw.levels, height: ecsw.ecsw.height, outer: ecsw.ecsw.outer as any, inner: ecsw.ecsw.inner as any }, indoor: ecsw.indoor as any, neighbors: ecsw.neighbors as any, paths: ecsw.paths as any, tileRadius: 4 };
-    scene.buildSite(d);
-    site = { kind: 'ecsw', center: ECSW_CENTER, outer: ecsw.ecsw.outer as any, rooms: (ecsw.indoor as any[]).filter(r => r.name && r.pts.length >= 3).map(r => ({ name: r.name, ring: r.pts })), builtFor: key };
-    $('#site').textContent = 'ECSW · UT Dallas';
+  if (k) {
+    scene.buildSite(k.data);
+    site = { kind: 'known', known: k, center: k.data.center, builtFor: key };
+    $('#site').textContent = k.key === 'ecsw' ? 'ECSW · UT Dallas' : `${k.label} · generated sample site`;
   } else {
     scene.buildSite({ center: c!, tileRadius: 3 });
     const xs = [...state.track.filter(p => p.kind === 'point'), ...state.locations.values()].map(p => scene.proj.toXZ(p.lon, p.lat));
     const minX = Math.min(...xs.map(p => p[0])) - 10, maxX = Math.max(...xs.map(p => p[0])) + 10, minZ = Math.min(...xs.map(p => p[1])) - 10, maxZ = Math.max(...xs.map(p => p[1])) + 10;
     const name = state.assets.size ? ([...state.assets.values()][0].location.split('/')[0].trim() || 'Site') : 'Site';
     scene.buildHall(minX, maxX, minZ, maxZ, name);
-    site = { kind: 'generic', center: c!, outer: null, rooms: [], builtFor: key };
+    site = { kind: 'generic', known: null, center: c!, builtFor: key };
     $('#site').textContent = `${state.db.replace(/^wm-/, '')} · synthetic site`;
   }
   resetHeat();
 }
-function locate(lat: number, lon: number): string | undefined {
-  if (!site) return; const pt: [number, number] = [lon, lat];
-  for (const r of site.rooms) if (pointInRing(pt, r.ring)) return r.name;
-  if (site.outer && pointInRing(pt, site.outer)) return 'inside ECSW';
-  return site.kind === 'ecsw' ? 'outside the building' : undefined;
+function locate(lat: number, lon: number, floor?: number | null): string | undefined {
+  if (!site?.known) return;
+  return locateIn(site.known, lat, lon, floor);
 }
 
 // ---------- clock / replay ----------
@@ -172,7 +169,7 @@ function frame(now: number) {
       const pos = positionAt(s, clock); if (!pos) continue;
       const [x, z] = scene.proj.toXZ(pos.lon, pos.lat); const y = lvl(pos.floor) * scene.floorH + 1.1;
       const trail: number[] = []; for (let i = 0; i <= pos.i; i++) { const q = s.smooth[i]; const [tx, tz] = scene.proj.toXZ(q.lon, q.lat); trail.push(tx, lvl(q.floor) * scene.floorH + 0.6, tz); } trail.push(x, y - 0.5, z);
-      const where = locate(pos.lat, pos.lon); const last = s.smooth[pos.i]; const stale = clock - last.tMs > 90_000;
+      const where = locate(pos.lat, pos.lon, pos.floor); const last = s.smooth[pos.i]; const stale = clock - last.tMs > 90_000;
       const floorTxt = pos.floor !== undefined && pos.floor > 0 ? ` · L${pos.floor}` : '';
       scene.setWearer(dev, { color: wearerColor(dev), name: wearerName(dev), sub: (where ? where : stale ? `last fix ${fmtTime(last.tMs)}` : 'on shift') + floorTxt, pos: [x, y, z], trail, acc: pos.acc });
       drawn = true; break;
@@ -184,7 +181,7 @@ function frame(now: number) {
         const trail: number[] = []; let last = s.smooth[0];
         for (const q of s.smooth) { if (q.tMs > clock) break; last = q; const [tx, tz] = scene.proj.toXZ(q.lon, q.lat); trail.push(tx, lvl(q.floor) * scene.floorH + 0.6, tz); }
         const [x, z] = scene.proj.toXZ(last.lon, last.lat); const y = lvl(last.floor) * scene.floorH + 1.1;
-        const where = locate(last.lat, last.lon);
+        const where = locate(last.lat, last.lon, last.floor);
         scene.setWearer(dev, { color: wearerColor(dev), name: wearerName(dev), sub: `${where ? where + ' · ' : ''}ended ${fmtTime(shiftEnd(s))}`, pos: [x, y, z], trail });
       } else scene.hideWearer(dev);
     }
