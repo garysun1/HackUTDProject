@@ -1,5 +1,5 @@
 // Known sites (decision 0032): the real ECSW building (OpenStreetMap) and the generated sample
-// sites (demo/synth/sites.mjs). The map picks the one the data sits in, by distance, so a
+// sites (demo/synth/sites.mjs), plus the Northstar Data Center on a real Richardson building (OSM, demo/synth/osm). The map picks the one the data sits in, by distance, so a
 // workspace needs no configuration: UTD capture lands on ECSW, a replayed sample on its own plant.
 import type { SiteData, Room } from './scene';
 import { haversineM, pointInRing } from './geo';
@@ -8,6 +8,7 @@ import plant from './data/sites/plant.json';
 import hospital from './data/sites/hospital.json';
 import substation from './data/sites/substation.json';
 import warehouse from './data/sites/warehouse.json';
+import nmc2 from './data/sites/nmc2.json';
 
 export type KnownSite = { key: string; label: string; data: SiteData; rooms: { name: string; level: number; ring: [number, number][] }[]; outer: [number, number][] };
 const levelOf = (r: Room) => (/^\d+$/.test(String(r.level ?? '')) ? Number(r.level) : 0);
@@ -17,7 +18,7 @@ function known(key: string, label: string, data: SiteData): KnownSite {
 const ECSW: SiteData = { center: ecsw.center as any, main: { name: ecsw.ecsw.name, levels: ecsw.ecsw.levels, height: ecsw.ecsw.height, outer: ecsw.ecsw.outer as any, inner: ecsw.ecsw.inner as any }, indoor: ecsw.indoor as any, neighbors: ecsw.neighbors as any, paths: ecsw.paths as any, tileRadius: 4 };
 export const SITES: KnownSite[] = [
   known('ecsw', 'ECSW', ECSW),
-  ...[plant, hospital, substation, warehouse].map((d: any, i) => known(['plant', 'hospital', 'substation', 'warehouse'][i], d.main.name, d as SiteData)),
+  ...[plant, hospital, substation, warehouse, nmc2].map((d: any, i) => known(['plant', 'hospital', 'substation', 'warehouse', 'nmc2'][i], d.main.name, d as SiteData)),
 ];
 /** The known site the data sits in (within 400 m of its centre); ECSW when there is no data yet. */
 export function siteFor(c: [number, number] | null): KnownSite | null {
