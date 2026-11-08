@@ -158,3 +158,23 @@ test('the most specific asset wins when a name mentions several', () => {
   assert.deepEqual(matchAssets(['PDU A (Rack R12)'], regs).map(x => x.assetId), ['PDU-A', 'R12']);
   assert.deepEqual(matchAssets(['RACK R12'], regs).map(x => x.assetId), ['R12']);
 });
+
+// ---------- episodes (#6) ----------
+import { segmentEvents, plainEpisodeTitle } from '../spacetimedb/src/rules.ts';
+
+test('episodes split on place change, long gaps and embedding jumps', () => {
+  const m = (n: number) => 1794110400000000n + BigInt(n) * 60_000_000n;
+  const segs = segmentEvents([
+    { id: 'a', t: m(0), place: 'Cold Aisle 3', wearer: 'Maria', summary: 'sign', embedding: [1, 0] },
+    { id: 'b', t: m(5), place: 'Cold Aisle 3, Rack R12', wearer: 'Maria', summary: 'rack', embedding: [0.9, 0.1] }, // nested place: same episode
+    { id: 'c', t: m(8), place: 'Cold Aisle 3', wearer: 'Dev', summary: 'pdu', embedding: [0, 1] }, // dissimilar, but the place is known: same episode
+    { id: 'd', t: m(9), place: '', wearer: 'Dev', summary: 'cable', embedding: [0, 1] }, // place change to unknown
+    { id: 'e', t: m(10), place: '', wearer: 'Dev', summary: 'ups', embedding: [1, 0] }, // no place: embedding jump splits
+    { id: 'f', t: m(40), place: '', wearer: 'Dev', summary: '' }, // gap
+  ].reverse());
+  assert.deepEqual(segs.map(s => s.eventIds), [['a', 'b', 'c'], ['d'], ['e'], ['f']]);
+  assert.deepEqual(segs[0].wearers, ['Maria', 'Dev']);
+  assert.equal(segs[0].place, 'Cold Aisle 3');
+  assert.equal(segs[1].place, 'no place identified');
+  assert.deepEqual(plainEpisodeTitle(segs[2]), { title: 'no place identified, Dev', summary: 'ups' });
+});

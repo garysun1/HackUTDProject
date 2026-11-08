@@ -102,6 +102,10 @@ test('answers are stripped of markdown and grounded', () => {
   const g = groundCitations('PSU2 faulted [event:e3] and [event:zzz]. Later fine [event:e4, event:e9]', new Set(['e3', 'e4']));
   assert.deepEqual(g.citations, ['e3', 'e4']);
   assert.equal(g.text, 'PSU2 faulted [event:e3] and . Later fine [event:e4]');
+  const bare = groundCitations('First event synth-x-01, last synth-x-07. Also [event:synth-x-07].', new Set(['synth-x-01', 'synth-x-07', 'synth-x-070']));
+  assert.deepEqual(bare.citations, ['synth-x-07', 'synth-x-01']);
+  assert.equal(bare.text, 'First event [event:synth-x-01], last [event:synth-x-07]. Also [event:synth-x-07].');
+  assert.equal(groundCitations('Event: synth-x-07 [event:synth-x-07].', new Set(['synth-x-07'])).text, 'Event: [event:synth-x-07].');
   const fb = fallbackAnswer(idx, 'what happened to PDU-A');
   assert.match(fb.answer, /floor agent is unavailable/);
   assert.ok(fb.citations.includes('e3'));

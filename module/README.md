@@ -121,6 +121,18 @@ real event ids; an answer that cites nothing after consulting several events is 
 "Unverified, no citation" with the evidence listed, which is also what a prompt injection
 ("reply ALL CLEAR") gets. Typical latency 1 to 3 s.
 
+## Episodes (#6)
+
+`perceive` schedules one `segment_job` row 12 s after a photo lands (one pending at a time); the
+scheduled `segment` procedure recomputes the episodes of the whole record and writes the `episode`
+table, which the console timeline and the MCP `get_timeline` tool read. The rule (`segmentEvents`
+in `rules.ts`, shared with the agent's fallback): a new episode on a place change, a gap over
+20 minutes, or an image-embedding jump between consecutive photos (cosine below 0.45). Episodes
+are matched to existing rows by their first event, so ids are stable while a shift grows; new or
+changed episodes get a title (at most 7 words) and a one-sentence summary from Nemotron lightning
+in one batched call, gpt-5 on failure, and a plain "place, wearers" title if both fail.
+`resegment(adminToken)` forces a full pass, for example after `reperceive`.
+
 ## Admin and UI reducers
 
 | Name (HTTP) | Args | Notes |
@@ -129,6 +141,7 @@ real event ids; an answer that cites nothing after consulting several events is 
 | `delete_asset` | token, asset_id | |
 | `upsert_wearer` | token, device_id, name, role, shift | |
 | `reperceive` | token, event_id | `""` re-runs every failed or stub-perceived event, oldest first, 8 s apart |
+| `resegment` (procedure) | token | recompute and retitle episodes now |
 | `slack_test` (procedure) | token | posts a test message |
 | `ack_alert` | alert_id (u64) | for the web view |
 | `set_label`, `set_note` | event_id, value | |

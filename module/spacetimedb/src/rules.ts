@@ -376,3 +376,67 @@ export function groundModelSections(text: string, known: Set<string>): string[] 
 export function assembleHandoff(sections: string[], snap: HandoffSnap): string {
   return [...sections, '', 'NOTES FROM THE SHIFT', ...notesLines(snap), '', 'QUIET', ...quietLines(snap)].join('\n');
 }
+
+// ---------- episodes (#6) ----------
+
+export interface SegEvent {
+  id: string;
+  t: bigint;
+  place: string; // '' when no place was identified
+  wearer: string;
+  summary: string;
+  embedding?: number[];
+}
+export interface Segment {
+  start: bigint;
+  end: bigint;
+  place: string;
+  wearers: string[];
+  eventIds: string[];
+  summaries: string[];
+}
+export const EPISODE_GAP_MICROS = 20n * 60n * 1_000_000n;
+export const EPISODE_JUMP_COSINE = 0.3; // when no place is known, consecutive photos less similar than this are a scene change
+export const NO_PLACE = 'no place identified';
+
+/**
+ * Split a shift into episodes: a new one starts on a place change, a gap over 20 minutes, or,
+ * only while no place is identified, an image-embedding jump between consecutive photos (a
+ * known shared place already says the photos belong together). The same rule serves the
+ * module's segment procedure and the agent's timeline fallback.
+ */
+/** "Cold Aisle 3" and "Cold Aisle 3, Rack R12" are the same place: one name contains the other. */
+export function samePlace(a: string, b: string): boolean {
+  const x = squash(a);
+  const y = squash(b);
+  return x === y || (x.length > 2 && y.length > 2 && (x.includes(y) || y.includes(x)));
+}
+
+export function segmentEvents(events: SegEvent[]): Segment[] {
+  const sorted = [...events].sort((a, b) => (a.t < b.t ? -1 : a.t > b.t ? 1 : 0));
+  const out: Segment[] = [];
+  let cur: Segment | null = null;
+  let prev: SegEvent | null = null;
+  for (const e of sorted) {
+    const place = e.place || NO_PLACE;
+    const jump =
+      place === NO_PLACE && prev && prev.embedding && prev.embedding.length && e.embedding && e.embedding.length ? cosine(prev.embedding, e.embedding) < EPISODE_JUMP_COSINE : false;
+    if (!cur || !samePlace(cur.place, place) || e.t - cur.end > EPISODE_GAP_MICROS || jump) {
+      cur = { start: e.t, end: e.t, place, wearers: [], eventIds: [], summaries: [] };
+      out.push(cur);
+    }
+    // the episode is named after its most general place
+    if (place !== NO_PLACE && (cur.place === NO_PLACE || place.length < cur.place.length)) cur.place = place;
+    cur.end = e.t;
+    cur.eventIds.push(e.id);
+    if (!cur.wearers.includes(e.wearer)) cur.wearers.push(e.wearer);
+    if (e.summary) cur.summaries.push(e.summary);
+    prev = e;
+  }
+  return out;
+}
+
+/** Title and summary for an episode when no model is available. */
+export function plainEpisodeTitle(s: Segment): { title: string; summary: string } {
+  return { title: `${s.place}, ${s.wearers.join(', ')}`, summary: s.summaries.slice(0, 2).join(' ') };
+}

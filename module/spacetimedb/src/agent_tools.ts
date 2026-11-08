@@ -2,7 +2,7 @@
 // tables, with the same semantics as the MCP server's tools (mcp/src/tools.mjs), so an
 // agent gets the same answers whether it goes through Claude Desktop or the module.
 // No SpacetimeDB imports: tested with plain Node (module/test/agent_tools.test.ts).
-import { squash, clockCT, parseSinceArg, graphSections, assembleHandoff, type HandoffSnap, type HEvent, type HAlert } from './rules.ts';
+import { squash, clockCT, parseSinceArg, graphSections, assembleHandoff, segmentEvents, plainEpisodeTitle, type HandoffSnap, type HEvent, type HAlert } from './rules.ts';
 
 export interface AChange {
   entityId: string;
@@ -65,7 +65,8 @@ export interface AgentIndex {
 
 export function makeIndex(now: bigint, events: AEvent[], entities: AEntity[], alerts: AAlert[], episodes: AEpisode[], lastHandoff: string | null): AgentIndex {
   const sorted = [...events].sort((a, b) => (a.t < b.t ? -1 : a.t > b.t ? 1 : 0));
-  return { now, events: sorted, byId: new Map(sorted.map(e => [e.id, e])), entities, alerts, episodes, lastHandoff };
+  const eps = [...episodes].sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0));
+  return { now, events: sorted, byId: new Map(sorted.map(e => [e.id, e])), entities, alerts, episodes: eps, lastHandoff };
 }
 
 // ---------- small helpers ----------
@@ -158,37 +159,13 @@ export function keywordScore(e: AEvent, ts: string[]): number {
   return s;
 }
 
-/** Timeline segments: stored episodes when present, else a new segment on place change or a gap over 20 minutes. */
+/** Timeline segments: stored episodes when present, else the same place-change / gap rule the module's segment procedure uses. */
 export function segments(idx: AgentIndex, from: bigint, to: bigint) {
-  const evs = idx.events.filter(e => e.t >= from && e.t <= to);
   if (idx.episodes.length) {
-    return idx.episodes
-      .filter(ep => ep.end >= from && ep.start <= to)
-      .map(ep => ({ start: ep.start, end: ep.end, title: ep.title, summary: ep.summary, eventIds: ep.eventIds }));
+    return idx.episodes.filter(ep => ep.end >= from && ep.start <= to).map(ep => ({ start: ep.start, end: ep.end, title: ep.title, summary: ep.summary, eventIds: ep.eventIds }));
   }
-  const out: { start: bigint; end: bigint; title: string; summary: string; eventIds: string[]; place: string; who: Set<string> }[] = [];
-  let cur: (typeof out)[number] | null = null;
-  for (const e of evs) {
-    const place = e.place || 'no place identified';
-    if (!cur || cur.place !== place || e.t - cur.end > 20n * 60n * 1_000_000n) {
-      cur = { start: e.t, end: e.t, title: '', summary: '', eventIds: [], place, who: new Set() };
-      out.push(cur);
-    }
-    cur.end = e.t;
-    cur.eventIds.push(e.id);
-    cur.who.add(e.wearer);
-  }
-  return out.map(s => ({
-    start: s.start,
-    end: s.end,
-    title: `${s.place}, ${[...s.who].join(', ')}`,
-    summary: s.eventIds
-      .map(id => idx.byId.get(id)?.summary)
-      .filter(Boolean)
-      .slice(0, 2)
-      .join(' '),
-    eventIds: s.eventIds,
-  }));
+  const evs = idx.events.filter(e => e.t >= from && e.t <= to);
+  return segmentEvents(evs.map(e => ({ id: e.id, t: e.t, place: e.place, wearer: e.wearer, summary: e.summary }))).map(s => ({ start: s.start, end: s.end, ...plainEpisodeTitle(s), eventIds: s.eventIds }));
 }
 
 // ---------- the tools ----------
@@ -371,7 +348,19 @@ export function groundCitations(text: string, known: Set<string>): { text: strin
     for (const id of good) if (!citations.includes(id)) citations.push(id);
     return good.map(id => `[event:${id}]`).join(' ');
   });
-  return { text: cleaned.replace(/[ \t]{2,}/g, ' ').replace(/ +\n/g, '\n').trim(), citations };
+  // a known event id written bare ("event synth-...-07") is a citation too
+  let out = cleaned;
+  for (const id of known) {
+    if (id.length < 6 || !out.includes(id)) continue;
+    const re = new RegExp(`(?<!\\[event:)(?<![\\w-])${id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\w-])`, 'g');
+    if (re.test(out)) {
+      out = out.replace(re, `[event:${id}]`);
+      if (!citations.includes(id)) citations.push(id);
+    }
+  }
+  // the same citation twice in a row (bare id and bracketed) reads once
+  out = out.replace(/(\[event:[^\]]+\])(?:[ ,]+\1)+/g, '$1');
+  return { text: out.replace(/[ \t]{2,}/g, ' ').replace(/ +\n/g, '\n').trim(), citations };
 }
 
 /** When no model is reachable: the closest evidence for the question, cited. */

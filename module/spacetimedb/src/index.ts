@@ -1,6 +1,6 @@
 // Working Memory for the Physical World — SpacetimeDB module (TypeScript).
 // Tables: event, photo, entity, edge, episode, handoff, alert, asset, wearer, perceive_job.
-// Procedures: ping, ingestPhoto (ingest_photo), ingestTrack, perceive (scheduled), handoff, ask, slackTest (slack_test).
+// Procedures: ping, ingestPhoto (ingest_photo), ingestTrack, perceive (scheduled), segment (scheduled), resegment, handoff, ask, slackTest (slack_test).
 // Reducers: setLabel, setNote, ackAlert; admin: upsertAsset, deleteAsset, upsertWearer.
 // See docs/DESIGN.md §5–§8 and docs/CONTRACT.md. Pure rules (alerts, asset matching) in rules.ts.
 
@@ -25,6 +25,10 @@ import {
   type HEvent,
   type HAlert,
   type HandoffSnap,
+  segmentEvents,
+  plainEpisodeTitle,
+  type SegEvent,
+  type Segment,
 } from './rules';
 import {
   makeIndex,
@@ -168,6 +172,15 @@ const wearer = table(
   }
 );
 
+// #6: one pending row re-segments the record a few seconds after a burst of photos settles.
+const segmentJob = table(
+  { name: 'segment_job' },
+  {
+    scheduledId: t.u64().primaryKey().autoInc(),
+    scheduledAt: t.scheduleAt(),
+  }
+);
+
 const perceiveJob = table(
   { name: 'perceive_job' },
   {
@@ -219,7 +232,7 @@ const trackPoint = table(
 );
 
 const spacetimedb = schema(
-  { event, photo, entity, edge, episode, handoff: handoffTable, alert, asset, wearer, perceiveJob, eventLocation, trackPoint },
+  { event, photo, entity, edge, episode, handoff: handoffTable, alert, asset, wearer, perceiveJob, segmentJob, eventLocation, trackPoint },
   {
     // #14: secrets live in the database's environment, set with
     //   spacetime publish wm-physical --env-only --server maincloud  (see module/README.md)
@@ -281,6 +294,7 @@ const SIMILAR_TOP = 3;
 const CONTEXT_EVENTS = 6; // recent perceived events given to the model as history
 const DEFAULT_AGENT_MODEL = 'nvidia/nemotron-3.5-lightning-30b-a3b';
 const HANDOFF_MAX_EVENTS = 150; // newest events kept in a handoff digest
+const SEGMENT_DELAY_MICROS = 12n * 1_000_000n; // wait for a burst of photos before re-segmenting
 
 function isoFromMicros(micros: bigint): string {
   return new Date(Number(micros / 1000n)).toISOString();
@@ -672,6 +686,10 @@ export const perceive = spacetimedb.procedure(
         perceptionJson: JSON.stringify({ ...p, _meta: meta }),
         embedding,
       });
+      // #6: re-segment once this burst settles; one pending job at a time
+      if (![...tx.db.segmentJob.iter()].length) {
+        tx.db.segmentJob.insert({ scheduledId: 0n, scheduledAt: ScheduleAt.time(ctx.timestamp.microsSinceUnixEpoch + SEGMENT_DELAY_MICROS) });
+      }
 
       const assets: (AssetLike & { location: string; assetType: string })[] = [...tx.db.asset.iter()];
       const assetById = new Map(assets.map(a => [a.assetId, a]));
@@ -1324,6 +1342,105 @@ export const ask = spacetimedb.procedure({ question: t.string() }, AskResult, (c
     if (r) return r;
   }
   return fallbackAnswer(idx, q);
+});
+
+// ---------- segment (#6): episodes for the timeline ----------
+
+const SegmentResult = t.object('SegmentResult', { episodes: t.u32(), titled: t.u32() });
+
+const EPISODE_PROMPT =
+  'Name the episodes of an operations shift from the photo summaries below. For each episode give a title of at most 7 words that names the place and what was done, and a one-sentence summary of what its photos show. ' +
+  'Use only the summaries; never name or describe people, refer to wearers only by the names given; no markdown. ' +
+  'Reply with exactly one line per episode and nothing else, in the form: FIRST_EVENT_ID | title | summary. Copy FIRST_EVENT_ID exactly from the input.';
+
+type Ctx = { timestamp: { microsSinceUnixEpoch: bigint }; env: any; http: Http; withTx: <R>(f: (tx: any) => R) => R };
+
+/** Recompute episodes from the perceived events; title new or changed ones with the model. */
+function runSegmentation(ctx: Ctx, force = false): { episodes: number; titled: number } {
+  // 1. events and current episodes
+  const snap = ctx.withTx((tx: any) => {
+    const wearerName = new Map<string, string>();
+    for (const w of tx.db.wearer.iter()) wearerName.set(w.deviceId, w.name);
+    const events: SegEvent[] = [];
+    for (const e of tx.db.event.iter()) {
+      if (e.status !== 'in_graph') continue;
+      let place = '';
+      for (const x of tx.db.edge.fromId.filter(e.eventId)) {
+        if (x.kind === 'INVOLVES' && x.props.includes('"role":"setting"')) {
+          place = tx.db.entity.entityId.find(x.toId)?.canonicalName ?? x.toId;
+          break;
+        }
+      }
+      events.push({ id: e.eventId, t: e.tMicros, place, wearer: wearerName.get(e.deviceId) ?? e.deviceId, summary: e.summary, embedding: e.embedding });
+    }
+    const existing = [...tx.db.episode.iter()].map((ep: any) => ({ episodeId: ep.episodeId as bigint, tStartMicros: ep.tStartMicros as bigint, tEndMicros: ep.tEndMicros as bigint, title: ep.title as string, summary: ep.summary as string, eventIds: ep.eventIds as string[] }));
+    return { events, existing };
+  });
+  const segs = segmentEvents(snap.events);
+  const byFirst = new Map(snap.existing.map(ep => [ep.eventIds[0], ep]));
+  const same = (a: string[], b: string[]) => a.length === b.length && a.every((x, i) => x === b[i]);
+  const needTitle = segs.filter(s => {
+    const ep = byFirst.get(s.eventIds[0]);
+    return force || !ep || !ep.title || !same(ep.eventIds, s.eventIds);
+  });
+
+  // 2. titles for new or changed episodes, one model call, plain titles if it fails
+  const titles = new Map<string, { title: string; summary: string }>();
+  for (const s of needTitle) titles.set(s.eventIds[0], plainEpisodeTitle(s));
+  let titled = 0;
+  if (needTitle.length) {
+    const input = needTitle.map(s => `Episode first event ${s.eventIds[0]}, ${clockCT(s.start)} to ${clockCT(s.end)} at ${s.place}, ${s.wearers.join(' and ')}:\n` + s.summaries.slice(0, 8).map(x => `- ${x}`).join('\n')).join('\n\n');
+    const r = chatWithFallback(ctx.http, chatKeys(ctx.env), [{ role: 'user', content: `${EPISODE_PROMPT}\n\n${input}` }], 900);
+    for (const f of r.failures) console.warn(`segment: ${f}`);
+    if (r.text) {
+      const byFirstId = new Map(needTitle.map(s => [s.eventIds[0], s]));
+      for (const raw of r.text.split('\n')) {
+        const line = raw.replace(/^[\s\-*•`]+/, '').trim();
+        const parts = line.split('|').map(x => x.trim());
+        if (parts.length < 2) continue;
+        const s = byFirstId.get(parts[0].replace(/[`"']/g, ''));
+        const title = (parts[1] ?? '').replace(/[`"]/g, '');
+        if (!s || !title) continue;
+        titles.set(s.eventIds[0], { title: title.slice(0, 80), summary: parts.slice(2).join(' | ').slice(0, 300) || plainEpisodeTitle(s).summary });
+        titled++;
+      }
+      if (!titled) console.warn(`segment: no usable title lines in: ${r.text.slice(0, 160)}`);
+    }
+  }
+
+  // 3. write: update in place by first event, insert new, delete stale
+  ctx.withTx((tx: any) => {
+    const keep = new Set<bigint>();
+    for (const s of segs) {
+      const ep = byFirst.get(s.eventIds[0]);
+      const tt = titles.get(s.eventIds[0]);
+      if (ep) {
+        keep.add(ep.episodeId);
+        if (tt || ep.tEndMicros !== s.end || !same(ep.eventIds, s.eventIds)) {
+          tx.db.episode.episodeId.update({ episodeId: ep.episodeId, tStartMicros: s.start, tEndMicros: s.end, title: tt ? tt.title : ep.title, summary: tt ? tt.summary : ep.summary, eventIds: s.eventIds });
+        }
+      } else {
+        const t0 = tt ?? plainEpisodeTitle(s);
+        const row = tx.db.episode.insert({ episodeId: 0n, tStartMicros: s.start, tEndMicros: s.end, title: t0.title, summary: t0.summary, eventIds: s.eventIds });
+        keep.add(row.episodeId);
+      }
+    }
+    for (const ep of snap.existing) if (!keep.has(ep.episodeId)) tx.db.episode.episodeId.delete(ep.episodeId);
+  });
+  return { episodes: segs.length, titled };
+}
+
+// Scheduled by perceive (one pending job); the row is deleted after it runs.
+export const segment = spacetimedb.procedure({ onSchedule: segmentJob }, { arg: segmentJob.rowType }, t.unit(), (ctx, _args) => {
+  const r = runSegmentation(ctx);
+  console.info(`segment: ${r.episodes} episodes, ${r.titled} titled`);
+  return {};
+});
+
+// Admin: recompute every episode and retitle all of them (after a reperceive, or when titles went wrong).
+export const resegment = spacetimedb.procedure({ adminToken: t.string() }, SegmentResult, (ctx, { adminToken }) => {
+  if (adminToken !== (ctx.env.ADMIN_TOKEN ?? ctx.env.INGEST_TOKEN)) throw new SenderError('unauthorized');
+  return runSegmentation(ctx, true);
 });
 
 // ---------- reducers ----------
