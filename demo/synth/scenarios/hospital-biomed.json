@@ -156,30 +156,6 @@
       "room": "Blood bank"
     },
     {
-      "id": "05-transfer-switch",
-      "t": 70,
-      "wearer": "marcus",
-      "prompt": "Gray electrical automatic transfer switch cabinet in a generator room with indicator lights; a large engraved nameplate reads \"ATS-1\" and a lit green indicator reads \"NORMAL SOURCE\".",
-      "read": [
-        "ATS-1"
-      ],
-      "room": "Generator room",
-      "note": "Monthly generator test prep. ATS-1 on normal source."
-    },
-    {
-      "id": "08-generator-test",
-      "t": 96,
-      "wearer": "marcus",
-      "room": "Generator room",
-      "pair": "gen",
-      "prompt": "Control panel of a large diesel emergency generator in a generator room; a big engraved plate reads \"GEN-1\"; the panel display shows \"RUNNING\" and \"LOAD 38%\" in green; the panel has exactly two round indicator lights and both are lit green; there are no red lights or red buttons anywhere on the panel; yellow conduit and the generator housing beside it.",
-      "read": [
-        "GEN-1",
-        "RUNNING"
-      ],
-      "note": "Generator test started, GEN-1 carrying 38% of the building."
-    },
-    {
       "id": "09-pump-fails-test",
       "t": 125,
       "wearer": "aisha",
@@ -229,9 +205,45 @@
       "note": "Bottom corner of the BBR-2 door gasket is torn, the door is not sealing."
     },
     {
-      "id": "12-supply-gasket",
-      "t": 204,
+      "id": "15-pump-tagged-out",
+      "t": 200,
       "wearer": "aisha",
+      "room": "Biomed shop",
+      "prompt": "An infusion pump on a biomedical workshop shelf with a bright red tag tied to its handle reading \"OUT OF SERVICE\" in large letters and a printed sticker \"WO-5531\"; a white asset tag on the pump reads \"BME-10442\".",
+      "read": [
+        "10442",
+        "OUT OF SERVICE"
+      ],
+      "note": "10442 tagged out under WO-5531, pressure sensor on order. 4 West is one pump short tonight."
+    },
+    {
+      "id": "05-transfer-switch",
+      "t": 215,
+      "wearer": "marcus",
+      "prompt": "Gray electrical automatic transfer switch cabinet in a generator room with indicator lights; a large engraved nameplate reads \"ATS-1\" and a lit green indicator reads \"NORMAL SOURCE\".",
+      "read": [
+        "ATS-1"
+      ],
+      "room": "Generator room",
+      "note": "Monthly generator test prep. ATS-1 on normal source."
+    },
+    {
+      "id": "08-generator-test",
+      "t": 240,
+      "wearer": "marcus",
+      "room": "Generator room",
+      "pair": "gen",
+      "prompt": "Control panel of a large diesel emergency generator in a generator room; a big engraved plate reads \"GEN-1\"; the panel display shows \"RUNNING\" and \"LOAD 38%\" in green; the panel has exactly two round indicator lights and both are lit green; there are no red lights or red buttons anywhere on the panel; yellow conduit and the generator housing beside it.",
+      "read": [
+        "GEN-1",
+        "RUNNING"
+      ],
+      "note": "Generator test started, GEN-1 carrying 38% of the building."
+    },
+    {
+      "id": "12-supply-gasket",
+      "t": 265,
+      "wearer": "marcus",
       "room": "Central supply",
       "prompt": "A hospital central supply shelf of labeled plastic bins; a gloved hand pulls a bagged gray rubber refrigerator door gasket from a bin whose printed label reads \"GASKET BBR SERIES\".",
       "read": [
@@ -241,8 +253,8 @@
     },
     {
       "id": "13-blood-fridge-fixed",
-      "t": 242,
-      "wearer": "aisha",
+      "t": 300,
+      "wearer": "marcus",
       "room": "Blood bank",
       "pair": "bbr",
       "prompt": "Front of the blood bank refrigerator BBR-2, display back to normal.",
@@ -255,7 +267,7 @@
     },
     {
       "id": "14-generator-done",
-      "t": 300,
+      "t": 332,
       "wearer": "marcus",
       "room": "Generator room",
       "pair": "gen",
@@ -266,18 +278,6 @@
         "TEST COMPLETE"
       ],
       "note": "Generator test complete, building transferred back to normal source."
-    },
-    {
-      "id": "15-pump-tagged-out",
-      "t": 362,
-      "wearer": "aisha",
-      "room": "Biomed shop",
-      "prompt": "An infusion pump on a biomedical workshop shelf with a bright red tag tied to its handle reading \"OUT OF SERVICE\" in large letters and a printed sticker \"WO-5531\"; a white asset tag on the pump reads \"BME-10442\".",
-      "read": [
-        "10442",
-        "OUT OF SERVICE"
-      ],
-      "note": "10442 tagged out under WO-5531, pressure sensor on order. 4 West is one pump short tonight."
     }
   ],
   "site": {

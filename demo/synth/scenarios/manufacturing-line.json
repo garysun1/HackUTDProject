@@ -131,16 +131,6 @@
       "note": "CV-3 still locked out under WO-2207, Ray's lock and mine both on the disconnect."
     },
     {
-      "id": "05-quality-check",
-      "t": 58,
-      "wearer": "priya",
-      "prompt": "A machined aluminum part on a granite inspection table next to digital calipers and a printed inspection sheet with large text \"LOT 2291 PASS\".",
-      "read": [
-        "LOT 2291"
-      ],
-      "room": "QA lab"
-    },
-    {
       "id": "06-compressor",
       "t": 95,
       "wearer": "luis",
@@ -204,17 +194,6 @@
       "note": "Replaced the coolant hose and rerouted it clear of the bracket. Alarm cleared, CNC-07 back to normal and cutting again."
     },
     {
-      "id": "10-first-piece",
-      "t": 204,
-      "wearer": "priya",
-      "room": "QA lab",
-      "prompt": "A freshly machined aluminum part on a granite inspection table with a digital height gauge beside it and a printed inspection sheet with large bold text \"LOT 2292 FIRST PIECE PASS\".",
-      "read": [
-        "LOT 2292"
-      ],
-      "note": "First piece off CNC-07 after the repair measures in tolerance. Lot 2292 released."
-    },
-    {
       "id": "11-press-leak",
       "t": 255,
       "wearer": "luis",
@@ -227,20 +206,8 @@
       "note": "HP-2 return-line fitting is weeping, small oil leak at the base. Pad down; needs a new fitting before it gets worse."
     },
     {
-      "id": "12-cell-board",
-      "t": 300,
-      "wearer": "priya",
-      "room": "Cell 3",
-      "prompt": "A wall-mounted production status board at the end of a machining cell with large printed digits: \"CELL 3\", \"PLAN 340\", \"ACTUAL 312\", and \"STOP MIN 43\".",
-      "read": [
-        "CELL 3",
-        "312"
-      ],
-      "note": "Cell 3 at 312 of 340, the 43 minutes on CNC-07 cost us the rest."
-    },
-    {
       "id": "13-handoff-board",
-      "t": 385,
+      "t": 300,
       "wearer": "luis",
       "room": "Maintenance shop",
       "pair": "board",
@@ -251,6 +218,39 @@
         "HP-2"
       ],
       "note": "Board updated for third shift: CV-3 belt Tuesday, HP-2 fitting still to do."
+    },
+    {
+      "id": "05-quality-check",
+      "t": 320,
+      "wearer": "priya",
+      "prompt": "A machined aluminum part on a granite inspection table next to digital calipers and a printed inspection sheet with large text \"LOT 2291 PASS\".",
+      "read": [
+        "LOT 2291"
+      ],
+      "room": "QA lab"
+    },
+    {
+      "id": "10-first-piece",
+      "t": 335,
+      "wearer": "priya",
+      "room": "QA lab",
+      "prompt": "A freshly machined aluminum part on a granite inspection table with a digital height gauge beside it and a printed inspection sheet with large bold text \"LOT 2292 FIRST PIECE PASS\".",
+      "read": [
+        "LOT 2292"
+      ],
+      "note": "First piece off CNC-07 after the repair measures in tolerance. Lot 2292 released."
+    },
+    {
+      "id": "12-cell-board",
+      "t": 362,
+      "wearer": "priya",
+      "room": "Cell 3",
+      "prompt": "A wall-mounted production status board at the end of a machining cell with large printed digits: \"CELL 3\", \"PLAN 340\", \"ACTUAL 312\", and \"STOP MIN 43\".",
+      "read": [
+        "CELL 3",
+        "312"
+      ],
+      "note": "Cell 3 at 312 of 340, the 43 minutes on CNC-07 cost us the rest."
     }
   ],
   "site": {

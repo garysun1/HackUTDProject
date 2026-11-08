@@ -122,26 +122,6 @@
       "room": "Data hall B"
     },
     {
-      "id": "05-cable-work",
-      "t": 24,
-      "wearer": "dev",
-      "prompt": "A gloved hand holding a yellow single-mode fiber patch cable plugged into a dense patch panel; a white printed cable tag on the cable reads \"P24\" in large black text.",
-      "read": [
-        "P24"
-      ],
-      "room": "Data hall C"
-    },
-    {
-      "id": "06-core-switch",
-      "t": 31,
-      "wearer": "dev",
-      "prompt": "Front of a network core switch in a rack with many blinking amber and green port LEDs and neatly dressed blue cables; a large white label on the chassis reads \"SW-CORE-1\".",
-      "read": [
-        "SW-CORE-1"
-      ],
-      "room": "Data hall A"
-    },
-    {
       "id": "07-pdu-a-fault",
       "t": 42,
       "wearer": "maria",
@@ -166,8 +146,28 @@
       "room": "Data hall A"
     },
     {
+      "id": "05-cable-work",
+      "t": 62,
+      "wearer": "dev",
+      "prompt": "A gloved hand holding a yellow single-mode fiber patch cable plugged into a dense patch panel; a white printed cable tag on the cable reads \"P24\" in large black text.",
+      "read": [
+        "P24"
+      ],
+      "room": "Data hall C"
+    },
+    {
+      "id": "06-core-switch",
+      "t": 70,
+      "wearer": "dev",
+      "prompt": "Front of a network core switch in a rack with many blinking amber and green port LEDs and neatly dressed blue cables; a large white label on the chassis reads \"SW-CORE-1\".",
+      "read": [
+        "SW-CORE-1"
+      ],
+      "room": "Data hall A"
+    },
+    {
       "id": "09-ups-1",
-      "t": 56,
+      "t": 78,
       "wearer": "dev",
       "prompt": "Front touchscreen panel of a large floor-standing UPS cabinet in an electrical room; a nameplate reads \"UPS-1\"; the screen shows \"ONLINE\" in green and \"LOAD 42%\".",
       "read": [
@@ -178,8 +178,8 @@
     },
     {
       "id": "10-pdu-a-fixed",
-      "t": 64,
-      "wearer": "maria",
+      "t": 90,
+      "wearer": "dev",
       "pair": "pdu-a",
       "prompt": "Close-up of a vertical rack power distribution unit mounted inside rack R12; a white sticker label reads \"PDU-A\" in black block letters; its small backlit LCD shows \"10.9 kW\" and below it \"PSU2 OK\" with a green status light.",
       "edit": "change only the small backlit LCD so it reads \"10.9 kW\" and \"PSU2 OK\", and make its status light green instead of red.",
