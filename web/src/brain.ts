@@ -192,6 +192,8 @@ export function renderBrain(el: HTMLElement, ctx: BrainCtx): Snapshot {
         (h.carried.length ? `<ul>${h.carried.map(c => `<li class="${c.done ? 'done' : ''}">${esc(c.a.assetName || c.a.text)}${c.a.assetName ? ` · ${esc(c.a.text)}` : ''}</li>`).join('')}</ul>` : '<div class="clear">Nothing carried over</div>') +
         h.said.map(s => `<div class="said">“${esc(s)}”</div>`).join('') + `</div></section>`);
     }
+    // issues and the handoff stay pinned under the numbers; only the photo feed scrolls away
+    if (ctx.stats) { const pinned = document.createElement('div'); pinned.className = 'pinned'; pinned.innerHTML = parts.splice(0).join(''); ctx.stats.appendChild(pinned); pinned.querySelectorAll<HTMLElement>('[data-jump]').forEach(n => n.addEventListener('click', e => { e.stopPropagation(); if (n.dataset.jump) ctx.onJump(Number(n.dataset.jump)); })); }
     // photos, oldest first; the current one is marked and scrolled into view
     const curId = snap.events.length ? snap.events[snap.events.length - 1].eventId : '';
     const evHtml = (e: Ev) => {

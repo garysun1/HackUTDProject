@@ -222,7 +222,7 @@
     },
     {
       "id": "10-wildlife-guards",
-      "t": 300,
+      "t": 295,
       "wearer": "lena",
       "room": "Bay 3",
       "prompt": "A gloved hand holding a new bright orange plastic wildlife guard for a bushing, with a second one still in its packaging on the gravel, next to the gray circuit breaker cabinet whose white sticker label reads \"CB-12\".",
@@ -233,7 +233,7 @@
     },
     {
       "id": "11-breaker-closed-again",
-      "t": 330,
+      "t": 310,
       "wearer": "lena",
       "room": "Bay 3",
       "pair": "cb12",
@@ -247,7 +247,7 @@
     },
     {
       "id": "12-relay-normal",
-      "t": 345,
+      "t": 322,
       "wearer": "lena",
       "room": "Control house",
       "pair": "relay",

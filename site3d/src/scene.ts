@@ -370,6 +370,7 @@ export class SiteScene {
       let v = this.issues.get(p.id);
       if (!v) {
         const el = document.createElement('div'); el.className = 'idot arrive'; el.dataset.id = p.id; el.innerHTML = '<i></i>';
+        el.style.visibility = 'hidden'; requestAnimationFrame(() => requestAnimationFrame(() => { el.style.visibility = ''; })); // placed by the label renderer first, so it never flashes at the corner
         el.addEventListener('click', ev => { ev.stopPropagation(); this.onIssueClick(p.id); });
         el.addEventListener('mouseenter', ev => this.onIssueHover(p.id, ev.clientX, ev.clientY)); el.addEventListener('mouseleave', () => this.onIssueHover(null, 0, 0));
         const obj = new CSS2DObject(el);
