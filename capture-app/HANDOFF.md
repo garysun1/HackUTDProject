@@ -1,4 +1,20 @@
-# Spoken briefing check (Devin, 2026-11-07 ~20:40 CST) — on top of the 19:00 state below
+# Spoken briefing check (Devin, 2026-11-07 ~20:40–23:30 CST) — on top of the 19:00 state below
+
+**State at 23:30 CST (Edward resuming with Claude):** everything is pushed; `capture/1-photo-button` = origin =
+`faf4183`, PR #18 body current, issue #22 has the write-up, `#log` has the `[DONE]` post (ts `1794114571.434919`).
+Installed on Edward's iPhone 17 (`faf4183`, NVIDIA key seeded from the gitignored `Config/Config.plist`).
+
+Hardware run (debug.log, 05:10 UTC): Nemotron wrote a 41-word briefing from the live tables; Magpie read it over the
+Ray-Ban HFP route (~20 s from script to listening — TTS fetch + playback; consider pre-fetching the re-prompt lines
+while the script plays). The wearer's "Yes" was recognized as a partial, then on-device recognition returned an
+**empty final result** that wiped it, so the check re-asked — fixed in `faf4183` (`VoiceNarrator.ingest` keeps the
+partial when the final is empty). **Edward has not yet confirmed the fixed build end-to-end**; first thing to do is
+Start shift → say "yes" → expect "Good, Edward. You're up to speed." and the sheet closing, then pull
+`debug.log` (command in the 19:00 section) and check the `[Briefing] prompt 1 heard: … → yes` line.
+
+Open: ElevenLabs path untested (no key); Magpie voice/speed tuning (`NvidiaClient.defaultVoice`, Aria; `Jason`,
+`Mia` and `.Calm` variants exist); Gary's answer on a `briefing_ack` row vs the note; #10 measurements 2/4/5.
+
 
 Edward's ask: "some sort of AI needs to synthesize the info, the voice can't be so bad, it all has to be
 automated, and it has to get confirmation that they understand" — then simplified: confirmation is the wearer
