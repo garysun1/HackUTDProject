@@ -25,7 +25,8 @@ struct FloorQuantizer: Sendable, Equatable {
     /// 0.25 of a 4 m floor is 1 m: well above the barometer's noise (~0.1–0.3 m), well under a half floor.
     var hysteresis = 0.25
 
-    static let defaultFloorHeightM = 4.0
+    /// ECSW measured 5.7 / 5.2 / 5.5 m per floor on the 2026-11-08 calibration walk (capture-app/calibration/).
+    static let defaultFloorHeightM = 5.5
     /// Floor heights outside this range make no sense for a building and are clamped.
     static let floorHeightRange: ClosedRange<Double> = 2.5...8.0
     /// Hysteresis is clamped so that a change always needs less than one full floor of overshoot.

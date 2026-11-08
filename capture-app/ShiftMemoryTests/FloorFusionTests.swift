@@ -3,7 +3,7 @@
 // Shift Memory
 //
 // The fusion rules in front of the floor quantiser (issue #19): (a) pedometer floors must have
-// changed within 60 s, (b) the last fix must be within 20 m of a stair/elevator or absent,
+// changed within 60 s, (b) the last fix must be within `siteRadiusM` of a stair/elevator or absent,
 // (c) small drift while stationary away from stairs re-zeroes the baseline.
 //
 
@@ -92,17 +92,18 @@ final class FloorFusionTests: XCTestCase {
     _ = f.update(sample(0, alt: 0, floors: 0, fix: farFix))
     let d = f.update(sample(30, alt: 3.2, floors: 1, fix: farFix))
     guard case .rejected(0, 1, let reason) = d else { return XCTFail("\(d)") }
-    XCTAssertTrue(reason.contains("no stair or elevator within 20 m"), reason)
+    XCTAssertTrue(reason.contains("no stair or elevator within \(Int(config.siteRadiusM)) m"), reason)
     XCTAssertEqual(f.floor, 0)
   }
 
-  func testTwentyMetresIsTheEdge() {
+  func testSiteRadiusIsTheEdge() {
+    let r = config.siteRadiusM
     var f = FloorFusion(config: config)
-    _ = f.update(sample(0, alt: 0, floors: 0, fix: fix(at: eastStairs, offsetNorthM: 19)))
-    guard case .accepted = f.update(sample(30, alt: 3.2, floors: 1, fix: fix(at: eastStairs, offsetNorthM: 19))) else { return XCTFail() }
+    _ = f.update(sample(0, alt: 0, floors: 0, fix: fix(at: eastStairs, offsetNorthM: r - 1)))
+    guard case .accepted = f.update(sample(30, alt: 3.2, floors: 1, fix: fix(at: eastStairs, offsetNorthM: r - 1))) else { return XCTFail() }
     var g = FloorFusion(config: config)
-    _ = g.update(sample(0, alt: 0, floors: 0, fix: fix(at: eastStairs, offsetNorthM: 21)))
-    guard case .rejected = g.update(sample(30, alt: 3.2, floors: 1, fix: fix(at: eastStairs, offsetNorthM: 21))) else { return XCTFail() }
+    _ = g.update(sample(0, alt: 0, floors: 0, fix: fix(at: eastStairs, offsetNorthM: r + 1)))
+    guard case .rejected = g.update(sample(30, alt: 3.2, floors: 1, fix: fix(at: eastStairs, offsetNorthM: r + 1))) else { return XCTFail() }
   }
 
   func testNoFixAtAllLetsTheChangeThrough() {

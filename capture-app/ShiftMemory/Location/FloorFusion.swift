@@ -24,7 +24,7 @@ struct FloorFusion: Sendable {
     /// (a) How recently the pedometer's floor count must have changed.
     var pedometerWindow: TimeInterval = 60
     /// (b) How close the last fix must be to a stair or elevator.
-    var siteRadiusM = 20.0
+    var siteRadiusM = 40.0                   // indoor GPS at ECSW read the stairs at 24–35 m
     var sites: [FloorSite] = FloorSites.ecsw
     /// (a) Also demand a pedometer change when the wearer stands at an elevator (the pedometer
     /// never counts elevator floors, so true disables elevator rides).
