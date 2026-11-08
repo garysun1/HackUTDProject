@@ -96,9 +96,46 @@ script that calls `ingest_photo` for each in order at adjustable speed. First sc
 (arriving, a rack, a panel, a cable change, a conversation, a snack run, back to the desk),
 one with a `label`. Target output: a readable timeline and a handoff summary for that hour.
 
+## v3.1 additions (2026-11-08, additive; decision 0028)
+
+`event_json` gains two optional fields, stored by the module in `event_location` (not on
+`event`: adding columns to a populated table is not an automatic Spacetime migration):
+
+```json
+"shift_id": "uuid4, new on every Start shift on this device",
+"location": {"lat": 32.98589, "lon": -96.75023, "accuracy_m": 6.1,
+             "alt_m": 192.4, "floor": 2, "speed_mps": 0.6, "course_deg": 214.0,
+             "t": "2026-11-07T19:41:02.120-06:00", "age_ms": 1800}
+```
+
+WGS84 degrees from Core Location; `accuracy_m` is the horizontal radius; everything but
+`lat`, `lon` is optional. The phone omits `location` when it has no fix newer than 120 s or the
+fix is worse than 100 m. An event with no usable location simply has no `event_location` row.
+
+New procedure `ingest_track(track_json)`, body `["<track_json>"]`, same token check as
+`ingest_photo`, returns `[accepted, duplicates]`:
+
+```json
+{"device_id": "edward-iphone", "shift_id": "…", "ingest_token": "…", "app_version": "0.1.0",
+ "points": [{"t": "2026-11-07T19:41:02.120-06:00", "lat": 32.98589, "lon": -96.75023,
+             "accuracy_m": 6.1, "alt_m": 192.4, "floor": 2, "speed_mps": 0.6, "course_deg": 214.0}],
+ "marks":  [{"t": "…", "kind": "shift_start | shift_end"}]}
+```
+
+Idempotent on `(device_id, t)` per kind, so a batch can be retried until it gets a reply. Rows
+land in `track_point` (public); marks are stored as rows with `kind` set and borrow the nearest
+point's position in the same batch. Batches above 1000 entries are refused. The phone sends a
+batch every 30 s while a shift is live and buffers while the procedure is absent from the schema.
+
+Shutter-button photos (closes open point 2): on the real glasses, button presses reach the app
+as input events from the `MWDATInputs` capability and the app takes the photo itself; the photo
+capability does not deliver button photos on its own. They arrive while backgrounded (4 of 5 in
+the first measurement) and are tagged `source: shutter_button`.
+
 ## Open points for Edward
 
 1. Base64-in-JSON is now the transport (the procedure call API takes JSON arguments), which
    is the option you did not prefer. At 1600 px it is about 650 KB per photo. OK?
-2. Do shutter-button photos reach the app's photo listener while backgrounded?
-3. HEIC or JPEG from the glasses on your unit?
+2. ~~Do shutter-button photos reach the app's photo listener while backgrounded?~~ Answered above.
+3. HEIC or JPEG from the glasses on your unit? (Answered: HEIC from the glasses, JPEG 1600 px
+   from the phone.)

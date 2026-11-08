@@ -98,11 +98,13 @@ tap the version number five times). MockDeviceKit / MockCameraCaptureKit for dev
 Three ways a photo reaches the backend, all through the same procedure call. The first two
 go through our app's SDK session; the third needs no session.
 
-1. **Shutter button (primary bulk path).** While our app holds an active device session with
-   the standalone photo child started, photos the wearer takes with the glasses' physical
-   button are delivered to our app's photo listener exactly like app-requested ones (1.0
-   camera-capture docs). Uploaded as `source: shutter_button`. Open question (T7): whether
-   delivery works while our app is backgrounded.
+1. **Shutter button (primary bulk path).** While our app holds an active device session,
+   presses of the glasses' physical button reach the app as input events from the
+   `MWDATInputs` capability and the app takes the photo itself (verified on real glasses
+   2026-11-07: the photo capability does not deliver button photos on its own). Uploaded as
+   `source: shutter_button`. Works while backgrounded (4 of 5 in measurement 1); presses during
+   a transfer are queued. A spoken note recorded while the photo transfers goes into `note`
+   (decision 0027).
 2. **Capture button in our app (live demo path).** Standalone photo capture, no stream:
    session started → `capturePhoto(resolution: .full, quality: .high)` → bytes on the
    listener → upload as `source: sdk_capture`. The app subscribes to its own event row and
@@ -358,6 +360,10 @@ nodes; learned bindings; multi-shift consolidation; row-level security per weare
 
 ## Changelog
 
+- 2026-11-08 v4.3: location on every photo and a shift track from the phone (`event_location`,
+  `track_point`, `ingest_track`, contract v3.1); the console's canvas is the site map with the
+  relationship graph as the lens; spoken notes into `note`; shutter path corrected. Decisions
+  0027, 0028.
 - 2026-11-07 v4.2: enterprise operational-memory framing; wearer attribution, asset
   registry, alert rule, channel posting; demo rewritten around alert, handoff, supervisor
   beats. Decision 0026.

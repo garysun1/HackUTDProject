@@ -30,19 +30,16 @@ numerals on. Handoff section heads are 12px uppercase tracked, the one label-sty
 tooltip and drawer. Primary action is the ink-filled button; everything else is outlined.
 
 ## Signature move
-The memory graph (`src/floor.ts`) is the product; it owns the width (the operations rail and the
-floor schematic live in history: fc75319, 721439c). Photos are nodes (56×42 chips bordered in the
-wearer's color, red when an alert is open, time stamped beneath); the places, assets and objects
-the model saw in them stem outward; a line is a relationship (grey INVOLVES, amber CHANGES with
-its from → to on focus, dotted wearer-colored NEXT for the walk). Places are soft green hubs,
-assets are mono pills, objects are small dots that only appear when their photo is in focus
-unless two photos share them. A hand-written force simulation lays it out, with time as a soft
-left-to-right force (order, gaps capped) so the shift still reads in sequence. The view fits the
-whole graph while it stays readable, otherwise keeps the newest photos at the right, or centres
-on the selected photo; wheel zooms, drag pans, nodes can be dragged, double-click or Fit returns.
-Clicking any entity traces it: everything else dims to 12%. Replay empties the graph and rebuilds
-the shift in ten seconds with a scrubber. Hover shows the photo card; click opens the detail panel
-over the right edge. Arrow keys step through the shift. Canvas colors are read from the tokens.
+The site map (`src/map.ts`, Leaflet over Esri topographic tiles desaturated to the register) is
+the canvas since 2026-11-08: each wearer's walking track in their color (smoothed, fixes worse
+than 35 m dropped, a pulsing dot at the live end), photo pins carrying the thumbnail with the
+time beneath, red and breathing while an alert is open, settling green-then-neutral when it is
+acknowledged, an accuracy ring when the fix is loose, pins within 40 px clustered into a stack
+with a count. Clicking a pin opens the detail panel; clicking a cluster, or the "photos without
+a position" pill, opens the memory graph (`src/floor.ts`) as a lens over the map, scoped to those
+photos: photos as nodes, the places, assets and objects seen in them stemming outward, a line a
+relationship. The Map / Graph switch shows the graph full width. Replay empties both and rebuilds
+the shift in ten seconds with a scrubber; the view fits everything until the user takes over.
 
 ## Motion
 Positions ease (110 ms exponential), so zoom, reflow and new arrivals move instead of snapping.

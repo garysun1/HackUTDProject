@@ -1,7 +1,10 @@
 import { connect, onChange, state, visibleEvents, wearerColor, wearerName, notify, DB, fmtTime } from './store';
 import { renderTimeline } from './timeline';
-import { renderFloor } from './floor';
+import { renderFloor, floorUserView } from './floor';
 import { renderRail } from './rail';
+import { renderMap, mapUserView } from './map';
+import { renderTools } from './tools';
+import { view, setMode } from './view';
 
 document.getElementById('db')!.textContent = DB;
 const conn = document.getElementById('conn')!; const connText = document.getElementById('conn-text')!;
@@ -29,7 +32,11 @@ function renderChips() {
 }
 wearersEl.addEventListener('click', e => { const b = (e.target as HTMLElement).closest('.chip') as HTMLElement | null; if (!b) return; const ids = b.dataset.id!.split(','); const hidden = ids.every(id => state.hiddenWearers.has(id)); for (const id of ids) { if (hidden) state.hiddenWearers.delete(id); else state.hiddenWearers.add(id); } notify(); });
 
-onChange(() => { renderChips(); renderTimeline(); renderRail(); renderFloor(); }); // detail panel first: it changes the canvas width
+onChange(() => {
+  if (!view.modeChosen && state.locations.size && view.mode !== 'map') setMode('map', false); // the first positioned photo brings the map up
+  renderChips(); renderTimeline(); renderRail(); // detail panel first: it changes the canvas width
+  renderTools(view.mode === 'map' ? mapUserView() : floorUserView()); renderMap(); renderFloor();
+});
 
 // Timeline collapse: the floor takes the width. Remembered per browser.
 const grid = document.querySelector('.grid') as HTMLElement; const tlToggle = document.getElementById('tl-toggle') as HTMLButtonElement;
@@ -37,13 +44,13 @@ function setTimeline(open: boolean) {
   grid.dataset.tl = open ? 'open' : 'collapsed';
   tlToggle.setAttribute('aria-expanded', String(open)); tlToggle.title = open ? 'Hide timeline' : 'Show timeline';
   try { localStorage.setItem('wm.timeline', open ? 'open' : 'collapsed'); } catch { /* private mode */ }
-  renderFloor();
+  renderFloor(); renderMap();
 }
 tlToggle.addEventListener('click', () => setTimeline(grid.dataset.tl === 'collapsed'));
-grid.addEventListener('transitionend', e => { if (e.propertyName === 'grid-template-columns') renderFloor(); });
+grid.addEventListener('transitionend', e => { if (e.propertyName === 'grid-template-columns') { renderFloor(); renderMap(); } });
 try { if (localStorage.getItem('wm.timeline') === 'collapsed') setTimeline(false); } catch { /* ignore */ }
 document.addEventListener('select', () => notify());
-setInterval(() => { if (visibleEvents().length) { renderFloor(); renderRail(); } }, 15000); // "now" advances: time axis and ages
+setInterval(() => { if (visibleEvents().length) { renderFloor(); renderMap(); renderRail(); } }, 15000); // "now" advances: time axis and ages
 
 const stale = document.getElementById('stale')!;
 connect((s, msg) => {

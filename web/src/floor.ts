@@ -3,12 +3,17 @@
 // Time is a soft left-to-right force, so the shift still reads in order. A hand-written force
 // simulation (no dependency) lays it out; new photos drift into place; Replay rebuilds the
 // shift from empty in ten seconds.
-import { state, visibleEvents, placeOf, displayName, edgesFrom, props, alertsFor, wearerColor, wearerName, fmtTime, notify, loadPhoto, type Ev } from './store';
+import { state, visibleEvents, displayName, edgesFrom, props, alertsFor, wearerColor, wearerName, fmtTime, notify, loadPhoto, type Ev } from './store';
 import { select, esc } from './timeline';
+import { view as vs, shownEvents, setScope, onView } from './view';
+import { photoCard, showTip, hideTip } from './card';
+import { fitRequested } from './tools';
 
 const canvas = document.getElementById('floor') as HTMLCanvasElement;
 const empty = document.getElementById('floor-empty') as HTMLElement;
-const tools = document.getElementById('floor-tools') as HTMLElement;
+const floorEl = canvas.parentElement as HTMLElement;
+const scopeHead = document.getElementById('scope-head') as HTMLElement; const scopeTitle = document.getElementById('scope-title') as HTMLElement;
+document.getElementById('scope-close')!.addEventListener('click', () => setScope(null));
 const ctx = canvas.getContext('2d')!;
 
 // ---------- model ----------
@@ -22,8 +27,7 @@ const view = { k: 1, tx: 0, ty: 0 }; let userView = false;
 const bootT = performance.now();
 let hover: string | null = null; let drag: { n: N; moved: boolean; sx: number; sy: number } | null = null; let pan: { sx: number; sy: number; tx: number; ty: number; moved: boolean } | null = null;
 const imgs = new Map<string, HTMLImageElement>();
-let raf = 0; let lastFrame = performance.now();
-const replay = { on: false, playing: false, start: 0, progress: 1, dur: 10000 };
+let raf = 0; let lastFrame = performance.now(); let seenFit = fitRequested; let lastReplayStart = 0;
 
 function photo(id: string): HTMLImageElement | null {
   const url = state.photos.get(id); if (!url) { loadPhoto(id); return null; }
@@ -44,32 +48,15 @@ function readTokens() {
 readTokens(); matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { readTokens(); frame(); });
 const withAlpha = (hex: string, a: number) => { const m = /^#([0-9a-f]{6})$/i.exec(hex); if (!m) return hex; const n = parseInt(m[1], 16); return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${a})`; };
 
-// ---------- hover card ----------
-const tip = document.createElement('div'); tip.className = 'floor-tip'; tip.style.display = 'none'; document.body.appendChild(tip);
-function placeTip(e: MouseEvent) {
-  const pad = 14; const w = tip.offsetWidth || 260, h = tip.offsetHeight || 120;
-  tip.style.left = `${e.clientX + pad + w > innerWidth ? e.clientX - pad - w : e.clientX + pad}px`;
-  tip.style.top = `${e.clientY + pad + h > innerHeight ? e.clientY - pad - h : e.clientY + pad}px`;
-}
-function renderTip(n: N) {
-  if (n.kind === 'photo') {
-    const ev = state.events.get(n.id)!; const url = state.photos.get(n.id); const alerts = alertsFor(ev).filter(a => !a.acked); const place = placeOf(n.id);
-    tip.innerHTML = `${url ? `<img src="${url}" alt="">` : '<div class="ph"></div>'}<div class="tb"><div class="tt"><span class="mono">${fmtTime(ev.tMicros)}</span> · <i style="background:${wearerColor(ev.deviceId)}"></i>${esc(wearerName(ev.deviceId))}${place ? ` · ${esc(place.canonicalName)}` : ''}</div>${alerts.length ? `<div class="ta">${esc(alerts[0].text)}${alerts[0].assetName ? ` · ${esc(alerts[0].assetName)}` : ''}</div>` : ''}<div class="ts">${esc(ev.summary || 'reading the photo…')}</div>${ev.note ? `<div class="tn">“${esc(ev.note)}”</div>` : ''}</div>`;
-  } else {
-    const ent = state.entities.get(n.id); const evs = photosOf(n.id); const last = evs[0];
-    const kind = n.kind === 'place' ? 'Place' : n.kind === 'asset' ? 'Asset' : 'Seen in photos';
-    tip.innerHTML = `<div class="tb"><div class="tt"><b>${esc(ent ? displayName(ent) : n.id)}</b>${ent && displayName(ent) !== ent.canonicalName ? ` <span>${esc(ent.canonicalName)}</span>` : ''}</div><div class="ts">${kind} · in ${evs.length} photo${evs.length === 1 ? '' : 's'}${last ? ` · last ${fmtTime(last.tMicros)} by ${esc(wearerName(last.deviceId))}` : ''}. Click to trace.</div></div>`;
-  }
+// ---------- hover card (shared element in card.ts) ----------
+function entityCard(n: N): string {
+  const ent = state.entities.get(n.id); const evs = photosOf(n.id); const last = evs[0];
+  const kind = n.kind === 'place' ? 'Place' : n.kind === 'asset' ? 'Asset' : 'Seen in photos';
+  return `<div class="tb"><div class="tt"><b>${esc(ent ? displayName(ent) : n.id)}</b>${ent && displayName(ent) !== ent.canonicalName ? ` <span>${esc(ent.canonicalName)}</span>` : ''}</div><div class="ts">${kind} · in ${evs.length} photo${evs.length === 1 ? '' : 's'}${last ? ` · last ${fmtTime(last.tMicros)} by ${esc(wearerName(last.deviceId))}` : ''}. Click to trace.</div></div>`;
 }
 function photosOf(entityId: string): Ev[] { return shown().filter(e => state.edges.some(x => x.fromId === e.eventId && x.toId === entityId)); }
 
-// ---------- what is shown: the window, narrowed by replay ----------
-function shown(): Ev[] {
-  const saved = state.assetFilter; state.assetFilter = null; let evs: Ev[]; try { evs = visibleEvents(); } finally { state.assetFilter = saved; }
-  if (!replay.on || !evs.length) return evs;
-  const t0 = Number(evs[evs.length - 1].tMicros), t1 = Number(evs[0].tMicros); const cut = t0 + (t1 - t0) * replay.progress;
-  return evs.filter(e => Number(e.tMicros) <= cut + 1);
-}
+function shown(): Ev[] { return shownEvents(true); }
 
 // ---------- pointer ----------
 function hit(px: number, py: number): N | null {
@@ -91,15 +78,15 @@ canvas.addEventListener('mousemove', e => {
   if (drag) { const w = toWorld(px, py); drag.n.fx = w.x; drag.n.fy = w.y; if (Math.hypot(px - drag.sx, py - drag.sy) > 4) drag.moved = true; alpha = Math.max(alpha, 0.25); frame(); return; }
   if (pan) { if (Math.hypot(px - pan.sx, py - pan.sy) > 4) { pan.moved = true; userView = true; } if (pan.moved) { view.tx = pan.tx + (px - pan.sx); view.ty = pan.ty + (py - pan.sy); frame(); } return; }
   const n = hit(px, py); const prev = hover; hover = n?.id ?? null; canvas.style.cursor = n ? 'pointer' : 'grab';
-  if (n) { if (n.kind === 'photo' && !state.photos.get(n.id)) loadPhoto(n.id).then(() => { if (hover === n.id) renderTip(n); }); if (prev !== n.id) renderTip(n); tip.style.display = 'block'; placeTip(e); }
-  else tip.style.display = 'none';
+  if (n) showTip(n.kind === 'photo' ? photoCard(n.id) : entityCard(n), e.clientX, e.clientY, n.id);
+  else hideTip();
   if (prev !== hover) frame();
 });
 addEventListener('mouseup', e => {
   if (drag) { const n = drag.n; const moved = drag.moved; drag = null; n.fx = n.fy = null; if (!moved) { if (n.kind === 'photo') select(n.id); else { state.assetFilter = state.assetFilter === n.id ? null : n.id; notify(); } } return; }
   if (pan) { const moved = pan.moved; pan = null; if (!moved && e.target === canvas && state.selected) select(null); }
 });
-canvas.addEventListener('mouseleave', () => { hover = null; tip.style.display = 'none'; frame(); });
+canvas.addEventListener('mouseleave', () => { hover = null; hideTip(); frame(); });
 canvas.addEventListener('dblclick', () => { userView = false; frame(); });
 canvas.addEventListener('wheel', e => {
   if (!nodes.size) return; e.preventDefault();
@@ -117,35 +104,9 @@ document.addEventListener('keydown', e => {
 });
 addEventListener('resize', () => { alpha = Math.max(alpha, 0.2); frame(); });
 
-// ---------- header tools: replay, trace pill, fit ----------
-let toolsKey = '';
-tools.addEventListener('click', e => {
-  const t = e.target as HTMLElement;
-  if (t.closest('[data-replay]')) { replay.on = true; replay.playing = true; replay.progress = 0; replay.start = performance.now(); nodes.clear(); links = []; userView = false; frame(); }
-  if (t.closest('[data-live]')) { replay.on = false; replay.playing = false; replay.progress = 1; alpha = Math.max(alpha, 0.5); frame(); }
-  if (t.closest('[data-fit]')) { userView = false; frame(); }
-  if (t.closest('[data-clear]')) { state.assetFilter = null; notify(); }
-});
-tools.addEventListener('input', e => {
-  const t = e.target as HTMLInputElement; if (!t.matches('[data-scrub]')) return;
-  replay.playing = false; replay.progress = Number(t.value) / 1000; frame();
-});
-function renderTools(tracedName: string, tracedCount: number) {
-  const key = `${replay.on}|${replay.playing}|${tracedName}|${tracedCount}|${userView}`;
-  if (key !== toolsKey) {
-    toolsKey = key;
-    tools.innerHTML =
-      (tracedName ? `<button type="button" class="pill" data-clear title="Stop tracing">Tracing <b>${esc(tracedName)}</b> · ${tracedCount} photo${tracedCount === 1 ? '' : 's'} · clear</button>` : '') +
-      (replay.on ? `<label class="scrub" title="Scrub the shift"><input type="range" min="0" max="1000" value="${Math.round(replay.progress * 1000)}" data-scrub aria-label="Replay position"></label><button type="button" class="btn ghost" data-live>Live</button>`
-        : `<button type="button" class="btn ghost" data-replay title="Rebuild the shift from the first photo">▶ Replay</button>`) +
-      (userView ? `<button type="button" class="btn ghost" data-fit title="Fit the graph (double-click the canvas)">Fit</button>` : '');
-  }
-  const s = tools.querySelector('[data-scrub]') as HTMLInputElement | null; if (s && replay.playing) s.value = String(Math.round(replay.progress * 1000));
-}
-
 // ---------- graph construction: keep positions, add what is new, drop what left ----------
 function sync(evs: Ev[]) {
-  const now = performance.now(); const booted = now - bootT > 2500 || replay.on;
+  const now = performance.now(); const booted = now - bootT > 2500 || vs.replay.on;
   const keep = new Set<string>(); links = [];
   const chrono = [...evs].reverse();
   // x target by order in time, gaps capped: a four-hour pause is a longer gap, not an empty screen
@@ -219,15 +180,21 @@ function tick(xT: (t: number) => number) {
 // ---------- render ----------
 export function renderFloor() {
   const now = performance.now(); const dt = Math.min(50, now - lastFrame); lastFrame = now;
+  floorEl.dataset.mode = vs.mode;
+  const visible = vs.mode === 'graph' || !!vs.scope;
+  canvas.hidden = !visible; scopeHead.hidden = !(vs.mode === 'map' && vs.scope);
+  if (vs.scope) scopeTitle.innerHTML = `<b>${esc(vs.scopeLabel || 'Selection')}</b> · ${shown().length} photo${shown().length === 1 ? '' : 's'} · what connects`;
+  if (!visible) { empty.hidden = true; return; }
+  if (vs.replay.start !== lastReplayStart) { lastReplayStart = vs.replay.start; nodes.clear(); links = []; userView = false; }
+  if (fitRequested !== seenFit) { seenFit = fitRequested; userView = false; }
   const dpr = devicePixelRatio || 1;
   W = canvas.clientWidth; H = canvas.clientHeight;
   if (canvas.width !== W * dpr || canvas.height !== H * dpr) { canvas.width = W * dpr; canvas.height = H * dpr; }
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, H);
 
-  if (replay.playing) { replay.progress = Math.min(1, (now - replay.start) / replay.dur); if (replay.progress >= 1) replay.playing = false; }
-  const evs = shown(); empty.hidden = evs.length > 0 || replay.on;
+  const evs = shown(); empty.hidden = evs.length > 0 || vs.replay.on || !!vs.scope;
   const { xT, chrono } = sync(evs);
-  let moving = replay.playing;
+  let moving = vs.replay.playing;
   if (alpha > 0.004) { for (let i = 0; i < 2; i++) tick(xT); alpha += (0 - alpha) * 0.028; moving = true; } else alpha = 0;
 
   // view: auto-fit until the user takes over
@@ -316,10 +283,8 @@ export function renderFloor() {
   ctx.globalAlpha = 1; ctx.restore();
 
   // replay caption
-  if (replay.on && chrono.length) { const last = chrono[chrono.length - 1]; ctx.font = '12px Inter, sans-serif'; ctx.fillStyle = C.ink3; ctx.textAlign = 'left'; ctx.textBaseline = 'bottom'; ctx.fillText(`Replay · ${fmtTime(last.tMicros)} · ${chrono.length} photo${chrono.length === 1 ? '' : 's'}`, 16, H - 10); }
+  if (vs.replay.on && chrono.length && vs.mode === 'graph') { const last = chrono[chrono.length - 1]; ctx.font = '12px Inter, sans-serif'; ctx.fillStyle = C.ink3; ctx.textAlign = 'left'; ctx.textBaseline = 'bottom'; ctx.fillText(`Replay · ${fmtTime(last.tMicros)} · ${chrono.length} photo${chrono.length === 1 ? '' : 's'}`, 16, H - 10); }
 
-  const tracedName = traceId ? (state.entities.get(traceId) ? displayName(state.entities.get(traceId)!) : traceId) : '';
-  renderTools(tracedName, traceId ? photosOf(traceId).length : 0);
   if (moving) frame();
 }
 function bez(ax: number, ay: number, mx: number, bx: number, by: number, t: number) { const u = 1 - t; return { x: u * u * u * ax + 3 * u * u * t * mx + 3 * u * t * t * mx + t * t * t * bx, y: u * u * u * ay + 3 * u * u * t * ay + 3 * u * t * t * by + t * t * t * by }; }
@@ -330,3 +295,5 @@ function wrapText(s: string, x: number, y: number, maxW: number, lh: number) {
   if (cur) lines.push(cur); const top = y - ((lines.length - 1) * lh) / 2;
   lines.slice(0, 3).forEach((l, i) => ctx.fillText(l, x, top + i * lh));
 }
+export function floorUserView() { return userView; }
+onView(() => renderFloor());

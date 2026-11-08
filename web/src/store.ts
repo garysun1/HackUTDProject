@@ -17,6 +17,8 @@ export type Handoff = { handoffId: bigint; sinceMicros: bigint; generatedMicros:
 export type Alert = { id: string; alertId: bigint; eventId: string; kind: 'critical' | 'warning'; rawKind: string; text: string; tMicros: bigint; assetId?: string; assetName?: string; deviceId: string; wearerName: string; acked: boolean; slackStatus: string };
 export type Wearer = { deviceId: string; name: string; role: string; shift: string };
 export type Asset = { assetId: string; name: string; assetType: string; location: string; patterns: string[] };
+export type Loc = { eventId: string; deviceId: string; shiftId: string; tMicros: bigint; lat: number; lon: number; accuracyM: number; altM?: number; floor?: number; fixT: string; ageMs?: number };
+export type TrackPoint = { pointId: string; deviceId: string; shiftId: string; tMicros: bigint; kind: string; lat: number; lon: number; accuracyM: number; floor?: number };
 
 export const state = {
   events: new Map<string, Ev>(),
@@ -28,6 +30,8 @@ export const state = {
   wearers: new Map<string, Wearer>(),
   assets: new Map<string, Asset>(),
   photos: new Map<string, string>(), // eventId -> data URL
+  locations: new Map<string, Loc>(), // eventId -> where the photo was taken (#20)
+  track: new Map<string, TrackPoint>(), // pointId -> shift track point (#20)
   selected: null as string | null,
   windowMin: 0 as number, // 0 = all
   hiddenWearers: new Set<string>(),
@@ -142,13 +146,20 @@ export function connect(onState: (s: 'connecting' | 'live' | 'error', msg?: stri
       conn.db.alert.onInsert((_c, r) => { const a = toAlert(r); state.alerts.set(a.id, a); state.fresh.add(a.eventId); setTimeout(() => { state.fresh.delete(a.eventId); notify(); }, 1200); notify(); });
       conn.db.alert.onUpdate((_c, _o, r) => { const a = toAlert(r); state.alerts.set(a.id, a); notify(); });
       conn.db.alert.onDelete((_c, r) => { state.alerts.delete(String(r.alertId)); notify(); });
+      const toLoc = (r: any): Loc => ({ eventId: r.eventId, deviceId: r.deviceId, shiftId: r.shiftId, tMicros: BigInt(r.tMicros), lat: Number(r.lat), lon: Number(r.lon), accuracyM: Number(r.accuracyM), altM: r.altM ?? undefined, floor: r.floor ?? undefined, fixT: r.fixT, ageMs: r.ageMs ?? undefined });
+      conn.db.eventLocation.onInsert((_c, r) => { state.locations.set(r.eventId, toLoc(r)); notify(); });
+      conn.db.eventLocation.onUpdate((_c, _o, r) => { state.locations.set(r.eventId, toLoc(r)); notify(); });
+      conn.db.eventLocation.onDelete((_c, r) => { state.locations.delete(r.eventId); notify(); });
+      const toPt = (r: any): TrackPoint => ({ pointId: String(r.pointId), deviceId: r.deviceId, shiftId: r.shiftId, tMicros: BigInt(r.tMicros), kind: r.kind, lat: Number(r.lat), lon: Number(r.lon), accuracyM: Number(r.accuracyM), floor: r.floor ?? undefined });
+      conn.db.trackPoint.onInsert((_c, r) => { const p = toPt(r); state.track.set(p.pointId, p); notify(); });
+      conn.db.trackPoint.onDelete((_c, r) => { state.track.delete(String(r.pointId)); notify(); });
       conn.db.wearer.onInsert((_c, r) => { state.wearers.set(r.deviceId, { ...r }); notify(); });
       conn.db.wearer.onUpdate((_c, _o, r) => { state.wearers.set(r.deviceId, { ...r }); notify(); });
       conn.db.asset.onInsert((_c, r) => { state.assets.set(r.assetId, { ...r, patterns: [...r.patterns] }); notify(); });
       conn.db.asset.onUpdate((_c, _o, r) => { state.assets.set(r.assetId, { ...r, patterns: [...r.patterns] }); notify(); });
       conn.subscriptionBuilder()
         .onApplied(() => notify())
-        .subscribe(['SELECT * FROM event', 'SELECT * FROM entity', 'SELECT * FROM edge', 'SELECT * FROM episode', 'SELECT * FROM handoff', 'SELECT * FROM alert', 'SELECT * FROM wearer', 'SELECT * FROM asset']);
+        .subscribe(['SELECT * FROM event', 'SELECT * FROM entity', 'SELECT * FROM edge', 'SELECT * FROM episode', 'SELECT * FROM handoff', 'SELECT * FROM alert', 'SELECT * FROM wearer', 'SELECT * FROM asset', 'SELECT * FROM event_location', 'SELECT * FROM track_point']);
     })
     .onConnectError((_ctx, err) => { state.connected = false; onState('error', String(err?.message ?? err)); })
     .onDisconnect(() => { state.connected = false; onState('connecting', 'reconnecting'); })
