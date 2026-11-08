@@ -8,7 +8,11 @@ let current: string | null = null;
 
 export function photoCard(id: string): string {
   const ev = state.events.get(id); if (!ev) return '';
-  const url = state.photos.get(id); if (!url) loadPhoto(id).then(() => { if (current === id) { tip.innerHTML = photoCard(id); } });
+  // redraw only when the photo actually arrived: loadPhoto returns at once (undefined) while the photo
+  // is in flight or backing off, and re-running photoCard then would call it again forever, a
+  // microtask loop that never yields and freezes the page (seen hovering a pin right after a switch)
+  // (another caller may already be fetching it: then look again shortly, on a timer, which yields)
+  const url = state.photos.get(id); if (!url) loadPhoto(id).then(u => { if (current !== id) return; if (u) tip.innerHTML = photoCard(id); else setTimeout(() => { if (current === id) tip.innerHTML = photoCard(id); }, 600); });
   const alerts = alertsFor(ev).filter(a => !a.acked); const place = placeOf(id); const loc = state.locations.get(id);
   return `${url ? `<img src="${url}" alt="">` : '<div class="ph"></div>'}<div class="tb"><div class="tt"><span class="mono">${fmtTime(ev.tMicros)}</span> · <i style="background:${wearerColor(ev.deviceId)}"></i>${esc(wearerName(ev.deviceId))}${place ? ` · ${esc(place.canonicalName)}` : ''}${loc ? ` · ±${Math.round(loc.accuracyM)} m` : ''}</div>${alerts.length ? `<div class="ta">${esc(alerts[0].text)}${alerts[0].assetName ? ` · ${esc(alerts[0].assetName)}` : ''}</div>` : ''}<div class="ts">${esc(ev.summary || 'reading the photo…')}</div>${ev.note ? `<div class="tn">“${esc(ev.note)}”</div>` : ''}</div>`;
 }
