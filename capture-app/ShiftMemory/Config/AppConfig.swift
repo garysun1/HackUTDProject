@@ -19,6 +19,13 @@ final class EndpointSnapshot: Sendable {
   func set(_ endpoint: BackendEndpoint) { lock.withLock { $0 = endpoint } }
 }
 
+/// A secret as last saved, readable from any thread (the NVIDIA client runs off the main actor).
+final class SecretSnapshot: Sendable {
+  private let lock = OSAllocatedUnfairLock(initialState: "")
+  var value: String { lock.withLock { $0 } }
+  func set(_ value: String) { lock.withLock { $0 = value } }
+}
+
 @MainActor
 @Observable
 final class AppConfig {
@@ -65,6 +72,18 @@ final class AppConfig {
   var useGlassesMic: Bool { didSet { defaults.set(useGlassesMic, forKey: Keys.useGlassesMic) } }
   /// Show the shift briefing before a shift starts.
   var briefingOnStart: Bool { didSet { defaults.set(briefingOnStart, forKey: Keys.briefingOnStart) } }
+  /// Read the briefing aloud by itself and have the wearer repeat the key points back (Nemotron + Magpie
+  /// with a key; template script + keyword grade without).
+  var spokenBriefingCheck: Bool { didSet { defaults.set(spokenBriefingCheck, forKey: Keys.spokenBriefingCheck) } }
+  /// NVIDIA API key for Nemotron (briefing text, grading) and Magpie TTS (the voice). Keychain.
+  var nvidiaApiKey: String {
+    didSet {
+      keychain.set(nvidiaApiKey.isEmpty ? nil : nvidiaApiKey, for: Keys.nvidiaApiKey)
+      nvidiaKeySnapshot.set(nvidiaApiKey)
+    }
+  }
+  let nvidiaKeySnapshot = SecretSnapshot()
+  var hasNvidiaApiKey: Bool { !nvidiaApiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
   /// When this wearer last ended a shift / acknowledged a briefing (local only).
   var lastShiftEndedAt: Date? { didSet { defaults.set(lastShiftEndedAt, forKey: Keys.lastShiftEndedAt) } }
   var lastBriefingAckAt: Date? { didSet { defaults.set(lastBriefingAckAt, forKey: Keys.lastBriefingAckAt) } }
@@ -102,6 +121,8 @@ final class AppConfig {
     static let voiceContext = "capture.voiceContext"
     static let useGlassesMic = "capture.useGlassesMic"
     static let briefingOnStart = "shift.briefingOnStart"
+    static let spokenBriefingCheck = "shift.spokenBriefingCheck"
+    static let nvidiaApiKey = "nvidia_api_key"
     static let lastShiftEndedAt = "shift.lastShiftEndedAt"
     static let lastBriefingAckAt = "shift.lastBriefingAckAt"
     static let locationEnabled = "location.enabled"
@@ -127,6 +148,9 @@ final class AppConfig {
       if let v = seed["INGEST_TOKEN"] as? String, !v.isEmpty, keychain.string(for: Keys.ingestToken) == nil {
         keychain.set(v, for: Keys.ingestToken)
       }
+      if let v = seed["NVIDIA_API_KEY"] as? String, !v.isEmpty, keychain.string(for: Keys.nvidiaApiKey) == nil {
+        keychain.set(v, for: Keys.nvidiaApiKey)
+      }
       defaults.set(true, forKey: Keys.seeded)
     }
 
@@ -142,6 +166,8 @@ final class AppConfig {
     voiceContext = defaults.object(forKey: Keys.voiceContext) as? Bool ?? true
     useGlassesMic = defaults.object(forKey: Keys.useGlassesMic) as? Bool ?? true
     briefingOnStart = defaults.object(forKey: Keys.briefingOnStart) as? Bool ?? true
+    spokenBriefingCheck = defaults.object(forKey: Keys.spokenBriefingCheck) as? Bool ?? true
+    nvidiaApiKey = keychain.string(for: Keys.nvidiaApiKey) ?? ""
     lastShiftEndedAt = defaults.object(forKey: Keys.lastShiftEndedAt) as? Date
     lastBriefingAckAt = defaults.object(forKey: Keys.lastBriefingAckAt) as? Date
     locationEnabled = defaults.object(forKey: Keys.locationEnabled) as? Bool ?? true
@@ -156,6 +182,7 @@ final class AppConfig {
       deviceId = AppConfig.defaultDeviceId(wearerName: wearerName)
     }
     endpointSnapshot.set(endpoint)
+    nvidiaKeySnapshot.set(nvidiaApiKey)
   }
 
   /// `edward-iphone` when a wearer name is known, else `phone-3fa9c2`. Readable ids are what the

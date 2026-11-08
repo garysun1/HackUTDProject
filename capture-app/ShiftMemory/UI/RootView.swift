@@ -116,6 +116,9 @@ struct HomeView: View {
           isLoading: model.briefingLoading,
           error: model.briefingError,
           speaker: model.speaker,
+          check: model.briefingMode == .shiftStart && model.config.spokenBriefingCheck ? model.briefingCheck : nil,
+          onListenAgain: { model.briefingListenAgain() },
+          onRerunCheck: { model.rerunBriefingCheck() },
           onRefresh: { Task { await model.loadBriefing() } },
           onOpenEvent: { id in
             model.briefingPresented = false

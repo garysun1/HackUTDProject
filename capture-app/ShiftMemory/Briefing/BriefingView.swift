@@ -16,6 +16,10 @@ struct BriefingView: View {
   let isLoading: Bool
   let error: String?
   let speaker: BriefingSpeaker
+  /// The automated read-and-repeat-back check; nil when it is off.
+  let check: BriefingCheck?
+  let onListenAgain: () -> Void
+  let onRerunCheck: () -> Void
   let onRefresh: () -> Void
   let onOpenEvent: (String) -> Void
   let onAcknowledge: () -> Void
@@ -27,7 +31,8 @@ struct BriefingView: View {
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @ScaledMetric(relativeTo: .caption) private var monoSize: CGFloat = 12
 
-  init(briefing: Briefing?, isLoading: Bool, error: String?, speaker: BriefingSpeaker,
+  init(briefing: Briefing?, isLoading: Bool, error: String?, speaker: BriefingSpeaker, check: BriefingCheck? = nil,
+       onListenAgain: @escaping () -> Void = {}, onRerunCheck: @escaping () -> Void = {},
        onRefresh: @escaping () -> Void, onOpenEvent: @escaping (String) -> Void,
        onAcknowledge: @escaping () -> Void, onSkip: @escaping () -> Void,
        primaryTitle: String = "I'm up to speed, start shift") {
@@ -35,6 +40,9 @@ struct BriefingView: View {
     self.isLoading = isLoading
     self.error = error
     self.speaker = speaker
+    self.check = check
+    self.onListenAgain = onListenAgain
+    self.onRerunCheck = onRerunCheck
     self.onRefresh = onRefresh
     self.onOpenEvent = onOpenEvent
     self.onAcknowledge = onAcknowledge
@@ -70,6 +78,90 @@ struct BriefingView: View {
     .onChange(of: briefing?.needsYou.map(\.id) ?? []) { _, ids in
       acknowledged.formIntersection(ids)
     }
+    .onChange(of: check?.phase) { _, phase in
+      // A pass is the acknowledgement: every open item is checked, and the caller closes the sheet.
+      if phase == .passed, let briefing { acknowledged.formUnion(briefing.needsYou.map(\.id)) }
+    }
+  }
+
+  // MARK: - Spoken check
+
+  private func checkCard(_ check: BriefingCheck, _ b: Briefing) -> some View {
+    VStack(alignment: .leading, spacing: 8) {
+      HStack(spacing: 8) {
+        checkIcon(check.phase)
+        Text(checkTitle(check.phase)).font(.subheadline.weight(.semibold)).foregroundStyle(Theme.ink)
+        Spacer(minLength: 0)
+        if check.phase.isActive {
+          Button("Stop") { check.cancel() }.font(.footnote).foregroundStyle(Theme.ink3)
+        }
+      }
+      if check.phase == .listening {
+        Text(check.liveTranscript.isEmpty ? "Listening…" : check.liveTranscript)
+          .font(.body).foregroundStyle(check.liveTranscript.isEmpty ? Theme.ink3 : Theme.ink2)
+          .fixedSize(horizontal: false, vertical: true)
+      } else if !check.heard.isEmpty, check.phase != .speaking, check.phase != .writing {
+        Text("You said: “\(check.heard)”").font(.footnote).foregroundStyle(Theme.ink3)
+          .fixedSize(horizontal: false, vertical: true)
+      }
+      if let spoken = check.spoken, !spoken.mustKnow.isEmpty, check.phase != .writing {
+        VStack(alignment: .leading, spacing: 4) {
+          ForEach(Array(spoken.mustKnow.enumerated()), id: \.offset) { i, fact in
+            let covered = check.grade?.covered.contains(i) == true
+            HStack(alignment: .top, spacing: 6) {
+              Image(systemName: covered ? "checkmark.circle.fill" : "circle")
+                .foregroundStyle(covered ? Theme.accent : Theme.ink3).font(.footnote).padding(.top, 2)
+              Text(fact).font(.footnote).foregroundStyle(covered ? Theme.ink2 : Theme.ink)
+                .fixedSize(horizontal: false, vertical: true)
+            }
+          }
+        }
+        .padding(.top, 2)
+        .accessibilityLabel("Key points to repeat back")
+      }
+      if case .failed = check.phase {
+        HStack(spacing: 12) {
+          Button("Answer again") { onListenAgain() }.buttonStyle(InkButtonStyle(prominent: false))
+          Button("Read it again") { onRerunCheck() }.buttonStyle(InkButtonStyle(prominent: false))
+        }
+        .padding(.top, 4)
+      } else if case .unavailable = check.phase {
+        Button("Try again") { onRerunCheck() }.buttonStyle(InkButtonStyle(prominent: false)).padding(.top, 4)
+      }
+    }
+    .padding(12)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .background(Theme.ground)
+    .overlay(RoundedRectangle(cornerRadius: 10).stroke(Theme.line))
+    .clipShape(RoundedRectangle(cornerRadius: 10))
+    .accessibilityElement(children: .contain)
+  }
+
+  @ViewBuilder
+  private func checkIcon(_ phase: BriefingCheck.Phase) -> some View {
+    switch phase {
+    case .writing, .grading: ProgressView().controlSize(.small)
+    case .speaking, .reasking: Image(systemName: "speaker.wave.2.fill").foregroundStyle(Theme.accent)
+    case .listening: Image(systemName: "mic.fill").foregroundStyle(Theme.critical)
+    case .passed: Image(systemName: "checkmark.seal.fill").foregroundStyle(Theme.accent)
+    case .failed: Image(systemName: "exclamationmark.circle").foregroundStyle(Theme.warning)
+    case .unavailable: Image(systemName: "mic.slash").foregroundStyle(Theme.ink3)
+    case .idle: EmptyView()
+    }
+  }
+
+  private func checkTitle(_ phase: BriefingCheck.Phase) -> String {
+    switch phase {
+    case .idle: ""
+    case .writing: "Writing your briefing…"
+    case .speaking: "Reading the briefing"
+    case .listening: "Your turn: say the key points back"
+    case .grading: "Checking…"
+    case .reasking(let missed): missed.count == 1 ? "One more to cover" : "\(missed.count) more to cover"
+    case .passed: "Understood. Starting your shift."
+    case .failed(let missed): missed.count == 1 ? "One point not confirmed" : "\(missed.count) points not confirmed"
+    case .unavailable(let why): why
+    }
   }
 
   @ViewBuilder
@@ -78,6 +170,7 @@ struct BriefingView: View {
       ScrollView {
         VStack(alignment: .leading, spacing: 16) {
           header(briefing)
+          if let check, check.phase != .idle { checkCard(check, briefing) }
           if !briefing.needsYou.isEmpty { needsYouSection(briefing.needsYou) }
           if !briefing.leftForYou.isEmpty { leftForYouSection(briefing.leftForYou) }
           if !briefing.changed.isEmpty { changedSection(briefing.changed) }
@@ -283,10 +376,13 @@ struct BriefingView: View {
     let remaining = b.needsYou.count - acknowledgedCount(b.needsYou)
     return VStack(spacing: 8) {
       Button {
-        speaker.isSpeaking ? speaker.stop() : speaker.speak(b.spokenScript)
+        if let check, check.phase.isActive { check.cancel() }
+        else if check != nil { onRerunCheck() }
+        else { speaker.isSpeaking ? speaker.stop() : speaker.speak(check?.spoken?.script ?? b.spokenScript) }
       } label: {
-        Label(speaker.isSpeaking ? "Stop reading" : "Read it to me",
-              systemImage: speaker.isSpeaking ? "stop.fill" : "speaker.wave.2.fill")
+        let active = speaker.isSpeaking || check?.phase.isActive == true
+        Label(active ? "Stop" : (check == nil ? "Read it to me" : "Read it again and check me"),
+              systemImage: active ? "stop.fill" : "speaker.wave.2.fill")
       }
       .buttonStyle(InkButtonStyle(prominent: false))
       .accessibilityHint(speaker.isSpeaking ? "" : "Reads the briefing aloud")

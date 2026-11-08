@@ -35,6 +35,8 @@ final class AppModel {
   let shutterSound: ShutterSound
   let narrator: VoiceNarrator
   let speaker: BriefingSpeaker
+  let nvidia: NvidiaClient
+  let briefingCheck: BriefingCheck
   let floor: FloorStore
   let location: LocationTracker
   let trackStore: TrackStore
@@ -107,6 +109,15 @@ final class AppModel {
     speaker = BriefingSpeaker(prepareAudio: { [audio] in
       do { try audio.activateForPlayback() } catch { DebugLog.write("Audio", "activate for briefing failed: \(error)") }
     })
+    let keySnapshot = config.nvidiaKeySnapshot
+    let nvidia = NvidiaClient(apiKey: { keySnapshot.value })
+    self.nvidia = nvidia
+    speaker.log = { DebugLog.write("Speaker", $0) }
+    speaker.synthesize = { [nvidia] text in
+      guard nvidia.hasKey else { throw NvidiaError(kind: .noKey, detail: "") }
+      return try await nvidia.synthesize(text)
+    }
+    briefingCheck = BriefingCheck(nvidia: nvidia, speaker: speaker, narrator: narrator, log: { DebugLog.write("Briefing", $0) })
     floor = FloorStore(repository: FloorRepository(client: client), log: { DebugLog.write("Floor", $0) })
     location = LocationTracker(log: { DebugLog.write("Location", $0) })
     let trackStore = TrackStore(directory: support.appending(path: "Track"))
@@ -173,6 +184,12 @@ final class AppModel {
       self.finishShift(reason: "ended by operator after handoff")
     }
     glasses.onEvent = { [weak self] event in self?.record(event) }
+    briefingCheck.onPassed = { [weak self] note in
+      guard let self, self.briefingPresented else { return }
+      // The acknowledgement rides on the shift's first photo as its note, so it reaches the graph.
+      if self.config.pendingNotePrefix.isEmpty { self.config.pendingNotePrefix = note }
+      self.acknowledgeBriefing()
+    }
     // The chime marks the press itself; listening starts once the press is accepted as a capture.
     glasses.onShutterPress = { [weak self] in
       guard let self, self.config.shutterSound else { return }
@@ -286,6 +303,7 @@ final class AppModel {
 
   func presentBriefing(_ mode: BriefingMode) {
     briefingMode = mode
+    briefing = nil
     briefingPresented = true
     Task { await loadBriefing() }
   }
@@ -309,12 +327,25 @@ final class AppModel {
     }
     let since = briefingSince
     let handoffText = await latestHandoffText(since: since)
-    briefing = BriefingBuilder.build(
+    let built = BriefingBuilder.build(
       snapshot: floor.snapshot, myDeviceId: config.deviceId,
       myName: config.wearerName.isEmpty ? "you" : config.wearerName,
       since: since, now: Date(), handoffText: handoffText
     )
+    let first = briefing == nil
+    briefing = built
+    if first, briefingMode == .shiftStart, briefingPresented, config.spokenBriefingCheck {
+      briefingCheck.run(built, wearer: config.wearerName)
+    }
   }
+
+  /// The spoken check again, from the top (the Read-it button while a check is on).
+  func rerunBriefingCheck() {
+    guard let briefing else { return }
+    briefingCheck.run(briefing, wearer: config.wearerName)
+  }
+
+  func briefingListenAgain() { briefingCheck.listenAgain(wearer: config.wearerName) }
 
   /// The newest generated handoff (module #8) inside the window, if the pipeline has written one.
   private func latestHandoffText(since: Date) async -> String? {
@@ -330,13 +361,15 @@ final class AppModel {
 
   func acknowledgeBriefing() {
     config.lastBriefingAckAt = Date()
-    DebugLog.write("Shift", "briefing acknowledged (\(briefing?.needsYou.count ?? 0) open items)")
+    DebugLog.write("Shift", "briefing acknowledged (\(briefing?.needsYou.count ?? 0) open items; check: \(briefingCheck.phase))")
+    if briefingCheck.phase != .passed { briefingCheck.cancel() }
     speaker.stop()
     briefingPresented = false
   }
 
   func skipBriefing() {
     DebugLog.write("Shift", "briefing skipped")
+    briefingCheck.cancel()
     speaker.stop()
     briefingPresented = false
   }
