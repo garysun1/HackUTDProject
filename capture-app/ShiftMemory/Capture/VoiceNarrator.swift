@@ -500,13 +500,17 @@ final class VoiceNarrator {
   private func ingest(text: String?, isFinal: Bool, errorDomain: String?, errorCode: Int?, errorText: String?, id: NarrationQueue.ID) {
     let live: Live
     if let c = current, c.id == id { live = c } else if let f = finishing[id] { live = f } else { return }
-    if let text {
+    // On-device recognition often answers `endAudio()` with a final result whose transcription is
+    // empty (seen for one-word answers like "Yes"); the last partial is the better text, keep it.
+    if let text, !(isFinal && text.trimmingCharacters(in: .whitespaces).isEmpty && !live.text.isEmpty) {
       live.text = text
       queue.updatePartial(id, text)
       if current === live {
         liveTranscript = text
         live.endpointer.transcript(text, at: live.elapsed)
       }
+    } else if isFinal, let text, text.trimmingCharacters(in: .whitespaces).isEmpty {
+      log("narration: final result #\(id) empty, keeping partial '\(live.text)'")
     }
     if isFinal {
       complete(live)
