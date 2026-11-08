@@ -8,8 +8,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
-  <script type="module" crossorigin src="/assets/index-ClBceNT6.js"></script>
-  <link rel="stylesheet" crossorigin href="/assets/index-kdj3kdFQ.css">
+  <script type="module" crossorigin src="/assets/index-Cr8rH9ce.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-D1Rr3gGP.css">
 </head>
 <body>
 <header class="top">
@@ -23,36 +23,20 @@
 <main class="grid">
   <div class="stale" id="stale" role="status"></div>
   <section class="col timeline" aria-label="Timeline">
-    <div class="colhead"><h2>Timeline</h2><span class="count" id="count">0 events</span></div>
+    <div class="colhead"><h2>Timeline</h2><span class="count" id="count">0 events</span><button class="btn ghost icon" id="tl-toggle" type="button" aria-expanded="true" aria-controls="timeline" title="Hide timeline"><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="2.5" y="4" width="15" height="12" rx="2.5"/><path d="M7 7v6"/></svg></button></div>
     <ol id="timeline" class="events"></ol>
     <p class="empty" id="timeline-empty">No events yet. The first photo from the floor will appear here.</p>
   </section>
   <section class="col floor" aria-label="Floor schematic">
-    <div class="colhead"><h2>Floor</h2><span class="legend"><i class="k k-ev"></i>event <i class="k k-chg"></i>change <i class="k k-al"></i>alert</span></div>
+    <div class="colhead"><h2>Floor</h2><span id="floor-tools" class="floor-tools"></span><span class="legend"><i class="k k-ev"></i>event <i class="k k-chg"></i>change <i class="k k-al"></i>alert</span></div>
     <canvas id="floor" role="img" aria-label="Floor schematic: places as zones, assets as tiles, photos as marks on a time axis. The timeline lists the same events."></canvas>
     <p class="empty" id="floor-empty">The schematic draws itself from places and assets as photos arrive.</p>
-  </section>
-  <aside class="col rail" aria-label="Operations">
-    <section class="panel" id="alerts-panel">
-      <div class="colhead"><h2>Needs attention</h2><span class="count" id="alert-count" aria-live="polite"></span></div>
-      <ul id="alerts" class="alerts"></ul>
-      <p class="empty" id="alerts-empty">All clear. Nothing open.</p>
-    </section>
-    <section class="panel" id="handoff-panel">
-      <div class="colhead"><h2>Handoff</h2><button id="gen-handoff" class="btn primary" type="button">Generate</button></div>
-      <div id="handoff" class="handoff"></div>
-    </section>
-    <section class="panel" id="ask-panel">
-      <div class="colhead"><h2>Ask the floor</h2></div>
-      <form id="ask-form" class="ask"><label class="sr" for="ask-input">Question for the floor</label><input id="ask-input" type="text" placeholder="What happened to PDU-A today?" autocomplete="off" /><button class="btn" type="submit">Ask</button></form>
-      <div id="answer" class="answer"></div>
-    </section>
     <section class="drawer" id="drawer" hidden role="dialog" aria-labelledby="drawer-title">
       <div class="colhead"><h2 id="drawer-title">Event</h2><button class="btn ghost" id="drawer-close" type="button" aria-label="Close">Close</button></div>
       <img id="drawer-img" alt="Photo taken by the wearer at this event" />
       <dl id="drawer-fields" class="fields"></dl>
     </section>
-  </aside>
+  </section>
 </main>
 </body>
 </html>
