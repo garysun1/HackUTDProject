@@ -399,17 +399,25 @@ export const ingestPhoto = spacetimedb.procedure(
 
     const nowMicros = ctx.timestamp.microsSinceUnixEpoch;
     const serverT = isoFromMicros(nowMicros);
+    // Event time. Bulk paths carry the original capture time (CONTRACT: camera_roll sends the
+    // Photos library creation time; manual_upload is an import or a replay), so those events sit
+    // on the timeline where they were taken. Live paths use receipt time, within seconds of
+    // capture and immune to a wrong phone clock. server_t is always receipt time.
+    const clientMicros = microsFromIso(String(ev.client_t));
+    const bulk = ev.source === 'camera_roll' || ev.source === 'manual_upload';
+    const plausible = clientMicros !== null && clientMicros <= nowMicros + 5n * 60n * 1_000_000n && clientMicros >= nowMicros - 30n * 86400n * 1_000_000n;
+    const eventMicros = bulk && plausible ? clientMicros! : nowMicros;
 
     return ctx.withTx(tx => {
       const existing = tx.db.event.eventId.find(ev.event_id);
       if (existing) {
-        return { eventId: existing.eventId, serverT: isoFromMicros(existing.tMicros), status: 'duplicate' };
+        return { eventId: existing.eventId, serverT: isoFromMicros(existing.serverT.microsSinceUnixEpoch), status: 'duplicate' };
       }
       tx.db.event.insert({
         eventId: ev.event_id,
         deviceId: ev.device_id,
         clientT: ev.client_t,
-        tMicros: nowMicros,
+        tMicros: eventMicros,
         serverT: ctx.timestamp,
         source: ev.source,
         status: 'accepted',
@@ -438,7 +446,7 @@ export const ingestPhoto = spacetimedb.procedure(
           eventId: ev.event_id,
           deviceId: ev.device_id,
           shiftId: typeof ev.shift_id === 'string' ? ev.shift_id : '',
-          tMicros: nowMicros,
+          tMicros: eventMicros,
           ...fix,
         });
       }

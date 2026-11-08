@@ -128,6 +128,9 @@ test('graph sections cite every line and group rounds by wearer', () => {
   const withResolver = assembleHandoff(null, { ...snap, alerts: [{ ...snap.alerts[1], resolvedBy: 'e3' }] });
   assert.match(withResolver, /CRAC unit 2: OVERTEMP \(19:06 CT\), resolved \[event:e3\]/);
   assert.match(text, /Maria: 2 photos 22:00 CT to 22:30 CT, PDU A \(Rack R12\), Rack R12, Cold Aisle 3 \[event:e1\] \[event:e2\]/);
+  // a place that is also a listed asset is not repeated
+  const rackPlace = assembleHandoff(null, { ...snap, events: [{ ...snap.events[0], place: 'Rack R12' }, snap.events[1]] });
+  assert.match(rackPlace, /Maria: 2 photos 22:00 CT to 22:30 CT, PDU A \(Rack R12\), Rack R12, Cold Aisle 3 \[event:e1\] \[event:e2\]/);
   // nested places collapse to the most general name in rounds
   const nested = assembleHandoff(null, { ...snap, events: [{ ...snap.events[0], place: 'Cold Aisle 3, Row R12' }, { ...snap.events[1], place: 'Cold Aisle 3' }] });
   assert.match(nested, /Maria: 2 photos 22:00 CT to 22:30 CT, PDU A \(Rack R12\), Rack R12, Cold Aisle 3 \[event:e1\] \[event:e2\]/);

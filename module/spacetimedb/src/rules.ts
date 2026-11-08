@@ -357,7 +357,8 @@ export function roundsLines(snap: HandoffSnap): string[] {
         else if (e.place.length < places[dup].length) places[dup] = e.place; // keep the more general name
       }
     }
-    const seen = [...assets, ...places];
+    // a place that is also a listed asset (a rack) is not repeated
+    const seen = [...assets, ...places.filter(pl => !assets.some(a => squash(a) === squash(pl)))];
     const first = evs[0];
     const last = evs[evs.length - 1];
     const cites = first === last ? cite(first.id) : `${cite(first.id)} ${cite(last.id)}`;
