@@ -178,7 +178,10 @@ function connectData(onState: OnState) {
       conn.db.eventLocation.onInsert(on((_c: any, r: any) => { state.locations.set(r.eventId, toLoc(r)); notify(); }));
       conn.db.eventLocation.onUpdate(on((_c: any, _o: any, r: any) => { state.locations.set(r.eventId, toLoc(r)); notify(); }));
       conn.db.eventLocation.onDelete(on((_c: any, r: any) => { state.locations.delete(r.eventId); notify(); }));
-      const toPt = (r: any): TrackPoint => ({ pointId: String(r.pointId), deviceId: r.deviceId, shiftId: r.shiftId, tMicros: BigInt(r.tMicros), kind: r.kind, lat: Number(r.lat), lon: Number(r.lon), accuracyM: Number(r.accuracyM), floor: r.floor ?? undefined });
+      // A track point's time is the phone's clock (`t`), like a photo's capture time; the server
+      // micros are the fallback, and the only time a replayed dataset would otherwise show (#26).
+      const walkedMicros = (r: any): bigint => { const srv = BigInt(r.tMicros); const ms = Date.parse(r.t); if (!Number.isFinite(ms)) return srv; const c = BigInt(Math.round(ms)) * 1000n; const d = c > srv ? c - srv : srv - c; return d > 7n * 86_400_000_000n ? srv : c; };
+      const toPt = (r: any): TrackPoint => ({ pointId: String(r.pointId), deviceId: r.deviceId, shiftId: r.shiftId, tMicros: walkedMicros(r), kind: r.kind, lat: Number(r.lat), lon: Number(r.lon), accuracyM: Number(r.accuracyM), floor: r.floor ?? undefined });
       conn.db.trackPoint.onInsert(on((_c: any, r: any) => { const p = toPt(r); state.track.set(p.pointId, p); notify(); }));
       conn.db.trackPoint.onDelete(on((_c: any, r: any) => { state.track.delete(String(r.pointId)); notify(); }));
       const toQ = (r: any): Question => ({ questionId: String(r.questionId), tMicros: BigInt(r.tMicros), source: r.source, tool: r.tool, text: r.text, answer: r.answer, eventIds: [...r.eventIds], asker: r.asker });

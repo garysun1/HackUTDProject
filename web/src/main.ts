@@ -5,7 +5,6 @@ import { renderFloor, floorUserView } from './floor';
 import { renderRail } from './rail';
 import { renderMap, mapUserView } from './map';
 import { renderTools } from './tools';
-import { renderSite } from './site';
 import { view, setMode, onView } from './view';
 
 const dbEl = document.getElementById('db')!;
@@ -50,7 +49,8 @@ function renderMenu() {
 }
 function renderWorkspace() { const w = current(); wsName.textContent = w.name; wsSub.textContent = w.subtitle; wsBtn.title = `${w.name} · ${w.db}`; dbEl.textContent = DB;
   const h2 = document.querySelector('.floor .colhead h2'); if (h2) h2.textContent = vocab().session;
-  const lg = document.querySelector('.floor .legend'); if (lg) { const v = vocab(); lg.innerHTML = `<i class="k k-ph"></i>photo <i class="k k-as"></i>${v.tracked.toLowerCase()} <i class="k k-al"></i>${v.flag.toLowerCase()} <i class="k k-chg"></i>change <i class="k k-nt"></i>${v.note.toLowerCase()}${state.questions.size ? ' <i class="k k-q"></i>question' : ''}`; }
+  const lg = document.querySelector('.floor .legend'); if (lg && view.mode === 'map') { const v = vocab(); lg.innerHTML = `<i class="k k-walk"></i>walk <i class="k k-heat"></i>time spent <i class="k k-ph"></i>photo <i class="k k-al"></i>open ${v.flag.toLowerCase()}`; }
+  else if (lg) { const v = vocab(); lg.innerHTML = `<i class="k k-ph"></i>photo <i class="k k-as"></i>${v.tracked.toLowerCase()} <i class="k k-al"></i>${v.flag.toLowerCase()} <i class="k k-chg"></i>change <i class="k k-nt"></i>${v.note.toLowerCase()}${state.questions.size ? ' <i class="k k-q"></i>question' : ''}`; }
 }
 function openMenu(open: boolean) { wsMenu.hidden = !open; wsBtn.setAttribute('aria-expanded', String(open)); if (open) { renderMenu(); refreshCounts(); (wsMenu.querySelector('[aria-checked="true"]') as HTMLElement | null)?.focus(); } }
 wsBtn.addEventListener('click', () => openMenu(wsMenu.hidden));
@@ -62,7 +62,7 @@ onChange(() => {
   if (!view.modeChosen && state.locations.size && view.mode !== 'map') setMode('map', false); // the first positioned photo brings the map up
   renderWorkspace(); // follows the dataset switch
   renderChips(); renderTimeline(); renderRail(); // detail panel first: it changes the canvas width
-  renderTools(view.mode === 'map' ? mapUserView() : floorUserView()); renderMap(); renderFloor(); renderSite();
+  renderTools(view.mode === 'map' ? mapUserView() : floorUserView()); renderMap(); renderFloor();
 });
 
 // Timeline collapse: the floor takes the width. Remembered per browser.
@@ -73,13 +73,15 @@ function setTimeline(open: boolean, remember = true) {
   if (remember) { try { localStorage.setItem('wm.timeline', open ? 'open' : 'collapsed'); } catch { /* private mode */ } }
   renderFloor(); renderMap();
 }
-// One list on screen: the Site tab embeds a view with its own event panel, so the console's
-// timeline folds away while it is up and comes back when you leave (not remembered).
-let autoFolded = false;
-onView(() => {
-  if (view.mode === 'site' && grid.dataset.tl !== 'collapsed') { autoFolded = true; setTimeline(false, false); }
-  else if (view.mode !== 'site' && autoFolded) { autoFolded = false; setTimeline(true, false); }
-});
+// One list on screen: the map carries the shift-memory panel with its own event feed, so the
+// console's timeline folds away while the map is up and comes back when you leave (not remembered).
+let autoFolded = false; let lastMode = view.mode;
+function foldForMode() {
+  if (view.mode === 'map' && grid.dataset.tl !== 'collapsed') { autoFolded = true; setTimeline(false, false); }
+  else if (view.mode !== 'map' && autoFolded) { autoFolded = false; setTimeline(true, false); }
+}
+onView(() => { if (view.mode !== lastMode) { lastMode = view.mode; foldForMode(); renderWorkspace(); } });
+foldForMode();
 tlToggle.addEventListener('click', () => setTimeline(grid.dataset.tl === 'collapsed'));
 grid.addEventListener('transitionend', e => { if (e.propertyName === 'grid-template-columns') { renderFloor(); renderMap(); } });
 try { if (localStorage.getItem('wm.timeline') === 'collapsed') setTimeline(false); } catch { /* ignore */ }

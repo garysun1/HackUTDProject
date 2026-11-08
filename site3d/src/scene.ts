@@ -8,7 +8,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 import { Proj, tileXY, tileBounds, centroid } from './geo';
-import { cssVar } from './store';
+const cssVar = (n: string) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 
 export type LonLat = [number, number];
 export type Building = { name?: string | null; kind?: string | null; height: number; pts: LonLat[] };
@@ -65,31 +65,36 @@ export class SiteScene {
   private clock = new THREE.Clock(); private materials: { m: THREE.Material; role: string }[] = []; private lineMats: LineMaterial[] = [];
   private sun: THREE.DirectionalLight; private hemi: THREE.HemisphereLight;
 
-  constructor(canvas: HTMLCanvasElement, labelsEl: HTMLElement) {
+  constructor(canvas: HTMLCanvasElement, labelsEl: HTMLElement, private host: HTMLElement) {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false, powerPreference: 'high-performance' });
     this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping; this.renderer.toneMappingExposure = 1.05;
     this.renderer.shadowMap.enabled = true; this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.labels = new CSS2DRenderer({ element: labelsEl });
-    const asp = innerWidth / innerHeight;
+    const asp = Math.max(0.2, host.clientWidth / Math.max(1, host.clientHeight));
     this.persp = new THREE.PerspectiveCamera(42, asp, 0.5, 5000); this.persp.position.set(150, 125, 185);
     const o = 140; this.ortho = new THREE.OrthographicCamera(-o * asp, o * asp, o, -o, 0.5, 5000); this.ortho.position.set(0, 600, 0.001); this.ortho.up.set(0, 0, -1); this.ortho.lookAt(0, 0, 0);
     this.ctrl3d = new OrbitControls(this.persp, canvas); this.ctrl3d.enableDamping = true; this.ctrl3d.dampingFactor = 0.08; this.ctrl3d.maxPolarAngle = Math.PI / 2 - 0.04; this.ctrl3d.minDistance = 18; this.ctrl3d.maxDistance = 900; this.ctrl3d.target.set(0, 4, 0);
     this.ctrl2d = new OrbitControls(this.ortho, canvas); this.ctrl2d.enableRotate = false; this.ctrl2d.enableDamping = true; this.ctrl2d.dampingFactor = 0.1; this.ctrl2d.minZoom = 0.35; this.ctrl2d.maxZoom = 8; this.ctrl2d.enabled = false;
     this.ctrl2d.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN }; this.ctrl2d.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_PAN };
-    for (const c of [this.ctrl3d, this.ctrl2d]) c.addEventListener('start', () => { if (this.follow) this.setFollow(false, true); });
+    for (const c of [this.ctrl3d, this.ctrl2d]) c.addEventListener('start', () => { this.userView = true; if (this.follow) this.setFollow(false, true); });
     this.hemi = new THREE.HemisphereLight(0xffffff, 0x9a968c, 1.1); this.scene.add(this.hemi);
     this.sun = new THREE.DirectionalLight(0xffffff, 1.7); this.sun.position.set(140, 260, 90); this.sun.castShadow = true;
     const sc = this.sun.shadow.camera; sc.left = sc.bottom = -380; sc.right = sc.top = 380; sc.near = 10; sc.far = 800; this.sun.shadow.mapSize.set(2048, 2048); this.sun.shadow.bias = -0.0006; this.sun.shadow.normalBias = 0.6;
     this.scene.add(this.sun); this.scene.add(this.ground); this.scene.add(this.site);
     this.applyTheme();
     matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => this.applyTheme());
-    addEventListener('resize', () => this.resize()); this.resize();
+    new ResizeObserver(() => this.resize()).observe(host); this.resize();
   }
+  userView = false;
+  /** Back to the opening framing of the site. */
+  resetView() { this.userView = false; this.setFollow(false); if (this.home) { this.ctrl3d.target.copy(this.home.target); this.persp.position.copy(this.home.pos); this.ctrl2d.target.set(this.home.target.x, 0, this.home.target.z); this.ortho.position.set(this.home.target.x, 600, this.home.target.z + 0.001); this.ortho.zoom = 1; this.ortho.updateProjectionMatrix(); } }
+  private home: { target: THREE.Vector3; pos: THREE.Vector3 } | null = null;
+  private setHome() { this.home = { target: this.ctrl3d.target.clone(), pos: this.persp.position.clone() }; }
 
   get camera() { return this.mode === '3d' ? this.persp : this.ortho; }
   resize() {
-    const w = innerWidth, h = innerHeight, asp = w / h;
+    const w = Math.max(1, this.host.clientWidth), h = Math.max(1, this.host.clientHeight), asp = w / h;
     this.renderer.setSize(w, h); this.labels.setSize(w, h);
     this.persp.aspect = asp; this.persp.updateProjectionMatrix();
     const o = 140; this.ortho.left = -o * asp; this.ortho.right = o * asp; this.ortho.top = o; this.ortho.bottom = -o; this.ortho.updateProjectionMatrix();
@@ -140,7 +145,7 @@ export class SiteScene {
       this.site.add(rot(new THREE.LineSegments(new THREE.EdgesGeometry(g, 25), edgeMat)));
       if (b.name && !/^\d+$/.test(b.name)) {
         const [cx, cy] = centroid(b.pts); const [x, z] = this.proj.toXZ(cx, cy);
-        const el = document.createElement('div'); el.className = 'lbl bld'; el.textContent = b.name;
+        const el = document.createElement('div'); el.className = 's3-lbl bld'; el.textContent = b.name;
         const lo = new CSS2DObject(el); lo.position.set(x, b.height + 2, z); this.site.add(lo); this.bldLabels.push(lo);
       }
     }
@@ -160,7 +165,7 @@ export class SiteScene {
         const e = rot(new THREE.LineSegments(new THREE.EdgesGeometry(slabGeom), edgeMat)); e.position.y = y + 0.01; this.site.add(e);
         if (i > 0) this.upper.push(s, e);
       }
-      const el = document.createElement('div'); el.className = 'lbl bld'; el.textContent = M.name;
+      const el = document.createElement('div'); el.className = 's3-lbl bld'; el.textContent = M.name;
       const [cx, cy] = centroid(M.outer); const [x, z] = this.proj.toXZ(cx, cy); const lo = new CSS2DObject(el); lo.position.set(x, M.height + 4, z); this.site.add(lo); this.bldLabels.push(lo);
       // rooms on the ground floor
       const roomMat = this.mat(new THREE.LineBasicMaterial({ transparent: true, opacity: 0.5 }), 'room');
@@ -170,7 +175,7 @@ export class SiteScene {
         this.site.add(new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(pts), roomMat));
         if (r.name) {
           const [cx, cy] = centroid(r.pts); const [x, z] = this.proj.toXZ(cx, cy);
-          const el = document.createElement('div'); el.className = 'lbl'; el.textContent = r.name;
+          const el = document.createElement('div'); el.className = 's3-lbl'; el.textContent = r.name;
           const lo = new CSS2DObject(el); lo.position.set(x, 0.6, z); this.site.add(lo); this.roomLabels.push(lo);
         }
       }
@@ -178,7 +183,7 @@ export class SiteScene {
       const xs = M.outer.map(p => this.proj.toXZ(p[0], p[1]));
       const minX = Math.min(...xs.map(p => p[0])) - 25, maxX = Math.max(...xs.map(p => p[0])) + 25, minZ = Math.min(...xs.map(p => p[1])) - 25, maxZ = Math.max(...xs.map(p => p[1])) + 25;
       this.heat = new HeatLayer(minX, maxX, minZ, maxZ, cssVar('--heat') || '#eb6834'); this.scene.add(this.heat.mesh);
-      this.ctrl3d.target.set(x, 4, z); this.persp.position.set(x + 150, 125, z + 185); this.ctrl2d.target.set(x, 0, z); this.ortho.position.set(x, 600, z + 0.001);
+      this.ctrl3d.target.set(x, 4, z); this.persp.position.set(x + 150, 125, z + 185); this.ctrl2d.target.set(x, 0, z); this.ortho.position.set(x, 600, z + 0.001); this.setHome();
     } else {
       this.floorH = 3.6; this.beamH = 9;
       this.heat = new HeatLayer(-160, 160, -160, 160, cssVar('--heat') || '#eb6834'); this.scene.add(this.heat.mesh);
@@ -191,9 +196,9 @@ export class SiteScene {
     const edgeMat = this.mat(new THREE.LineBasicMaterial({ transparent: true, opacity: 0.6 }), 'edge');
     const g = new THREE.BoxGeometry(maxX - minX, 6, maxZ - minZ); const m = new THREE.Mesh(g, glass); m.position.set((minX + maxX) / 2, 3, (minZ + maxZ) / 2); m.renderOrder = 5; this.site.add(m);
     const e = new THREE.LineSegments(new THREE.EdgesGeometry(g), edgeMat); e.position.copy(m.position); this.site.add(e); this.upper.push(m);
-    const el = document.createElement('div'); el.className = 'lbl bld'; el.textContent = name; const lo = new CSS2DObject(el); lo.position.set(m.position.x, 8, m.position.z); this.site.add(lo);
+    const el = document.createElement('div'); el.className = 's3-lbl bld'; el.textContent = name; const lo = new CSS2DObject(el); lo.position.set(m.position.x, 8, m.position.z); this.site.add(lo);
     if (this.heat) { this.scene.remove(this.heat.mesh); } this.heat = new HeatLayer(minX - 20, maxX + 20, minZ - 20, maxZ + 20, cssVar('--heat') || '#eb6834'); this.scene.add(this.heat.mesh);
-    this.ctrl3d.target.set(m.position.x, 3, m.position.z); this.persp.position.set(m.position.x + 90, 70, m.position.z + 110); this.ctrl2d.target.set(m.position.x, 0, m.position.z); this.ortho.position.set(m.position.x, 600, m.position.z + 0.001);
+    this.ctrl3d.target.set(m.position.x, 3, m.position.z); this.persp.position.set(m.position.x + 90, 70, m.position.z + 110); this.ctrl2d.target.set(m.position.x, 0, m.position.z); this.ortho.position.set(m.position.x, 600, m.position.z + 0.001); this.setHome();
   }
   private shape(outer: LonLat[], holes: LonLat[][] = []): THREE.Shape | null {
     if (outer.length < 3) return null;
@@ -221,10 +226,10 @@ export class SiteScene {
       const ring = rot(new THREE.Mesh(new THREE.RingGeometry(1.2, 2.2, 48), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.7, side: THREE.DoubleSide, depthWrite: false }))); ring.renderOrder = 3;
       const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 1, 12, 1, true), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.2, depthWrite: false, side: THREE.DoubleSide })); beam.renderOrder = 4;
       const light = new THREE.PointLight(color, 60, 40, 2);
-      const geom = new LineGeometry(); const lm = new LineMaterial({ vertexColors: true, linewidth: 4, worldUnits: false, transparent: true, opacity: 0.95, depthTest: true }); lm.resolution.set(innerWidth, innerHeight); this.lineMats.push(lm);
+      const geom = new LineGeometry(); const lm = new LineMaterial({ vertexColors: true, linewidth: 4, worldUnits: false, transparent: true, opacity: 0.95, depthTest: true }); lm.resolution.set(this.host.clientWidth, this.host.clientHeight); this.lineMats.push(lm);
       geom.setPositions([0, 0, 0, 0, 0, 0]); geom.setColors([0, 0, 0, 0, 0, 0]);
       const line = new Line2(geom, lm); line.renderOrder = 6; line.frustumCulled = false;
-      const labelEl = document.createElement('div'); labelEl.className = 'wlbl'; labelEl.style.setProperty('--c', spec.color); labelEl.innerHTML = `<i></i><span></span><small></small>`;
+      const labelEl = document.createElement('div'); labelEl.className = 's3-wlbl'; labelEl.style.setProperty('--c', spec.color); labelEl.innerHTML = `<i></i><span></span><small></small>`;
       const label = new CSS2DObject(labelEl);
       w = { head, ring, beam, light, line, geom, label, labelEl, color, n: 0, born: performance.now() };
       this.scene.add(head, ring, beam, light, line, label); this.wearers.set(id, w);
@@ -246,7 +251,7 @@ export class SiteScene {
       w.geom.setPositions(spec.trail); w.geom.setColors(cols);
     }
   }
-  hideWearer(id: string) { const w = this.wearers.get(id); if (!w) return; for (const o of [w.head, w.ring, w.beam, w.light, w.label]) o.visible = false; }
+  hideWearer(id: string) { const w = this.wearers.get(id); if (!w) return; for (const o of [w.head, w.ring, w.beam, w.light, w.label, w.line]) o.visible = false; }
 
   // ---------- pins ----------
   setPins(list: PinSpec[]) {
@@ -256,7 +261,7 @@ export class SiteScene {
       let v = this.pins.get(p.id);
       const sig = `${p.alert}|${p.thumb ? 1 : 0}|${p.selected}|${p.color}`;
       if (!v) {
-        const el = document.createElement('div'); el.className = 'pin arrive'; el.dataset.id = p.id;
+        const el = document.createElement('div'); el.className = 's3-pin arrive'; el.dataset.id = p.id;
         el.addEventListener('click', ev => { ev.stopPropagation(); this.onPinClick(p.id); });
         el.addEventListener('mouseenter', ev => this.onPinHover(p.id, ev.clientX, ev.clientY)); el.addEventListener('mouseleave', () => this.onPinHover(null, 0, 0));
         const obj = new CSS2DObject(el); obj.position.set(p.x, p.y + 2.6, p.z);
@@ -279,7 +284,7 @@ export class SiteScene {
     if (mode === '2d') { const t = this.ctrl3d.target; this.ctrl2d.target.set(t.x, 0, t.z); this.ortho.position.set(t.x, 600, t.z + 0.001); this.ortho.lookAt(t.x, 0, t.z); }
     else { const t = this.ctrl2d.target; const d = this.persp.position.clone().sub(this.ctrl3d.target); this.ctrl3d.target.set(t.x, 4, t.z); this.persp.position.copy(this.ctrl3d.target).add(d); }
   }
-  setFollow(on: boolean, fromUser = false) { this.follow = on; if (!on) this.followPos = null; dispatchEvent(new CustomEvent('site:follow', { detail: { on, fromUser } })); }
+  setFollow(on: boolean, fromUser = false) { this.follow = on; if (!on) this.followPos = null; this.host.dispatchEvent(new CustomEvent('site:follow', { detail: { on, fromUser } })); }
   focus(x: number, z: number) {
     const c = this.mode === '3d' ? this.ctrl3d : this.ctrl2d; const d = c.object.position.clone().sub(c.target);
     c.target.set(x, this.mode === '3d' ? 4 : 0, z); c.object.position.copy(c.target).add(d);
