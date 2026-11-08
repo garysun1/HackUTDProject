@@ -1,36 +1,95 @@
 {
   "id": "utility-substation",
   "title": "Utility field service: substation inspection",
-  "summary": "A lineworker's inspection of a distribution substation: site sign, power transformer, and a breaker that is found tripped on the second pass. Field service with no building at all.",
-  "shift_start": "2026-11-07T09:00:00-06:00",
-  "style": "Unedited first-person snapshot from a head-mounted wearable camera at eye level, deep focus with everything sharp, no bokeh, outdoors at an electrical utility substation, slightly off-level framing, overcast daylight, gravel ground, chain-link fence, light sensor noise, realistic, no people or faces in frame.",
+  "summary": "Sam, a substation technician, does the monthly inspection at Northlake Substation in Plano. Mid-morning dispatch reports feeder 12 out: breaker CB-12 has tripped on a phase B ground fault. Lena, the relay tech, arrives; they find a scorched insulator from animal contact on the CB-12 line side, clean it, fit new wildlife guards, and close CB-12 with dispatch. On the way out Sam finds transformer T2's oil level low with a stain under the radiator, and leaves it open for a crew.",
+  "shift_start": "2026-11-07T08:00:00-06:00",
+  "style": "Unedited first-person snapshot from a head-mounted wearable camera at eye level, deep focus with everything sharp, no bokeh, outdoors at an electrical utility substation, slightly off-level framing, overcast daylight, gravel ground, chain-link fence, light sensor noise, realistic, no faces in frame (a coworker's gloved hands at most).",
   "wearers": [
     {
       "key": "sam",
-      "name": "Sam (lineworker)",
+      "name": "Sam (substation tech)",
       "role": "Substation technician",
+      "shift": "Day"
+    },
+    {
+      "key": "lena",
+      "name": "Lena (relay tech)",
+      "role": "Protection and relay technician",
       "shift": "Day"
     }
   ],
   "assets": [
     {
+      "asset_id": "T1",
+      "name": "Power transformer T1",
+      "type": "transformer",
+      "location": "Northlake / Transformer T1",
+      "patterns": [
+        "TRANSFORMER T1",
+        "XFMR T1"
+      ]
+    },
+    {
       "asset_id": "T2",
       "name": "Power transformer T2",
       "type": "transformer",
-      "location": "Northlake substation",
+      "location": "Northlake / Transformer T2",
       "patterns": [
         "TRANSFORMER T2",
         "XFMR T2"
       ]
     },
     {
+      "asset_id": "CB-11",
+      "name": "Circuit breaker CB-11",
+      "type": "breaker",
+      "location": "Northlake / Bay 2",
+      "patterns": [
+        "CB 11"
+      ]
+    },
+    {
       "asset_id": "CB-12",
       "name": "Circuit breaker CB-12",
       "type": "breaker",
-      "location": "Northlake substation / bay 3",
+      "location": "Northlake / Bay 3",
       "patterns": [
         "CB 12"
       ]
+    },
+    {
+      "asset_id": "RLY-12",
+      "name": "Feeder 12 protective relay",
+      "type": "relay",
+      "location": "Northlake / Control house",
+      "patterns": [
+        "RLY 12"
+      ]
+    },
+    {
+      "asset_id": "BAT-1",
+      "name": "Station battery 1",
+      "type": "battery",
+      "location": "Northlake / Control house",
+      "patterns": [
+        "BAT 1"
+      ]
+    }
+  ],
+  "issues": [
+    {
+      "issue_id": "WO-7712",
+      "title": "Feeder 12 out: CB-12 tripped on phase B ground fault",
+      "asset_id": "CB-12",
+      "opened_by": "Dispatch",
+      "opened_t": 119
+    },
+    {
+      "issue_id": "WO-7718",
+      "title": "T2 oil level low, oil stain under the radiator",
+      "asset_id": "T2",
+      "opened_by": "Sam (substation tech)",
+      "opened_t": 262
     }
   ],
   "shots": [
@@ -41,31 +100,66 @@
       "prompt": "A white sign mounted on a chain-link fence gate reads \"NORTHLAKE SUBSTATION\" in large red letters, with high-voltage equipment behind the fence.",
       "read": [
         "NORTHLAKE"
+      ],
+      "room": "Entrance gate",
+      "note": "On site for the monthly inspection."
+    },
+    {
+      "id": "05-station-battery",
+      "t": 10,
+      "wearer": "sam",
+      "room": "Control house",
+      "prompt": "Inside a substation control house: a rack of large station batteries with a wall-mounted battery charger above them; a big engraved plate reads \"BAT-1\" and the charger display shows \"129.8 V FLOAT\".",
+      "read": [
+        "BAT-1"
       ]
     },
     {
       "id": "02-transformer",
-      "t": 9,
+      "t": 21,
       "wearer": "sam",
       "prompt": "Side of a large green oil-filled power transformer with cooling fins and an analog oil temperature gauge; a big white stenciled marking on the tank reads \"T2\".",
       "read": [
         "T2"
+      ],
+      "room": "Transformer T2"
+    },
+    {
+      "id": "06-transformer-t1",
+      "t": 33,
+      "wearer": "sam",
+      "room": "Transformer T1",
+      "prompt": "Side of a large gray oil-filled power transformer with cooling radiators and a round oil level gauge with its needle in the middle of the band; a big white stenciled marking on the tank reads \"T1\".",
+      "read": [
+        "T1"
       ]
     },
     {
       "id": "03-breaker-closed",
-      "t": 17,
+      "t": 46,
       "wearer": "sam",
       "pair": "cb12",
       "prompt": "Open door of an outdoor gray circuit breaker control cabinet; a white printed sticker label on the door reads \"CB-12\" in large bold black letters; a mechanical position indicator flag shows \"CLOSED\" in red and a counter.",
       "read": [
         "CB-12",
         "CLOSED"
+      ],
+      "room": "Bay 3"
+    },
+    {
+      "id": "07-breaker-cb11",
+      "t": 58,
+      "wearer": "sam",
+      "room": "Bay 2",
+      "prompt": "Open door of an outdoor gray circuit breaker control cabinet; a white printed sticker label on the door reads \"CB-11\" in large bold black letters; a mechanical position indicator flag shows \"CLOSED\" in red.",
+      "read": [
+        "CB-11",
+        "CLOSED"
       ]
     },
     {
       "id": "04-breaker-tripped",
-      "t": 46,
+      "t": 118,
       "wearer": "sam",
       "pair": "cb12",
       "prompt": "Open door of an outdoor gray circuit breaker control cabinet; a white printed sticker label on the door reads \"CB-12\" in large bold black letters; a yellow alarm light is lit and a flag indicator reads \"TRIPPED\".",
@@ -74,14 +168,114 @@
         "TRIPPED"
       ],
       "expect": "alert",
-      "edit": "change the position indicator flag so it reads \"TRIPPED\" and light the yellow alarm lamp; change nothing else."
+      "edit": "change the position indicator flag so it reads \"TRIPPED\" and light the yellow alarm lamp; change nothing else.",
+      "room": "Bay 3",
+      "note": "Dispatch radioed: feeder 12 is out. CB-12 shows tripped."
+    },
+    {
+      "id": "08-relay-target",
+      "t": 126,
+      "wearer": "sam",
+      "room": "Control house",
+      "pair": "relay",
+      "prompt": "Front panel of a digital protective relay mounted in a control house relay rack; a large engraved label above it reads \"RLY-12\"; a red target LED is lit and the small LCD reads \"TRIP PH B GND\".",
+      "read": [
+        "RLY-12"
+      ],
+      "note": "Relay 12 shows a phase B to ground trip. Reported to dispatch, waiting on Lena."
+    },
+    {
+      "id": "09-scorched-insulator",
+      "t": 148,
+      "wearer": "lena",
+      "room": "Bay 3",
+      "prompt": "Looking up at a gray porcelain bushing insulator on top of an outdoor circuit breaker, with black scorch and flash marks on its sheds and a melted remnant of a plastic wildlife guard; a white sign on the steel structure below reads \"CB-12 LINE SIDE\".",
+      "read": [
+        "CB-12"
+      ],
+      "note": "Found the cause on the CB-12 line side: scorched insulator from animal contact."
+    },
+    {
+      "id": "10-wildlife-guards",
+      "t": 166,
+      "wearer": "lena",
+      "room": "Bay 3",
+      "prompt": "A gloved hand holding a new bright orange plastic wildlife guard for a bushing, with a second one still in its packaging on the gravel, next to the gray circuit breaker cabinet whose white sticker label reads \"CB-12\".",
+      "read": [
+        "CB-12"
+      ],
+      "note": "Insulator cleaned; new wildlife guards going on both line-side bushings."
+    },
+    {
+      "id": "11-breaker-closed-again",
+      "t": 190,
+      "wearer": "sam",
+      "room": "Bay 3",
+      "pair": "cb12",
+      "prompt": "The CB-12 breaker cabinet, closed again.",
+      "edit": "change only the position indicator flag so it reads \"CLOSED\" in red again and make sure no alarm light is lit.",
+      "read": [
+        "CB-12",
+        "CLOSED"
+      ],
+      "note": "Dispatch cleared it: CB-12 reset and closed, feeder 12 restored."
+    },
+    {
+      "id": "12-relay-normal",
+      "t": 214,
+      "wearer": "lena",
+      "room": "Control house",
+      "pair": "relay",
+      "prompt": "The RLY-12 relay after the targets were reset.",
+      "edit": "turn off the red target LED and change only the small LCD so it reads \"NORMAL\".",
+      "read": [
+        "RLY-12",
+        "NORMAL"
+      ],
+      "note": "Relay 12 targets reset, event record saved for engineering."
+    },
+    {
+      "id": "13-t2-oil-low",
+      "t": 261,
+      "wearer": "sam",
+      "room": "Transformer T2",
+      "prompt": "Close-up of a round oil level gauge on the side of a green power transformer tank with its needle down in the red band marked \"LOW\"; a big white stenciled \"T2\" on the tank beside it; a dark oil stain on the gravel below the cooling radiator.",
+      "read": [
+        "T2",
+        "LOW"
+      ],
+      "note": "T2 oil level is low and there's an oil stain under the radiator. Looks like a slow leak."
+    },
+    {
+      "id": "14-switching-log",
+      "t": 300,
+      "wearer": "lena",
+      "room": "Control house",
+      "prompt": "A printed switching log sheet on a clipboard on a control house desk; large printed header \"NORTHLAKE SWITCHING LOG\" and a typed line \"FEEDER 12 RESTORED 11:10\" with a pen lying across the page.",
+      "read": [
+        "NORTHLAKE",
+        "FEEDER 12"
+      ],
+      "note": "Switching log signed off with dispatch."
+    },
+    {
+      "id": "15-gate-locked",
+      "t": 328,
+      "wearer": "sam",
+      "room": "Entrance gate",
+      "prompt": "A chain-link substation gate closed with a heavy chain and a brass padlock, and a white sign on the gate reading \"NORTHLAKE SUBSTATION\" in large red letters; afternoon light.",
+      "read": [
+        "NORTHLAKE"
+      ],
+      "note": "Gate locked, leaving site. T2 oil needs a crew tomorrow."
     }
   ],
   "site": {
-    "lat": 33.03,
-    "lon": -96.749,
-    "radius_m": 70,
-    "label": "Plano, TX substation (synthetic placement)",
+    "scene": "substation",
+    "lat": 33.0345,
+    "lon": -96.74588,
+    "radius_m": 80,
+    "label": "Northlake Substation, Plano TX (generated site)",
     "synthetic": true
   }
 }

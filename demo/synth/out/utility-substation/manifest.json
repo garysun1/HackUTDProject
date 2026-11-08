@@ -107,6 +107,226 @@
           "CB-12"
         ]
       }
+    },
+    "05-station-battery": {
+      "file": "05-station-battery.jpg",
+      "provider": "azure/flux-2-pro",
+      "seed": 39771,
+      "prompt": "Unedited first-person snapshot from a head-mounted wearable camera at eye level, deep focus with everything sharp, no bokeh, outdoors at an electrical utility substation, slightly off-level framing, overcast daylight, gravel ground, chain-link fence, light sensor noise, realistic, no faces in frame (a coworker's gloved hands at most). Inside a substation control house: a rack of large station batteries with a wall-mounted battery charger above them; a big engraved plate reads \"BAT-1\" and the charger display shows \"129.8 V FLOAT\". Off-center casual framing, not a composed hero shot. Flat practical lighting, deep focus with the background nearly as sharp as the foreground, no cinematic depth of field, no dramatic lighting, no text overlays or watermarks.",
+      "check": {
+        "pass": true,
+        "missing": [],
+        "faces": 0,
+        "looks_real": true,
+        "read": [
+          "CRING & NISTERY",
+          "129.8V FLOAT",
+          "BAT-1",
+          "BAT"
+        ]
+      }
+    },
+    "06-transformer-t1": {
+      "file": "06-transformer-t1.jpg",
+      "provider": "azure/flux-2-pro",
+      "seed": 28537,
+      "prompt": "Unedited first-person snapshot from a head-mounted wearable camera at eye level, deep focus with everything sharp, no bokeh, outdoors at an electrical utility substation, slightly off-level framing, overcast daylight, gravel ground, chain-link fence, light sensor noise, realistic, no faces in frame (a coworker's gloved hands at most). Side of a large gray oil-filled power transformer with cooling radiators and a round oil level gauge with its needle in the middle of the band; a big white stenciled marking on the tank reads \"T1\". Off-center casual framing, not a composed hero shot. Flat practical lighting, deep focus with the background nearly as sharp as the foreground, no cinematic depth of field, no dramatic lighting, no text overlays or watermarks.",
+      "check": {
+        "pass": true,
+        "missing": [],
+        "faces": 0,
+        "looks_real": true,
+        "read": [
+          "T1"
+        ]
+      }
+    },
+    "11-breaker-closed-again": {
+      "file": "11-breaker-closed-again.jpg",
+      "provider": "azure/flux-2-pro",
+      "seed": 10703,
+      "edited_from": "03-breaker-closed",
+      "prompt": "EDIT of previous shot: change only the position indicator flag so it reads \"CLOSED\" in red again and make sure no alarm light is lit.",
+      "check": {
+        "pass": true,
+        "missing": [],
+        "faces": 0,
+        "looks_real": true,
+        "read": [
+          "CB-12",
+          "CLOSED",
+          "OCHSYSTEMS"
+        ]
+      }
+    },
+    "07-breaker-cb11": {
+      "file": "07-breaker-cb11.jpg",
+      "provider": "azure/flux-2-pro",
+      "seed": 20487,
+      "prompt": "Unedited first-person snapshot from a head-mounted wearable camera at eye level, deep focus with everything sharp, no bokeh, outdoors at an electrical utility substation, slightly off-level framing, overcast daylight, gravel ground, chain-link fence, light sensor noise, realistic, no faces in frame (a coworker's gloved hands at most). Open door of an outdoor gray circuit breaker control cabinet; a white printed sticker label on the door reads \"CB-11\" in large bold black letters; a mechanical position indicator flag shows \"CLOSED\" in red. Off-center casual framing, not a composed hero shot. Flat practical lighting, deep focus with the background nearly as sharp as the foreground, no cinematic depth of field, no dramatic lighting, no text overlays or watermarks.",
+      "check": {
+        "pass": true,
+        "missing": [],
+        "faces": 0,
+        "looks_real": true,
+        "read": [
+          "CB-11",
+          "CLOSED",
+          "0601"
+        ]
+      }
+    },
+    "08-relay-target": {
+      "file": "08-relay-target.jpg",
+      "provider": "azure/flux-2-pro",
+      "seed": 2258,
+      "prompt": "Unedited first-person snapshot from a head-mounted wearable camera at eye level, deep focus with everything sharp, no bokeh, outdoors at an electrical utility substation, slightly off-level framing, overcast daylight, gravel ground, chain-link fence, light sensor noise, realistic, no faces in frame (a coworker's gloved hands at most). Front panel of a digital protective relay mounted in a control house relay rack; a large engraved label above it reads \"RLY-12\"; a red target LED is lit and the small LCD reads \"TRIP PH B GND\". Off-center casual framing, not a composed hero shot. Flat practical lighting, deep focus with the background nearly as sharp as the foreground, no cinematic depth of field, no dramatic lighting, no text overlays or watermarks.",
+      "check": {
+        "pass": true,
+        "missing": [],
+        "faces": 0,
+        "looks_real": true,
+        "read": [
+          "RLY-12",
+          "RUS",
+          "125 VDC",
+          "TRIP PH B",
+          "GND",
+          "STATUS",
+          "STATUS",
+          "MENU",
+          "HERR-",
+          "ENTER",
+          "TER GRUED T OF EXG",
+          "FISS",
+          "MIEFR TOULS"
+        ]
+      }
+    },
+    "12-relay-normal": {
+      "file": "12-relay-normal.jpg",
+      "provider": "azure/flux-2-pro",
+      "seed": 2258,
+      "edited_from": "08-relay-target",
+      "prompt": "EDIT of previous shot: turn off the red target LED and change only the small LCD so it reads \"NORMAL\".",
+      "check": {
+        "pass": true,
+        "missing": [],
+        "faces": 0,
+        "looks_real": true,
+        "read": [
+          "RLY-12",
+          "RUS",
+          "125 VDC",
+          "STATUS",
+          "STATUS",
+          "MENU",
+          "HERR-",
+          "ENTER",
+          "TER GRUED T OR EXC",
+          "FISS",
+          "MIEFR TOULS",
+          "NORMAL",
+          "END"
+        ]
+      }
+    },
+    "09-scorched-insulator": {
+      "file": "09-scorched-insulator.jpg",
+      "provider": "azure/flux-2-pro",
+      "seed": 49898,
+      "prompt": "Unedited first-person snapshot from a head-mounted wearable camera at eye level, deep focus with everything sharp, no bokeh, outdoors at an electrical utility substation, slightly off-level framing, overcast daylight, gravel ground, chain-link fence, light sensor noise, realistic, no faces in frame (a coworker's gloved hands at most). Looking up at a gray porcelain bushing insulator on top of an outdoor circuit breaker, with black scorch and flash marks on its sheds and a melted remnant of a plastic wildlife guard; a white sign on the steel structure below reads \"CB-12 LINE SIDE\". Off-center casual framing, not a composed hero shot. Flat practical lighting, deep focus with the background nearly as sharp as the foreground, no cinematic depth of field, no dramatic lighting, no text overlays or watermarks.",
+      "check": {
+        "pass": true,
+        "missing": [],
+        "faces": 0,
+        "looks_real": true,
+        "read": [
+          "CB-12",
+          "LINE SIDE"
+        ]
+      }
+    },
+    "10-wildlife-guards": {
+      "file": "10-wildlife-guards.jpg",
+      "provider": "azure/flux-2-pro",
+      "seed": 81558,
+      "prompt": "Unedited first-person snapshot from a head-mounted wearable camera at eye level, deep focus with everything sharp, no bokeh, outdoors at an electrical utility substation, slightly off-level framing, overcast daylight, gravel ground, chain-link fence, light sensor noise, realistic, no faces in frame (a coworker's gloved hands at most). A gloved hand holding a new bright orange plastic wildlife guard for a bushing, with a second one still in its packaging on the gravel, next to the gray circuit breaker cabinet whose white sticker label reads \"CB-12\". Off-center casual framing, not a composed hero shot. Flat practical lighting, deep focus with the background nearly as sharp as the foreground, no cinematic depth of field, no dramatic lighting, no text overlays or watermarks.",
+      "check": {
+        "pass": true,
+        "missing": [],
+        "faces": 0,
+        "looks_real": true,
+        "read": [
+          "CB-12"
+        ]
+      }
+    },
+    "13-t2-oil-low": {
+      "file": "13-t2-oil-low.jpg",
+      "provider": "azure/flux-2-pro",
+      "seed": 22390,
+      "prompt": "Unedited first-person snapshot from a head-mounted wearable camera at eye level, deep focus with everything sharp, no bokeh, outdoors at an electrical utility substation, slightly off-level framing, overcast daylight, gravel ground, chain-link fence, light sensor noise, realistic, no faces in frame (a coworker's gloved hands at most). Close-up of a round oil level gauge on the side of a green power transformer tank with its needle down in the red band marked \"LOW\"; a big white stenciled \"T2\" on the tank beside it; a dark oil stain on the gravel below the cooling radiator. Off-center casual framing, not a composed hero shot. Flat practical lighting, deep focus with the background nearly as sharp as the foreground, no cinematic depth of field, no dramatic lighting, no text overlays or watermarks.",
+      "check": {
+        "pass": true,
+        "missing": [],
+        "faces": 0,
+        "looks_real": true,
+        "read": [
+          "OIL LEVEL",
+          "LOW",
+          "20",
+          "DANGER",
+          "HIGH",
+          "VOLTAGE",
+          "T2"
+        ]
+      }
+    },
+    "14-switching-log": {
+      "file": "14-switching-log.jpg",
+      "provider": "azure/flux-2-pro",
+      "seed": 98506,
+      "prompt": "Unedited first-person snapshot from a head-mounted wearable camera at eye level, deep focus with everything sharp, no bokeh, outdoors at an electrical utility substation, slightly off-level framing, overcast daylight, gravel ground, chain-link fence, light sensor noise, realistic, no faces in frame (a coworker's gloved hands at most). A printed switching log sheet on a clipboard on a control house desk; large printed header \"NORTHLAKE SWITCHING LOG\" and a typed line \"FEEDER 12 RESTORED 11:10\" with a pen lying across the page. Off-center casual framing, not a composed hero shot. Flat practical lighting, deep focus with the background nearly as sharp as the foreground, no cinematic depth of field, no dramatic lighting, no text overlays or watermarks.",
+      "check": {
+        "pass": true,
+        "missing": [],
+        "faces": 0,
+        "looks_real": true,
+        "read": [
+          "NORTHLAKE",
+          "SWITCHING LOG",
+          "FEEDER 12 RESTORED",
+          "11:10",
+          "DATE/TIME",
+          "MOVED/DOWN",
+          "QTY/OWN",
+          "HIGH",
+          "VOLTS",
+          "DISCONNECT",
+          "HIGH VOLTAGE",
+          "OFF",
+          "ON",
+          "OFF-1",
+          "CLOSED"
+        ]
+      }
+    },
+    "15-gate-locked": {
+      "file": "15-gate-locked.jpg",
+      "provider": "azure/flux-2-pro",
+      "seed": 41042,
+      "prompt": "Unedited first-person snapshot from a head-mounted wearable camera at eye level, deep focus with everything sharp, no bokeh, outdoors at an electrical utility substation, slightly off-level framing, overcast daylight, gravel ground, chain-link fence, light sensor noise, realistic, no faces in frame (a coworker's gloved hands at most). A chain-link substation gate closed with a heavy chain and a brass padlock, and a white sign on the gate reading \"NORTHLAKE SUBSTATION\" in large red letters; afternoon light. Off-center casual framing, not a composed hero shot. Flat practical lighting, deep focus with the background nearly as sharp as the foreground, no cinematic depth of field, no dramatic lighting, no text overlays or watermarks.",
+      "check": {
+        "pass": true,
+        "missing": [],
+        "faces": 0,
+        "looks_real": true,
+        "read": [
+          "NORTHLAKE",
+          "SUBSTATION"
+        ]
+      }
     }
   },
   "scenario": "utility-substation",

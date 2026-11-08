@@ -88,9 +88,181 @@
           "222"
         ]
       }
+    },
+    "00-wave-board": {
+      "file": "00-wave-board.jpg",
+      "provider": "azure/flux-2-pro",
+      "seed": 13767,
+      "prompt": "Unedited first-person snapshot from a head-mounted wearable camera at eye level, deep focus with everything sharp, no bokeh, inside a large distribution center warehouse, slightly off-level framing, high-bay LED lighting, light sensor noise, realistic, no faces in frame (a coworker's gloved hands at most). A whiteboard in a warehouse shipping office with neat block-capital marker writing: header \"EARLY SHIFT\", then the lines \"WAVE 1: 42 ORDERS\" and \"DOCK 14 TRAILER 5521\"; a desk with a label printer below it. Off-center casual framing, not a composed hero shot. Flat practical lighting, deep focus with the background nearly as sharp as the foreground, no cinematic depth of field, no dramatic lighting, no text overlays or watermarks.",
+      "check": {
+        "pass": true,
+        "missing": [],
+        "faces": 0,
+        "looks_real": true,
+        "read": [
+          "EARLY SHIFT",
+          "WAVE 1: 42 ORDERS",
+          "DOCK 14 TRAILER 5521"
+        ]
+      }
+    },
+    "14-handoff-board": {
+      "file": "14-handoff-board.jpg",
+      "provider": "azure/flux-2-pro",
+      "seed": 13768,
+      "edited_from": "00-wave-board",
+      "prompt": "EDIT of previous shot: change only the whiteboard writing: header \"LATE SHIFT\", then the lines \"FZ-1 EVAP ICED - CONTRACTOR 7AM\", \"PRODUCT IN FZ-2\", and \"AISLE 22 OPEN\", in the same neat block-capital marker.",
+      "check": {
+        "pass": true,
+        "missing": [],
+        "faces": 0,
+        "looks_real": true,
+        "read": [
+          "LATE SHIFT",
+          "FZ-1 EVAP ICED -",
+          "CONTRACTOR 7AM",
+          "AISLE 22 OPEN",
+          "RRD"
+        ]
+      }
+    },
+    "10-freezer-alarm": {
+      "file": "10-freezer-alarm.jpg",
+      "provider": "azure/flux-2-pro",
+      "seed": 95264,
+      "prompt": "Unedited first-person snapshot from a head-mounted wearable camera at eye level, deep focus with everything sharp, no bokeh, inside a large distribution center warehouse, slightly off-level framing, high-bay LED lighting, light sensor noise, realistic, no faces in frame (a coworker's gloved hands at most). Insulated stainless walk-in freezer door with frost around the seal; a large printed label on the door reads \"FZ-1\"; the digital temperature display beside the door shows \"-12C\" with a large red \"ALARM\" light lit above it. Off-center casual framing, not a composed hero shot. Flat practical lighting, deep focus with the background nearly as sharp as the foreground, no cinematic depth of field, no dramatic lighting, no text overlays or watermarks.",
+      "check": {
+        "pass": true,
+        "missing": [],
+        "faces": 0,
+        "looks_real": true,
+        "read": [
+          "FZ-1",
+          "ALARM",
+          "- 12C",
+          "ITOIS"
+        ]
+      }
+    },
+    "06-aisle-taped": {
+      "file": "06-aisle-taped.jpg",
+      "provider": "azure/flux-2-pro",
+      "seed": 42562,
+      "prompt": "Unedited first-person snapshot from a head-mounted wearable camera at eye level, deep focus with everything sharp, no bokeh, inside a large distribution center warehouse, slightly off-level framing, high-bay LED lighting, light sensor noise, realistic, no faces in frame (a coworker's gloved hands at most). Yellow and black caution tape stretched across the end of a warehouse racking aisle with a printed sign hanging from it reading \"AISLE 22 CLOSED\"; tall loaded pallet racking beyond. Off-center casual framing, not a composed hero shot. Flat practical lighting, deep focus with the background nearly as sharp as the foreground, no cinematic depth of field, no dramatic lighting, no text overlays or watermarks.",
+      "check": {
+        "pass": true,
+        "missing": [],
+        "faces": 0,
+        "looks_real": true,
+        "read": [
+          "AISLE 22",
+          "CLOSED"
+        ]
+      }
+    },
+    "07-forklift-scrape": {
+      "file": "07-forklift-scrape.jpg",
+      "provider": "azure/flux-2-pro",
+      "seed": 69054,
+      "prompt": "Unedited first-person snapshot from a head-mounted wearable camera at eye level, deep focus with everything sharp, no bokeh, inside a large distribution center warehouse, slightly off-level framing, high-bay LED lighting, light sensor noise, realistic, no faces in frame (a coworker's gloved hands at most). Close-up of the fork carriage of a yellow forklift with fresh blue paint scrapes on the steel; a large black stenciled marking on the mast reads \"FL-12\". Off-center casual framing, not a composed hero shot. Flat practical lighting, deep focus with the background nearly as sharp as the foreground, no cinematic depth of field, no dramatic lighting, no text overlays or watermarks.",
+      "check": {
+        "pass": true,
+        "missing": [],
+        "faces": 0,
+        "looks_real": true,
+        "read": [
+          "FL-12",
+          "RCIBR"
+        ]
+      }
+    },
+    "08-red-tag": {
+      "file": "08-red-tag.jpg",
+      "provider": "azure/flux-2-pro",
+      "seed": 81672,
+      "prompt": "Unedited first-person snapshot from a head-mounted wearable camera at eye level, deep focus with everything sharp, no bokeh, inside a large distribution center warehouse, slightly off-level framing, high-bay LED lighting, light sensor noise, realistic, no faces in frame (a coworker's gloved hands at most). A bright red inspection tag zip-tied to a bent blue steel pallet racking upright, the tag printed in large white letters \"DO NOT USE - UNLOAD BAY\", and a small label on the upright reads \"BAY 07\". Off-center casual framing, not a composed hero shot. Flat practical lighting, deep focus with the background nearly as sharp as the foreground, no cinematic depth of field, no dramatic lighting, no text overlays or watermarks.",
+      "check": {
+        "pass": true,
+        "missing": [],
+        "faces": 0,
+        "looks_real": true,
+        "read": [
+          "DO NOT USE",
+          "UNLOAD BAY",
+          "BAY 07",
+          "84 07"
+        ]
+      }
+    },
+    "09-dock-shipped": {
+      "file": "09-dock-shipped.jpg",
+      "provider": "azure/flux-2-pro",
+      "seed": 24798,
+      "prompt": "Unedited first-person snapshot from a head-mounted wearable camera at eye level, deep focus with everything sharp, no bokeh, inside a large distribution center warehouse, slightly off-level framing, high-bay LED lighting, light sensor noise, realistic, no faces in frame (a coworker's gloved hands at most). A closed warehouse loading dock door with a green light lit beside it and a large yellow sign above the door reading \"DOCK 14\"; an empty pallet jack parked in front. Off-center casual framing, not a composed hero shot. Flat practical lighting, deep focus with the background nearly as sharp as the foreground, no cinematic depth of field, no dramatic lighting, no text overlays or watermarks.",
+      "check": {
+        "pass": true,
+        "missing": [],
+        "faces": 0,
+        "looks_real": true,
+        "read": [
+          "DOCK 14",
+          "EXIT"
+        ]
+      }
+    },
+    "11-evaporator-iced": {
+      "file": "11-evaporator-iced.jpg",
+      "provider": "azure/flux-2-pro",
+      "seed": 15471,
+      "prompt": "Unedited first-person snapshot from a head-mounted wearable camera at eye level, deep focus with everything sharp, no bokeh, inside a large distribution center warehouse, slightly off-level framing, high-bay LED lighting, light sensor noise, realistic, no faces in frame (a coworker's gloved hands at most). Inside a walk-in freezer, looking up at a ceiling-mounted evaporator unit whose coil and fans are completely encased in thick white ice; a printed label on the unit housing reads \"FZ-1 EVAP 2\". Off-center casual framing, not a composed hero shot. Flat practical lighting, deep focus with the background nearly as sharp as the foreground, no cinematic depth of field, no dramatic lighting, no text overlays or watermarks.",
+      "check": {
+        "pass": true,
+        "missing": [],
+        "faces": 0,
+        "looks_real": true,
+        "read": [
+          "FZ-1 EVAP 2"
+        ]
+      }
+    },
+    "13-forklift-back": {
+      "file": "13-forklift-back.jpg",
+      "provider": "azure/flux-2-pro",
+      "seed": 92523,
+      "prompt": "Unedited first-person snapshot from a head-mounted wearable camera at eye level, deep focus with everything sharp, no bokeh, inside a large distribution center warehouse, slightly off-level framing, high-bay LED lighting, light sensor noise, realistic, no faces in frame (a coworker's gloved hands at most). A yellow forklift parked at a charging station with its charging cable plugged in; a large black stenciled \"FL-12\" on the mast and a green tag hanging from the overhead guard printed \"INSPECTED OK\". Off-center casual framing, not a composed hero shot. Flat practical lighting, deep focus with the background nearly as sharp as the foreground, no cinematic depth of field, no dramatic lighting, no text overlays or watermarks.",
+      "check": {
+        "pass": true,
+        "missing": [],
+        "faces": 0,
+        "looks_real": true,
+        "read": [
+          "INSPECTED",
+          "OK",
+          "FL-12",
+          "HYSTER",
+          "FIELD-AI"
+        ]
+      }
+    },
+    "12-upright-replaced": {
+      "file": "12-upright-replaced.jpg",
+      "provider": "azure/flux-2-pro",
+      "seed": 70089,
+      "prompt": "Unedited first-person snapshot from a head-mounted wearable camera at eye level, deep focus with everything sharp, no bokeh, inside a large distribution center warehouse, slightly off-level framing, high-bay LED lighting, light sensor noise, realistic, no faces in frame (a coworker's gloved hands at most). Looking down at the base of a brand-new, clean, glossy blue steel pallet racking upright with a new bolted base plate and fresh anchor bolts on the concrete floor; the lowest bay beside it is empty; a small label on the upright reads \"BAY 07\" and a green tag zip-tied to it reads \"OK TO LOAD\". Off-center casual framing, not a composed hero shot. Flat practical lighting, deep focus with the background nearly as sharp as the foreground, no cinematic depth of field, no dramatic lighting, no text overlays or watermarks.",
+      "check": {
+        "pass": true,
+        "missing": [],
+        "faces": 0,
+        "looks_real": true,
+        "read": [
+          "BAY 07",
+          "OK TO LOAD",
+          "BAY 7"
+        ]
+      }
     }
   },
   "scenario": "warehouse-dc",
-  "title": "Distribution center safety walk",
+  "title": "Distribution center safety walk, early shift",
   "synthetic": true
 }

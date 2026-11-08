@@ -140,6 +140,240 @@
           "NORMAL SOURCE"
         ]
       }
+    },
+    "06-monitor-check": {
+      "file": "06-monitor-check.jpg",
+      "provider": "azure/flux-2-pro",
+      "seed": 38685,
+      "prompt": "Unedited first-person snapshot from a head-mounted wearable camera at eye level, deep focus with everything sharp, no bokeh, in a hospital back-of-house corridor or equipment room, slightly off-level framing, bright clinical fluorescent lighting, light sensor noise, realistic, no patients, no faces in frame (a coworker's gloved hands at most). A patient monitor on a rolling stand parked in an empty hospital ward hallway alcove, its screen showing a large green \"SELF TEST PASS\" message; a white asset tag sticker on the monitor bezel reads \"BME-20817\" in large black text. Off-center casual framing, not a composed hero shot. Flat practical lighting, deep focus with the background nearly as sharp as the foreground, no cinematic depth of field, no dramatic lighting, no text overlays or watermarks.",
+      "check": {
+        "pass": true,
+        "missing": [],
+        "faces": 0,
+        "looks_real": true,
+        "read": [
+          "SELF TEST PASS",
+          "BME-20817",
+          "10:52",
+          "Abbott",
+          "i-STAT",
+          "Alaris"
+        ]
+      }
+    },
+    "07-nurse-note": {
+      "file": "07-nurse-note.jpg",
+      "provider": "azure/flux-2-pro",
+      "seed": 65865,
+      "prompt": "Unedited first-person snapshot from a head-mounted wearable camera at eye level, deep focus with everything sharp, no bokeh, in a hospital back-of-house corridor or equipment room, slightly off-level framing, bright clinical fluorescent lighting, light sensor noise, realistic, no patients, no faces in frame (a coworker's gloved hands at most). A bright yellow sticky note stuck on a hospital nurse station counter next to a phone and a keyboard, written in clear block-capital marker: \"BIOMED - PUMP 10442 ALARMED AGAIN 0400\". Off-center casual framing, not a composed hero shot. Flat practical lighting, deep focus with the background nearly as sharp as the foreground, no cinematic depth of field, no dramatic lighting, no text overlays or watermarks.",
+      "check": {
+        "pass": true,
+        "missing": [],
+        "faces": 0,
+        "looks_real": true,
+        "read": [
+          "EXIT",
+          "BIOMED -",
+          "PUMP 10442",
+          "ALARMED",
+          "AGAIN 0400"
+        ]
+      }
+    },
+    "13-blood-fridge-fixed": {
+      "file": "13-blood-fridge-fixed.jpg",
+      "provider": "azure/flux-2-pro",
+      "seed": 6868,
+      "edited_from": "03-blood-fridge-ok",
+      "prompt": "EDIT of previous shot: change only the digital temperature display so it shows a steady green \"4.0C\", like a normally working refrigerator.",
+      "check": {
+        "pass": true,
+        "missing": [],
+        "faces": 0,
+        "looks_real": true,
+        "read": [
+          "BBR-2",
+          "4.0C",
+          "BBR-2",
+          "SUPPLIES",
+          "BBR-2",
+          "BBR-2",
+          "JH1",
+          "O B+",
+          "B-",
+          "AB+",
+          "A+",
+          "O+",
+          "O G",
+          "HG",
+          "EXIT",
+          "BBR-2"
+        ]
+      }
+    },
+    "08-generator-test": {
+      "file": "08-generator-test.jpg",
+      "provider": "azure/flux-2-pro",
+      "seed": 11761,
+      "prompt": "Unedited first-person snapshot from a head-mounted wearable camera at eye level, deep focus with everything sharp, no bokeh, in a hospital back-of-house corridor or equipment room, slightly off-level framing, bright clinical fluorescent lighting, light sensor noise, realistic, no patients, no faces in frame (a coworker's gloved hands at most). Control panel of a large diesel emergency generator in a generator room; a big engraved plate reads \"GEN-1\"; the panel display shows \"RUNNING\" and \"LOAD 38%\" in green; yellow conduit and the generator housing beside it. Off-center casual framing, not a composed hero shot. Flat practical lighting, deep focus with the background nearly as sharp as the foreground, no cinematic depth of field, no dramatic lighting, no text overlays or watermarks.",
+      "check": {
+        "pass": true,
+        "missing": [],
+        "faces": 0,
+        "looks_real": true,
+        "read": [
+          "GEN-1",
+          "RUNNING LOAD 38%",
+          "Corfleer",
+          "DUCOUTT",
+          "MSSR",
+          "INEGINT",
+          "DIESR",
+          "RESUMMING",
+          "MIP",
+          "IDENT",
+          "OVERHEATING",
+          "LOAD",
+          "FUME",
+          "PDNE",
+          "OP MAN",
+          "ALARMENOH",
+          "=",
+          "CEER",
+          "MAUNTERS",
+          "GFOVELDELICH"
+        ]
+      }
+    },
+    "14-generator-done": {
+      "file": "14-generator-done.jpg",
+      "provider": "azure/flux-2-pro",
+      "seed": 11761,
+      "edited_from": "08-generator-test",
+      "prompt": "EDIT of previous shot: change only the panel display so it reads \"COOLDOWN\" and \"TEST COMPLETE\" instead of RUNNING and the load.",
+      "check": {
+        "pass": true,
+        "missing": [],
+        "faces": 0,
+        "looks_real": true,
+        "read": [
+          "GEN-1",
+          "TEST COMPLETE",
+          "Corefer",
+          "DUOCUTT",
+          "MISSIR",
+          "INEBOMT",
+          "DIESR",
+          "RESUMMING",
+          "MGR",
+          "IGDIT",
+          "OVERHEID",
+          "FUNE",
+          "LOAD",
+          "PDIE",
+          "OP PAINT",
+          "CEER",
+          "MÄNNTER",
+          "GFOYDELIGEICH",
+          "ALCOMMERCH",
+          "="
+        ]
+      }
+    },
+    "09-pump-fails-test": {
+      "file": "09-pump-fails-test.jpg",
+      "provider": "azure/flux-2-pro",
+      "seed": 70523,
+      "prompt": "Unedited first-person snapshot from a head-mounted wearable camera at eye level, deep focus with everything sharp, no bokeh, in a hospital back-of-house corridor or equipment room, slightly off-level framing, bright clinical fluorescent lighting, light sensor noise, realistic, no patients, no faces in frame (a coworker's gloved hands at most). An infusion pump connected by tubing to a gray infusion device analyzer on a biomedical workbench; the analyzer screen reads \"OCCLUSION TEST FAIL\" in red; a white asset tag on the pump reads \"BME-10442\" in large black text. Off-center casual framing, not a composed hero shot. Flat practical lighting, deep focus with the background nearly as sharp as the foreground, no cinematic depth of field, no dramatic lighting, no text overlays or watermarks.",
+      "check": {
+        "pass": true,
+        "missing": [],
+        "faces": 0,
+        "looks_real": true,
+        "read": [
+          "OCCLUSION TEST FAIL",
+          "BME-10442",
+          "SME2 425058",
+          "COIN RN",
+          "CNME",
+          "IMADION",
+          "COM",
+          "GTATOR",
+          "MSTORS",
+          "10E-3ME",
+          "Uses",
+          "Position",
+          "Normal",
+          "Warning"
+        ]
+      }
+    },
+    "10-units-to-bbr1": {
+      "file": "10-units-to-bbr1.jpg",
+      "provider": "azure/flux-2-pro",
+      "seed": 14548,
+      "prompt": "Unedited first-person snapshot from a head-mounted wearable camera at eye level, deep focus with everything sharp, no bokeh, in a hospital back-of-house corridor or equipment room, slightly off-level framing, bright clinical fluorescent lighting, light sensor noise, realistic, no patients, no faces in frame (a coworker's gloved hands at most). A lab technician's blue-gloved hands placing labeled blood bags onto the shelf of an open glass-door blood bank refrigerator; a label on the door frame reads \"BBR-1\" and its digital display shows \"3.9C\" in green. Off-center casual framing, not a composed hero shot. Flat practical lighting, deep focus with the background nearly as sharp as the foreground, no cinematic depth of field, no dramatic lighting, no text overlays or watermarks.",
+      "check": {
+        "pass": true,
+        "missing": [],
+        "faces": 0,
+        "looks_real": true,
+        "read": [
+          "3.9°C",
+          "BBR-1"
+        ]
+      }
+    },
+    "11-torn-gasket": {
+      "file": "11-torn-gasket.jpg",
+      "provider": "azure/flux-2-pro",
+      "seed": 95545,
+      "prompt": "Unedited first-person snapshot from a head-mounted wearable camera at eye level, deep focus with everything sharp, no bokeh, in a hospital back-of-house corridor or equipment room, slightly off-level framing, bright clinical fluorescent lighting, light sensor noise, realistic, no patients, no faces in frame (a coworker's gloved hands at most). Close-up of the bottom corner of an open blood bank refrigerator glass door showing the gray rubber door gasket torn and peeling away from the frame with frost on the edge; a printed label on the door reads \"BBR-2\". Off-center casual framing, not a composed hero shot. Flat practical lighting, deep focus with the background nearly as sharp as the foreground, no cinematic depth of field, no dramatic lighting, no text overlays or watermarks.",
+      "check": {
+        "pass": true,
+        "missing": [],
+        "faces": 0,
+        "looks_real": true,
+        "read": [
+          "BBR-2"
+        ]
+      }
+    },
+    "12-supply-gasket": {
+      "file": "12-supply-gasket.jpg",
+      "provider": "azure/flux-2-pro",
+      "seed": 66050,
+      "prompt": "Unedited first-person snapshot from a head-mounted wearable camera at eye level, deep focus with everything sharp, no bokeh, in a hospital back-of-house corridor or equipment room, slightly off-level framing, bright clinical fluorescent lighting, light sensor noise, realistic, no patients, no faces in frame (a coworker's gloved hands at most). A hospital central supply shelf of labeled plastic bins; a gloved hand pulls a bagged gray rubber refrigerator door gasket from a bin whose printed label reads \"GASKET BBR SERIES\". Off-center casual framing, not a composed hero shot. Flat practical lighting, deep focus with the background nearly as sharp as the foreground, no cinematic depth of field, no dramatic lighting, no text overlays or watermarks.",
+      "check": {
+        "pass": true,
+        "missing": [],
+        "faces": 0,
+        "looks_real": true,
+        "read": [
+          "GASKET BBR SERIES",
+          "GASKET BORNER SERIES"
+        ]
+      }
+    },
+    "15-pump-tagged-out": {
+      "file": "15-pump-tagged-out.jpg",
+      "provider": "azure/flux-2-pro",
+      "seed": 22328,
+      "prompt": "Unedited first-person snapshot from a head-mounted wearable camera at eye level, deep focus with everything sharp, no bokeh, in a hospital back-of-house corridor or equipment room, slightly off-level framing, bright clinical fluorescent lighting, light sensor noise, realistic, no patients, no faces in frame (a coworker's gloved hands at most). An infusion pump on a biomedical workshop shelf with a bright red tag tied to its handle reading \"OUT OF SERVICE\" in large letters and a printed sticker \"WO-5531\"; a white asset tag on the pump reads \"BME-10442\". Off-center casual framing, not a composed hero shot. Flat practical lighting, deep focus with the background nearly as sharp as the foreground, no cinematic depth of field, no dramatic lighting, no text overlays or watermarks.",
+      "check": {
+        "pass": true,
+        "missing": [],
+        "faces": 0,
+        "looks_real": true,
+        "read": [
+          "OUT OF SERVICE",
+          "WO-5531",
+          "BME-10442",
+          "Infafore Cook",
+          "a / HR",
+          "M0208"
+        ]
+      }
     }
   },
   "scenario": "hospital-biomed",

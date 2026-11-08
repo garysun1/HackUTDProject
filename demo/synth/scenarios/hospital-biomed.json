@@ -1,14 +1,20 @@
 {
   "id": "hospital-biomed",
   "title": "Hospital facilities and biomedical engineering rounds",
-  "summary": "Clinical engineering rounds in back-of-house areas only (no patients): a medical gas zone valve, infusion pumps due for maintenance, a blood bank refrigerator that goes into high-temperature alarm, and the emergency power transfer switch.",
+  "summary": "Aisha, the day clinical engineer at Mercy General, does rounds from the biomed shop to 4 West and the blood bank. A charge nurse's note sends her after an infusion pump that keeps alarming; it fails the occlusion test and is tagged out. Mid-morning the lab pages her: blood bank fridge BBR-2 is at 8.9C. The lab moves the units to BBR-1, she finds a torn door gasket, gets a spare from central supply and has BBR-2 back at 4.0C. Marcus from facilities runs the monthly generator test in parallel.",
   "shift_start": "2026-11-07T07:00:00-06:00",
-  "style": "Unedited first-person snapshot from a head-mounted wearable camera at eye level, deep focus with everything sharp, no bokeh, in a hospital back-of-house corridor or equipment room, slightly off-level framing, bright clinical fluorescent lighting, light sensor noise, realistic, no people, no patients, no faces in frame.",
+  "style": "Unedited first-person snapshot from a head-mounted wearable camera at eye level, deep focus with everything sharp, no bokeh, in a hospital back-of-house corridor or equipment room, slightly off-level framing, bright clinical fluorescent lighting, light sensor noise, realistic, no patients, no faces in frame (a coworker's gloved hands at most).",
   "wearers": [
     {
       "key": "aisha",
       "name": "Aisha (biomed)",
       "role": "Clinical engineer",
+      "shift": "Day"
+    },
+    {
+      "key": "marcus",
+      "name": "Marcus (facilities)",
+      "role": "Facilities electrician",
       "shift": "Day"
     }
   ],
@@ -25,19 +31,37 @@
     {
       "asset_id": "BME-10442",
       "name": "Infusion pump BME-10442",
-      "type": "infusion-pump",
+      "type": "pump",
       "location": "Biomed shop",
       "patterns": [
         "10442"
       ]
     },
     {
+      "asset_id": "BME-20817",
+      "name": "Patient monitor BME-20817",
+      "type": "monitor",
+      "location": "4 West ward",
+      "patterns": [
+        "20817"
+      ]
+    },
+    {
       "asset_id": "BBR-2",
       "name": "Blood bank refrigerator 2",
-      "type": "refrigerator",
-      "location": "Lab / blood bank",
+      "type": "fridge",
+      "location": "Blood bank",
       "patterns": [
         "BBR 2"
+      ]
+    },
+    {
+      "asset_id": "BBR-1",
+      "name": "Blood bank refrigerator 1",
+      "type": "fridge",
+      "location": "Blood bank",
+      "patterns": [
+        "BBR 1"
       ]
     },
     {
@@ -48,40 +72,128 @@
       "patterns": [
         "ATS 1"
       ]
+    },
+    {
+      "asset_id": "GEN-1",
+      "name": "Emergency generator 1",
+      "type": "generator",
+      "location": "Generator room",
+      "patterns": [
+        "GEN 1"
+      ]
+    }
+  ],
+  "issues": [
+    {
+      "issue_id": "WO-5531",
+      "title": "Infusion pump BME-10442 intermittent occlusion alarm on 4 West",
+      "asset_id": "BME-10442",
+      "opened_by": "Kim (night biomed)",
+      "opened_at": "2026-11-07T04:10:00-06:00",
+      "status": "open"
+    },
+    {
+      "issue_id": "WO-5540",
+      "title": "Blood bank fridge BBR-2 high temperature alarm",
+      "asset_id": "BBR-2",
+      "opened_by": "Aisha (biomed)",
+      "opened_t": 152
     }
   ],
   "shots": [
     {
-      "id": "01-zone-valve",
-      "t": 0,
-      "wearer": "aisha",
-      "prompt": "A wall-mounted medical gas zone valve box with a clear window, green oxygen valve handle and a pressure gauge; a printed label above it reads \"ZONE VALVE 4 WEST\".",
-      "read": [
-        "4 WEST"
-      ]
-    },
-    {
       "id": "02-infusion-pumps",
-      "t": 14,
+      "t": 0,
       "wearer": "aisha",
       "prompt": "Three infusion pumps on a metal shelf in a biomedical workshop; a white asset tag sticker on the front pump reads \"BME-10442\" in large black text.",
       "read": [
         "BME-10442"
+      ],
+      "room": "Biomed shop",
+      "note": "Start of rounds. Pump 10442 came back to the shop from 4 West overnight."
+    },
+    {
+      "id": "01-zone-valve",
+      "t": 17,
+      "wearer": "aisha",
+      "prompt": "A wall-mounted medical gas zone valve box with a clear window, green oxygen valve handle and a pressure gauge; a printed label above it reads \"ZONE VALVE 4 WEST\".",
+      "read": [
+        "4 WEST"
+      ],
+      "room": "4 West corridor"
+    },
+    {
+      "id": "06-monitor-check",
+      "t": 29,
+      "wearer": "aisha",
+      "room": "4 West ward",
+      "prompt": "A patient monitor on a rolling stand parked in an empty hospital ward hallway alcove, its screen showing a large green \"SELF TEST PASS\" message; a white asset tag sticker on the monitor bezel reads \"BME-20817\" in large black text.",
+      "read": [
+        "BME-20817",
+        "PASS"
       ]
     },
     {
+      "id": "07-nurse-note",
+      "t": 41,
+      "wearer": "aisha",
+      "room": "4 West nurse station",
+      "prompt": "A bright yellow sticky note stuck on a hospital nurse station counter next to a phone and a keyboard, written in clear block-capital marker: \"BIOMED - PUMP 10442 ALARMED AGAIN 0400\".",
+      "read": [
+        "10442"
+      ],
+      "note": "Charge nurse left a note: pump 10442 alarmed again at 4am. Pulling it for a full test."
+    },
+    {
       "id": "03-blood-fridge-ok",
-      "t": 27,
+      "t": 56,
       "wearer": "aisha",
       "pair": "bbr",
       "prompt": "Front of a glass-door blood bank refrigerator full of labeled blood bags; a label on the door reads \"BBR-2\"; its digital temperature display shows \"4.1C\" in green.",
       "read": [
         "BBR-2"
-      ]
+      ],
+      "room": "Blood bank"
+    },
+    {
+      "id": "05-transfer-switch",
+      "t": 70,
+      "wearer": "marcus",
+      "prompt": "Gray electrical automatic transfer switch cabinet in a generator room with indicator lights; a large engraved nameplate reads \"ATS-1\" and a lit green indicator reads \"NORMAL SOURCE\".",
+      "read": [
+        "ATS-1"
+      ],
+      "room": "Generator room",
+      "note": "Monthly generator test prep. ATS-1 on normal source."
+    },
+    {
+      "id": "08-generator-test",
+      "t": 96,
+      "wearer": "marcus",
+      "room": "Generator room",
+      "pair": "gen",
+      "prompt": "Control panel of a large diesel emergency generator in a generator room; a big engraved plate reads \"GEN-1\"; the panel display shows \"RUNNING\" and \"LOAD 38%\" in green; yellow conduit and the generator housing beside it.",
+      "read": [
+        "GEN-1",
+        "RUNNING"
+      ],
+      "note": "Generator test started, GEN-1 carrying 38% of the building."
+    },
+    {
+      "id": "09-pump-fails-test",
+      "t": 125,
+      "wearer": "aisha",
+      "room": "Biomed shop",
+      "prompt": "An infusion pump connected by tubing to a gray infusion device analyzer on a biomedical workbench; the analyzer screen reads \"OCCLUSION TEST FAIL\" in red; a white asset tag on the pump reads \"BME-10442\" in large black text.",
+      "read": [
+        "10442",
+        "FAIL"
+      ],
+      "note": "10442 failed the occlusion test on the analyzer, pressure sensor reads high. Taking it out of service."
     },
     {
       "id": "04-blood-fridge-alarm",
-      "t": 51,
+      "t": 151,
       "wearer": "aisha",
       "pair": "bbr",
       "prompt": "Front of a glass-door blood bank refrigerator full of labeled blood bags; a label on the door reads \"BBR-2\"; its digital display flashes red \"ALARM 8.9C HIGH TEMP\".",
@@ -90,23 +202,90 @@
         "ALARM"
       ],
       "expect": "alert",
-      "edit": "change only the digital temperature display so it flashes red \"ALARM 8.9C HIGH TEMP\"."
+      "edit": "change only the digital temperature display so it flashes red \"ALARM 8.9C HIGH TEMP\".",
+      "room": "Blood bank",
+      "note": "Lab paged me: BBR-2 alarming at 8.9C."
     },
     {
-      "id": "05-transfer-switch",
-      "t": 63,
+      "id": "10-units-to-bbr1",
+      "t": 158,
       "wearer": "aisha",
-      "prompt": "Gray electrical automatic transfer switch cabinet in a generator room with indicator lights; a large engraved nameplate reads \"ATS-1\" and a lit green indicator reads \"NORMAL SOURCE\".",
+      "room": "Blood bank",
+      "prompt": "A lab technician's blue-gloved hands placing labeled blood bags onto the shelf of an open glass-door blood bank refrigerator; a label on the door frame reads \"BBR-1\" and its digital display shows \"3.9C\" in green.",
       "read": [
-        "ATS-1"
-      ]
+        "BBR-1"
+      ],
+      "note": "Lab tech moved all units from BBR-2 into BBR-1, holding 3.9C."
+    },
+    {
+      "id": "11-torn-gasket",
+      "t": 166,
+      "wearer": "aisha",
+      "room": "Blood bank",
+      "prompt": "Close-up of the bottom corner of an open blood bank refrigerator glass door showing the gray rubber door gasket torn and peeling away from the frame with frost on the edge; a printed label on the door reads \"BBR-2\".",
+      "read": [
+        "BBR-2"
+      ],
+      "note": "Bottom corner of the BBR-2 door gasket is torn, the door is not sealing."
+    },
+    {
+      "id": "12-supply-gasket",
+      "t": 204,
+      "wearer": "aisha",
+      "room": "Central supply",
+      "prompt": "A hospital central supply shelf of labeled plastic bins; a gloved hand pulls a bagged gray rubber refrigerator door gasket from a bin whose printed label reads \"GASKET BBR SERIES\".",
+      "read": [
+        "GASKET"
+      ],
+      "note": "Central supply had one spare gasket for the BBR series."
+    },
+    {
+      "id": "13-blood-fridge-fixed",
+      "t": 242,
+      "wearer": "aisha",
+      "room": "Blood bank",
+      "pair": "bbr",
+      "prompt": "Front of the blood bank refrigerator BBR-2, display back to normal.",
+      "edit": "change only the digital temperature display so it shows a steady green \"4.0C\", like a normally working refrigerator.",
+      "read": [
+        "BBR-2",
+        "4.0"
+      ],
+      "note": "Replaced the door gasket on BBR-2. Door seals, temperature back to normal at 4.0C; lab can move the units back."
+    },
+    {
+      "id": "14-generator-done",
+      "t": 300,
+      "wearer": "marcus",
+      "room": "Generator room",
+      "pair": "gen",
+      "prompt": "The GEN-1 generator control panel after the test.",
+      "edit": "change only the panel display so it reads \"COOLDOWN\" and \"TEST COMPLETE\" instead of RUNNING and the load.",
+      "read": [
+        "GEN-1",
+        "TEST COMPLETE"
+      ],
+      "note": "Generator test complete, building transferred back to normal source."
+    },
+    {
+      "id": "15-pump-tagged-out",
+      "t": 362,
+      "wearer": "aisha",
+      "room": "Biomed shop",
+      "prompt": "An infusion pump on a biomedical workshop shelf with a bright red tag tied to its handle reading \"OUT OF SERVICE\" in large letters and a printed sticker \"WO-5531\"; a white asset tag on the pump reads \"BME-10442\".",
+      "read": [
+        "10442",
+        "OUT OF SERVICE"
+      ],
+      "note": "10442 tagged out under WO-5531, pressure sensor on order. 4 West is one pump short tonight."
     }
   ],
   "site": {
-    "lat": 32.811,
-    "lon": -96.84,
-    "radius_m": 90,
-    "label": "Dallas medical district (synthetic placement)",
+    "scene": "hospital",
+    "lat": 32.8111,
+    "lon": -96.83862,
+    "radius_m": 80,
+    "label": "Mercy General Hospital, Dallas medical district (generated site)",
     "synthetic": true
   }
 }

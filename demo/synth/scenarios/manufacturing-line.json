@@ -1,14 +1,20 @@
 {
   "id": "manufacturing-line",
   "title": "Automotive parts plant, second shift",
-  "summary": "A maintenance tech's walk of a machining cell: CNC machine, hydraulic press, a locked-out conveyor, a spindle alarm on CNC-07, and a quality check. Shows the same memory working on a plant floor.",
+  "summary": "Luis, the second-shift maintenance tech, walks Cell 3 at the Arlington plant. He inherits a locked-out conveyor from first shift, chases a spindle overtemp on CNC-07 down to a kinked coolant hose, gets a spare from the tool crib, and has the machine cutting again within the hour; Priya, the cell lead, signs off the first piece. Late in the shift he finds a weeping fitting on press HP-2 and leaves it, and the conveyor, for third shift.",
   "shift_start": "2026-11-07T14:00:00-06:00",
-  "style": "Unedited first-person snapshot from a head-mounted wearable camera at eye level, deep focus with everything sharp, no bokeh, on an industrial factory floor, slightly off-level framing, mixed overhead sodium and LED lighting, light sensor noise, realistic grime and wear, no people or faces in frame.",
+  "style": "Unedited first-person snapshot from a head-mounted wearable camera at eye level, deep focus with everything sharp, no bokeh, on an industrial factory floor, slightly off-level framing, mixed overhead sodium and LED lighting, light sensor noise, realistic grime and wear, no faces in frame (a coworker's gloved hands at most).",
   "wearers": [
     {
       "key": "luis",
       "name": "Luis (maintenance)",
       "role": "Maintenance technician",
+      "shift": "Second"
+    },
+    {
+      "key": "priya",
+      "name": "Priya (cell lead)",
+      "role": "Cell 3 lead operator",
       "shift": "Second"
     }
   ],
@@ -26,8 +32,9 @@
       "asset_id": "HP-2",
       "name": "Hydraulic press 2",
       "type": "press",
-      "location": "Cell 3",
+      "location": "Press line",
       "patterns": [
+        "HP 2",
         "PRESS 2"
       ]
     },
@@ -37,44 +44,117 @@
       "type": "conveyor",
       "location": "Cell 3 outfeed",
       "patterns": [
+        "CV 3",
         "CONVEYOR 3"
       ]
+    },
+    {
+      "asset_id": "CMP-1",
+      "name": "Air compressor 1",
+      "type": "compressor",
+      "location": "Compressor room",
+      "patterns": [
+        "CMP 1"
+      ]
+    }
+  ],
+  "issues": [
+    {
+      "issue_id": "WO-2207",
+      "title": "CV-3 drive belt worn, conveyor locked out until the replacement belt arrives",
+      "asset_id": "CV-3",
+      "opened_by": "Ray (first shift)",
+      "opened_at": "2026-11-07T11:20:00-06:00",
+      "status": "open"
+    },
+    {
+      "issue_id": "WO-2214",
+      "title": "CNC-07 stopped on alarm 1012 spindle overtemp",
+      "asset_id": "CNC-07",
+      "opened_by": "Luis (maintenance)",
+      "opened_t": 134
+    },
+    {
+      "issue_id": "WO-2219",
+      "title": "HP-2 return-line fitting weeping hydraulic oil",
+      "asset_id": "HP-2",
+      "opened_by": "Luis (maintenance)",
+      "opened_t": 256
     }
   ],
   "shots": [
     {
-      "id": "01-cnc-running",
+      "id": "00-handoff-board",
       "t": 0,
+      "wearer": "luis",
+      "room": "Maintenance shop",
+      "prompt": "A whiteboard on the wall of a factory maintenance shop with neat block-capital marker writing: a header \"2ND SHIFT\", and below it the lines \"CV-3 LOCKED OUT - BELT ON ORDER\" and \"PM: CMP-1 FILTER\"; a workbench with tools and a parts bin in front of it.",
+      "read": [
+        "2ND SHIFT",
+        "CV-3"
+      ],
+      "note": "Start of shift. First shift left CV-3 locked out, belt is on order.",
+      "pair": "board"
+    },
+    {
+      "id": "01-cnc-running",
+      "t": 12,
       "wearer": "luis",
       "pair": "cnc",
       "prompt": "Operator control screen of a CNC machining center, metal chips and coolant behind the window; a large plate above the screen reads \"CNC-07\"; the screen shows \"RUNNING\" in green and \"SPINDLE 8000 RPM\".",
       "read": [
         "CNC-07",
         "RUNNING"
-      ]
+      ],
+      "room": "Cell 3"
     },
     {
       "id": "02-press-gauge",
-      "t": 12,
+      "t": 24,
       "wearer": "luis",
       "prompt": "Round analog hydraulic pressure gauge on a large industrial press with the needle in the green band; a yellow stenciled label next to it reads \"HP-2\".",
       "read": [
         "HP-2"
-      ]
+      ],
+      "room": "Press line"
     },
     {
       "id": "03-conveyor-loto",
-      "t": 21,
+      "t": 35,
       "wearer": "luis",
       "prompt": "A roller conveyor with a red lockout padlock on its disconnect switch and a red tag reading \"LOCKED OUT\"; a stenciled sign on the conveyor frame reads \"CV-3\".",
       "read": [
         "CV-3",
         "LOCKED OUT"
-      ]
+      ],
+      "room": "Cell 3 outfeed",
+      "note": "CV-3 still locked out under WO-2207, Ray's lock and mine both on the disconnect."
+    },
+    {
+      "id": "05-quality-check",
+      "t": 58,
+      "wearer": "priya",
+      "prompt": "A machined aluminum part on a granite inspection table next to digital calipers and a printed inspection sheet with large text \"LOT 2291 PASS\".",
+      "read": [
+        "LOT 2291"
+      ],
+      "room": "QA lab"
+    },
+    {
+      "id": "06-compressor",
+      "t": 95,
+      "wearer": "luis",
+      "room": "Compressor room",
+      "prompt": "Control panel of a large industrial rotary screw air compressor in a compressor room; a big engraved plate reads \"CMP-1\"; the panel display shows \"RUNNING\" and \"7.2 BAR\"; a new air filter cartridge in its box sits on top of the cabinet.",
+      "read": [
+        "CMP-1",
+        "RUNNING"
+      ],
+      "note": "PM on CMP-1: intake filter changed, holding 7.2 bar."
     },
     {
       "id": "04-cnc-alarm",
-      "t": 33,
+      "t": 133,
       "wearer": "luis",
       "pair": "cnc",
       "prompt": "Operator control screen of a CNC machining center, metal chips and coolant behind the window; a large plate above the screen reads \"CNC-07\"; the screen shows a red banner \"ALARM 1012 SPINDLE OVERTEMP\".",
@@ -83,23 +163,101 @@
         "ALARM"
       ],
       "expect": "alert",
-      "edit": "change only the control screen so it shows a red banner reading \"ALARM 1012 SPINDLE OVERTEMP\" instead of RUNNING."
+      "edit": "change only the control screen so it shows a red banner reading \"ALARM 1012 SPINDLE OVERTEMP\" instead of RUNNING.",
+      "room": "Cell 3",
+      "note": "Priya called me over: CNC-07 stopped mid-cycle on alarm 1012, spindle overtemp."
     },
     {
-      "id": "05-quality-check",
-      "t": 45,
+      "id": "07-coolant-kink",
+      "t": 141,
       "wearer": "luis",
-      "prompt": "A machined aluminum part on a granite inspection table next to digital calipers and a printed inspection sheet with large text \"LOT 2291 PASS\".",
+      "room": "Cell 3",
+      "prompt": "Close-up inside the open side access panel of a CNC machining center, lit by a flashlight: a black rubber coolant hose is folded sharply into a tight V-shaped kink and crushed flat where it is pinched behind a steel bracket; a gloved finger points at the kink; a small engraved plate on the inside of the panel door reads \"CNC-07\".",
       "read": [
-        "LOT 2291"
-      ]
+        "CNC-07"
+      ],
+      "note": "Found the cause: coolant hose kinked behind the bracket, no coolant flow to the spindle."
+    },
+    {
+      "id": "08-tool-crib-hose",
+      "t": 153,
+      "wearer": "luis",
+      "room": "Tool crib",
+      "prompt": "Across a tool crib service counter with wire-mesh shelving behind it, a coworker's gloved hand slides a new coiled black coolant hose in a clear plastic bag across the counter; a printed white part label on the bag reads \"44-118 COOLANT HOSE\".",
+      "read": [
+        "44-118"
+      ],
+      "note": "Dana at the tool crib had a spare coolant hose, part 44-118."
+    },
+    {
+      "id": "09-cnc-running-again",
+      "t": 177,
+      "wearer": "luis",
+      "room": "Cell 3",
+      "pair": "cnc",
+      "prompt": "Operator control screen of a CNC machining center showing \"RUNNING\" in green, a plate above reads \"CNC-07\", and a yellow sticky note on the frame reads \"HOSE REPLACED\".",
+      "edit": "change only the control screen so it shows \"RUNNING\" in green and \"SPINDLE 8000 RPM\" like a normal running machine, and add a small yellow sticky note on the machine frame beside the screen with marker text \"HOSE REPLACED\".",
+      "read": [
+        "CNC-07",
+        "RUNNING"
+      ],
+      "note": "Replaced the coolant hose and rerouted it clear of the bracket. Alarm cleared, CNC-07 back to normal and cutting again."
+    },
+    {
+      "id": "10-first-piece",
+      "t": 204,
+      "wearer": "priya",
+      "room": "QA lab",
+      "prompt": "A freshly machined aluminum part on a granite inspection table with a digital height gauge beside it and a printed inspection sheet with large bold text \"LOT 2292 FIRST PIECE PASS\".",
+      "read": [
+        "LOT 2292"
+      ],
+      "note": "First piece off CNC-07 after the repair measures in tolerance. Lot 2292 released."
+    },
+    {
+      "id": "11-press-leak",
+      "t": 255,
+      "wearer": "luis",
+      "room": "Press line",
+      "prompt": "Looking down at the base of a large hydraulic press beside a big yellow stenciled marking \"HP-2\" on its frame; a hydraulic hose fitting is wet with oil and a small dark puddle of oil spreads on the concrete floor, partly soaked by a white absorbent pad.",
+      "read": [
+        "HP-2"
+      ],
+      "note": "HP-2 return-line fitting is weeping, small oil leak at the base. Pad down; needs a new fitting before it gets worse."
+    },
+    {
+      "id": "12-cell-board",
+      "t": 300,
+      "wearer": "priya",
+      "room": "Cell 3",
+      "prompt": "A wall-mounted production status board at the end of a machining cell with large printed digits: \"CELL 3\", \"PLAN 340\", \"ACTUAL 312\", and \"STOP MIN 43\".",
+      "read": [
+        "CELL 3",
+        "312"
+      ],
+      "note": "Cell 3 at 312 of 340, the 43 minutes on CNC-07 cost us the rest."
+    },
+    {
+      "id": "13-handoff-board",
+      "t": 385,
+      "wearer": "luis",
+      "room": "Maintenance shop",
+      "pair": "board",
+      "prompt": "The same maintenance shop whiteboard, rewritten for the next shift.",
+      "edit": "change only the whiteboard writing: header \"3RD SHIFT\", then the lines \"CV-3 LOCKED OUT - BELT TUE\", \"HP-2 FITTING WEEPING - PAD DOWN\", and \"CNC-07 HOSE DONE\", in the same neat block-capital marker.",
+      "read": [
+        "3RD SHIFT",
+        "HP-2"
+      ],
+      "note": "Board updated for third shift: CV-3 belt Tuesday, HP-2 fitting still to do."
     }
   ],
   "site": {
-    "lat": 32.705,
-    "lon": -97.129,
-    "radius_m": 120,
-    "label": "Arlington, TX plant (synthetic placement)",
+    "scene": "plant",
+    "lat": 32.70721,
+    "lon": -97.12418,
+    "radius_m": 80,
+    "label": "Arlington Assembly Plant, Arlington TX (generated site)",
     "synthetic": true
   }
 }

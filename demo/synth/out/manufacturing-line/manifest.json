@@ -231,6 +231,226 @@
           "40. Tolerances: Unless"
         ]
       }
+    },
+    "00-handoff-board": {
+      "file": "00-handoff-board.jpg",
+      "provider": "azure/flux-2-pro",
+      "seed": 13767,
+      "prompt": "Unedited first-person snapshot from a head-mounted wearable camera at eye level, deep focus with everything sharp, no bokeh, on an industrial factory floor, slightly off-level framing, mixed overhead sodium and LED lighting, light sensor noise, realistic grime and wear, no faces in frame (a coworker's gloved hands at most). A whiteboard on the wall of a factory maintenance shop with neat block-capital marker writing: a header \"2ND SHIFT\", and below it the lines \"CV-3 LOCKED OUT - BELT ON ORDER\" and \"PM: CMP-1 FILTER\"; a workbench with tools and a parts bin in front of it. Off-center casual framing, not a composed hero shot. Flat practical lighting, deep focus with the background nearly as sharp as the foreground, no cinematic depth of field, no dramatic lighting, no text overlays or watermarks.",
+      "check": {
+        "pass": true,
+        "missing": [],
+        "faces": 0,
+        "looks_real": true,
+        "read": [
+          "2ND SHIFT",
+          "CV-3 LOCKED OUT -",
+          "BELT ON ORDER",
+          "PM: CMP-1 FILTER",
+          "+L-S"
+        ]
+      }
+    },
+    "13-handoff-board": {
+      "file": "13-handoff-board.jpg",
+      "provider": "azure/flux-2-pro",
+      "seed": 13768,
+      "edited_from": "00-handoff-board",
+      "prompt": "EDIT of previous shot: change only the whiteboard writing: header \"3RD SHIFT\", then the lines \"CV-3 LOCKED OUT - BELT TUE\", \"HP-2 FITTING WEEPING - PAD DOWN\", and \"CNC-07 HOSE DONE\", in the same neat block-capital marker.",
+      "check": {
+        "pass": true,
+        "missing": [],
+        "faces": 0,
+        "looks_real": true,
+        "read": [
+          "3RD SHIFT",
+          "CV-3 LOCKED OUT - BELT TUE",
+          "HP-2 FITTING WEEPING-PAD DOWN",
+          "CNC-07 HOSE DONE"
+        ]
+      }
+    },
+    "09-cnc-running-again": {
+      "file": "09-cnc-running-again.jpg",
+      "provider": "azure/flux-2-pro",
+      "seed": 8185,
+      "edited_from": "01-cnc-running",
+      "prompt": "EDIT of previous shot: change only the control screen so it shows \"RUNNING\" in green and \"SPINDLE 8000 RPM\" like a normal running machine, and add a small yellow sticky note on the machine frame beside the screen with marker text \"HOSE REPLACED\".",
+      "check": {
+        "pass": true,
+        "missing": [],
+        "faces": 0,
+        "looks_real": true,
+        "read": [
+          "CNC-07",
+          "HOSE REPLACED",
+          "CINSENCE",
+          "RUNNING",
+          "MYO",
+          "SPINDLE 80000 RPM RPM",
+          "MDI",
+          "SPINDL 100",
+          "SPINDL 1000",
+          "PRESETS 100",
+          "OCCUR LOADING",
+          "1",
+          "2",
+          "3",
+          "4",
+          "5",
+          "6",
+          "7",
+          "8",
+          "9",
+          "10",
+          "MASTER",
+          "RESET",
+          "START",
+          "STOP",
+          "EMERGENCY STOP"
+        ]
+      }
+    },
+    "06-compressor": {
+      "file": "06-compressor.jpg",
+      "provider": "azure/flux-2-pro",
+      "seed": 36205,
+      "prompt": "Unedited first-person snapshot from a head-mounted wearable camera at eye level, deep focus with everything sharp, no bokeh, on an industrial factory floor, slightly off-level framing, mixed overhead sodium and LED lighting, light sensor noise, realistic grime and wear, no faces in frame (a coworker's gloved hands at most). Control panel of a large industrial rotary screw air compressor in a compressor room; a big engraved plate reads \"CMP-1\"; the panel display shows \"RUNNING\" and \"7.2 BAR\"; a new air filter cartridge in its box sits on top of the cabinet. Off-center casual framing, not a composed hero shot. Flat practical lighting, deep focus with the background nearly as sharp as the foreground, no cinematic depth of field, no dramatic lighting, no text overlays or watermarks.",
+      "check": {
+        "pass": true,
+        "missing": [],
+        "faces": 0,
+        "looks_real": true,
+        "read": [
+          "AIR FILTER CARTRIDGE",
+          "PN 457-AL",
+          "CMP-1",
+          "RUNNING",
+          "7.2 BAR",
+          "WARNING",
+          "EACH",
+          "HIGH FIBER OIL AIR DUCT",
+          "HIGH TO LONG HIGH MOISTURE",
+          "COMPRESSOR",
+          "CMP-1",
+          "DANGER",
+          "TVSR",
+          "PHASE",
+          "ON ALL FAILURE",
+          "EMERVOLTAGE",
+          "N",
+          "OFF",
+          "ON",
+          "RESET",
+          "EMERGENCY STOP",
+          "PUSH TO RESET"
+        ]
+      }
+    },
+    "08-tool-crib-hose": {
+      "file": "08-tool-crib-hose.jpg",
+      "provider": "azure/flux-2-pro",
+      "seed": 22799,
+      "prompt": "Unedited first-person snapshot from a head-mounted wearable camera at eye level, deep focus with everything sharp, no bokeh, on an industrial factory floor, slightly off-level framing, mixed overhead sodium and LED lighting, light sensor noise, realistic grime and wear, no faces in frame (a coworker's gloved hands at most). Across a tool crib service counter with wire-mesh shelving behind it, a coworker's gloved hand slides a new coiled black coolant hose in a clear plastic bag across the counter; a printed white part label on the bag reads \"44-118 COOLANT HOSE\". Off-center casual framing, not a composed hero shot. Flat practical lighting, deep focus with the background nearly as sharp as the foreground, no cinematic depth of field, no dramatic lighting, no text overlays or watermarks.",
+      "check": {
+        "pass": true,
+        "missing": [],
+        "faces": 0,
+        "looks_real": true,
+        "read": [
+          "44-118",
+          "COOLANT HOSE",
+          "SHIMURA",
+          "BOSK INCHES",
+          "NUBIOLTENO"
+        ]
+      }
+    },
+    "10-first-piece": {
+      "file": "10-first-piece.jpg",
+      "provider": "azure/flux-2-pro",
+      "seed": 40754,
+      "prompt": "Unedited first-person snapshot from a head-mounted wearable camera at eye level, deep focus with everything sharp, no bokeh, on an industrial factory floor, slightly off-level framing, mixed overhead sodium and LED lighting, light sensor noise, realistic grime and wear, no faces in frame (a coworker's gloved hands at most). A freshly machined aluminum part on a granite inspection table with a digital height gauge beside it and a printed inspection sheet with large bold text \"LOT 2292 FIRST PIECE PASS\". Off-center casual framing, not a composed hero shot. Flat practical lighting, deep focus with the background nearly as sharp as the foreground, no cinematic depth of field, no dramatic lighting, no text overlays or watermarks.",
+      "check": {
+        "pass": true,
+        "missing": [],
+        "faces": 0,
+        "looks_real": true,
+        "read": [
+          "LOT 2292",
+          "FIRST PIECE PASS",
+          "70.7",
+          "Amore",
+          "On",
+          "Off",
+          "Cutters",
+          "Cut Off",
+          "Data",
+          "Power",
+          "C/On",
+          "Store",
+          "Print Label",
+          "0.40 0.00 0.00",
+          "Dolor sit amet, consectetur adipiscing elit.",
+          "Curabitur at tortor vel tellus vehicula lacinia.",
+          "Nullam euismod, nisl eget aliquam tincidunt, nunc nisl aliquet nunc, eu aliquam nunc nunc eu nunc.",
+          "Lorem ipsum dolor sit amet, consectetur adipiscing elit.",
+          "Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.",
+          "Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.",
+          "Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.",
+          "Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum."
+        ]
+      }
+    },
+    "11-press-leak": {
+      "file": "11-press-leak.jpg",
+      "provider": "azure/flux-2-pro",
+      "seed": 50555,
+      "prompt": "Unedited first-person snapshot from a head-mounted wearable camera at eye level, deep focus with everything sharp, no bokeh, on an industrial factory floor, slightly off-level framing, mixed overhead sodium and LED lighting, light sensor noise, realistic grime and wear, no faces in frame (a coworker's gloved hands at most). Looking down at the base of a large hydraulic press beside a big yellow stenciled marking \"HP-2\" on its frame; a hydraulic hose fitting is wet with oil and a small dark puddle of oil spreads on the concrete floor, partly soaked by a white absorbent pad. Off-center casual framing, not a composed hero shot. Flat practical lighting, deep focus with the background nearly as sharp as the foreground, no cinematic depth of field, no dramatic lighting, no text overlays or watermarks.",
+      "check": {
+        "pass": true,
+        "missing": [],
+        "faces": 0,
+        "looks_real": true,
+        "read": [
+          "HP-2",
+          "D400"
+        ]
+      }
+    },
+    "12-cell-board": {
+      "file": "12-cell-board.jpg",
+      "provider": "azure/flux-2-pro",
+      "seed": 45032,
+      "prompt": "Unedited first-person snapshot from a head-mounted wearable camera at eye level, deep focus with everything sharp, no bokeh, on an industrial factory floor, slightly off-level framing, mixed overhead sodium and LED lighting, light sensor noise, realistic grime and wear, no faces in frame (a coworker's gloved hands at most). A wall-mounted production status board at the end of a machining cell with large printed digits: \"CELL 3\", \"PLAN 340\", \"ACTUAL 312\", and \"STOP MIN 43\". Off-center casual framing, not a composed hero shot. Flat practical lighting, deep focus with the background nearly as sharp as the foreground, no cinematic depth of field, no dramatic lighting, no text overlays or watermarks.",
+      "check": {
+        "pass": true,
+        "missing": [],
+        "faces": 0,
+        "looks_real": true,
+        "read": [
+          "CELL 3",
+          "PLAN 340",
+          "ACTUAL 312",
+          "STOP MIN 43"
+        ]
+      }
+    },
+    "07-coolant-kink": {
+      "file": "07-coolant-kink.jpg",
+      "provider": "azure/flux-2-pro",
+      "seed": 98801,
+      "prompt": "Unedited first-person snapshot from a head-mounted wearable camera at eye level, deep focus with everything sharp, no bokeh, on an industrial factory floor, slightly off-level framing, mixed overhead sodium and LED lighting, light sensor noise, realistic grime and wear, no faces in frame (a coworker's gloved hands at most). Close-up inside the open side access panel of a CNC machining center, lit by a flashlight: a black rubber coolant hose is folded sharply into a tight V-shaped kink and crushed flat where it is pinched behind a steel bracket; a gloved finger points at the kink; a small engraved plate on the inside of the panel door reads \"CNC-07\". Off-center casual framing, not a composed hero shot. Flat practical lighting, deep focus with the background nearly as sharp as the foreground, no cinematic depth of field, no dramatic lighting, no text overlays or watermarks.",
+      "check": {
+        "pass": true,
+        "missing": [],
+        "faces": 0,
+        "looks_real": true,
+        "read": [
+          "CNC-07",
+          "MECHANIX WEAR"
+        ]
+      }
     }
   },
   "scenario": "manufacturing-line",

@@ -1,14 +1,20 @@
 {
   "id": "warehouse-dc",
-  "title": "Distribution center safety walk",
-  "summary": "A shift lead's safety walk of a distribution center: a dock door, forklift charging, pallet racking that is found damaged, and a freezer reading. Shows anomaly detection without any status text.",
+  "title": "Distribution center safety walk, early shift",
+  "summary": "Jordan, the early-shift lead at the DFW distribution center, opens the building and gets wave 1 out of dock 14. An hour in, Tasha finds a racking upright in aisle 22 buckled by a forklift: the aisle is taped off, FL-12 is pulled for a check, the inspector red-tags the bay, and the racking crew replaces the upright before noon. Meanwhile freezer FZ-1 starts alarming at -12C with an iced evaporator; the contractor can't come until tomorrow, so it is the open item at handoff.",
   "shift_start": "2026-11-07T05:30:00-06:00",
-  "style": "Unedited first-person snapshot from a head-mounted wearable camera at eye level, deep focus with everything sharp, no bokeh, inside a large distribution center warehouse, slightly off-level framing, high-bay LED lighting, light sensor noise, realistic, no people or faces in frame.",
+  "style": "Unedited first-person snapshot from a head-mounted wearable camera at eye level, deep focus with everything sharp, no bokeh, inside a large distribution center warehouse, slightly off-level framing, high-bay LED lighting, light sensor noise, realistic, no faces in frame (a coworker's gloved hands at most).",
   "wearers": [
     {
       "key": "jordan",
       "name": "Jordan (shift lead)",
       "role": "Warehouse shift lead",
+      "shift": "Early"
+    },
+    {
+      "key": "tasha",
+      "name": "Tasha (inventory)",
+      "role": "Inventory control lead",
       "shift": "Early"
     }
   ],
@@ -17,7 +23,7 @@
       "asset_id": "DOCK-14",
       "name": "Dock door 14",
       "type": "dock",
-      "location": "Inbound docks",
+      "location": "Docks 11–20",
       "patterns": [
         "DOCK 14"
       ]
@@ -37,73 +43,225 @@
       "type": "racking",
       "location": "Aisle 22",
       "patterns": [
-        "AISLE 22"
+        "AISLE 22",
+        "BAY 07"
+      ]
+    },
+    {
+      "asset_id": "FL-12",
+      "name": "Forklift FL-12",
+      "type": "forklift",
+      "location": "Charging bay",
+      "patterns": [
+        "FL 12"
       ]
     },
     {
       "asset_id": "FZ-1",
       "name": "Freezer FZ-1",
       "type": "freezer",
-      "location": "Cold storage",
+      "location": "Freezer FZ-1",
       "patterns": [
         "FZ 1"
       ]
     }
   ],
+  "issues": [
+    {
+      "issue_id": "WO-3301",
+      "title": "Aisle 22 bay 07 racking upright buckled by forklift impact",
+      "asset_id": "A22-B07",
+      "opened_by": "Tasha (inventory)",
+      "opened_t": 99
+    },
+    {
+      "issue_id": "WO-3305",
+      "title": "Freezer FZ-1 high temperature, evaporator 2 iced",
+      "asset_id": "FZ-1",
+      "opened_by": "Jordan (shift lead)",
+      "opened_t": 231
+    }
+  ],
   "shots": [
     {
-      "id": "01-dock-door",
+      "id": "00-wave-board",
       "t": 0,
+      "wearer": "jordan",
+      "room": "Shipping office",
+      "pair": "board",
+      "prompt": "A whiteboard in a warehouse shipping office with neat block-capital marker writing: header \"EARLY SHIFT\", then the lines \"WAVE 1: 42 ORDERS\" and \"DOCK 14 TRAILER 5521\"; a desk with a label printer below it.",
+      "read": [
+        "EARLY SHIFT",
+        "DOCK 14"
+      ],
+      "note": "Opening up. Wave 1 is 42 orders out of dock 14."
+    },
+    {
+      "id": "01-dock-door",
+      "t": 10,
       "wearer": "jordan",
       "prompt": "An open warehouse loading dock door with a trailer backed in and pallets of boxes; a large yellow sign above the door reads \"DOCK 14\".",
       "read": [
         "DOCK 14"
-      ]
+      ],
+      "room": "Docks 11–20"
     },
     {
       "id": "02-charger",
-      "t": 11,
+      "t": 21,
       "wearer": "jordan",
       "prompt": "An industrial forklift battery charger on a wall with a cable plugged into a forklift; a large label reads \"CHG-05\" and its display shows \"78%\".",
       "read": [
         "CHG-05"
-      ]
+      ],
+      "room": "Charging bay"
     },
     {
       "id": "03-racking-ok",
-      "t": 20,
+      "t": 30,
       "wearer": "jordan",
-      "pair": "rack",
       "prompt": "Orange and blue steel pallet racking loaded with shrink-wrapped pallets; a large aisle sign reads \"AISLE 22\"; the uprights and beams are straight and intact.",
       "read": [
         "AISLE 22"
-      ]
-    },
-    {
-      "id": "04-racking-damaged",
-      "t": 38,
-      "wearer": "jordan",
-      "prompt": "Looking down at the base of a blue steel pallet racking upright in aisle 22 that is badly bent and buckled inward from a forklift impact, with scraped paint and a dented base plate; loaded pallets above; a large white aisle sign reading \"AISLE 22\" is visible in the top of the frame.",
-      "read": [
-        "AISLE 22"
       ],
-      "expect": "alert"
+      "room": "Aisle 22"
     },
     {
       "id": "05-freezer",
-      "t": 52,
+      "t": 44,
       "wearer": "jordan",
       "prompt": "Insulated walk-in freezer door with frost around the seal; a label reads \"FZ-1\" and a digital display beside it shows \"-18C\".",
       "read": [
         "FZ-1"
-      ]
+      ],
+      "room": "Freezer FZ-1"
+    },
+    {
+      "id": "04-racking-damaged",
+      "t": 98,
+      "wearer": "tasha",
+      "prompt": "Looking down at the base of a blue steel pallet racking upright in aisle 22 that is badly bent and buckled inward from a forklift impact, with scraped paint and a dented base plate; loaded pallets above; a large white aisle sign reading \"AISLE 22\" is visible in the top of the frame.",
+      "read": [
+        "AISLE 22"
+      ],
+      "expect": "alert",
+      "room": "Aisle 22",
+      "note": "Forklift clipped the upright at bay 07 in aisle 22, it's buckled at the base."
+    },
+    {
+      "id": "06-aisle-taped",
+      "t": 104,
+      "wearer": "tasha",
+      "room": "Aisle 22",
+      "prompt": "Yellow and black caution tape stretched across the end of a warehouse racking aisle with a printed sign hanging from it reading \"AISLE 22 CLOSED\"; tall loaded pallet racking beyond.",
+      "read": [
+        "AISLE 22",
+        "CLOSED"
+      ],
+      "note": "Taped off aisle 22. The FL-12 driver reported it straight away."
+    },
+    {
+      "id": "07-forklift-scrape",
+      "t": 113,
+      "wearer": "jordan",
+      "room": "Charging bay",
+      "prompt": "Close-up of the fork carriage of a yellow forklift with fresh blue paint scrapes on the steel; a large black stenciled marking on the mast reads \"FL-12\".",
+      "read": [
+        "FL-12"
+      ],
+      "note": "Pulled FL-12 off the floor for a check: blue paint on the carriage matches the upright."
+    },
+    {
+      "id": "08-red-tag",
+      "t": 150,
+      "wearer": "tasha",
+      "room": "Aisle 22",
+      "prompt": "A bright red inspection tag zip-tied to a bent blue steel pallet racking upright, the tag printed in large white letters \"DO NOT USE - UNLOAD BAY\", and a small label on the upright reads \"BAY 07\".",
+      "read": [
+        "DO NOT USE",
+        "BAY 07"
+      ],
+      "note": "Racking inspector red-tagged bay 07: unload it and replace the upright."
+    },
+    {
+      "id": "09-dock-shipped",
+      "t": 186,
+      "wearer": "jordan",
+      "room": "Docks 11–20",
+      "prompt": "A closed warehouse loading dock door with a green light lit beside it and a large yellow sign above the door reading \"DOCK 14\"; an empty pallet jack parked in front.",
+      "read": [
+        "DOCK 14"
+      ],
+      "note": "Wave 1 shipped, trailer 5521 sealed and pulled from dock 14."
+    },
+    {
+      "id": "10-freezer-alarm",
+      "t": 230,
+      "wearer": "jordan",
+      "room": "Freezer FZ-1",
+      "prompt": "Insulated stainless walk-in freezer door with frost around the seal; a large printed label on the door reads \"FZ-1\"; the digital temperature display beside the door shows \"-12C\" with a large red \"ALARM\" light lit above it.",
+      "read": [
+        "FZ-1",
+        "ALARM"
+      ],
+      "note": "FZ-1 alarming at -12C and climbing."
+    },
+    {
+      "id": "11-evaporator-iced",
+      "t": 238,
+      "wearer": "jordan",
+      "room": "Freezer FZ-1",
+      "prompt": "Inside a walk-in freezer, looking up at a ceiling-mounted evaporator unit whose coil and fans are completely encased in thick white ice; a printed label on the unit housing reads \"FZ-1 EVAP 2\".",
+      "read": [
+        "FZ-1"
+      ],
+      "note": "Evaporator 2 is iced solid. Refrigeration contractor can't come until 7am tomorrow; moving the ice cream pallets to FZ-2."
+    },
+    {
+      "id": "12-upright-replaced",
+      "t": 282,
+      "wearer": "tasha",
+      "room": "Aisle 22",
+      "prompt": "Looking down at the base of a brand-new, clean, glossy blue steel pallet racking upright with a new bolted base plate and fresh anchor bolts on the concrete floor; the lowest bay beside it is empty; a small label on the upright reads \"BAY 07\" and a green tag zip-tied to it reads \"OK TO LOAD\".",
+      "read": [
+        "BAY 07",
+        "OK TO LOAD"
+      ],
+      "note": "Racking crew replaced the upright at bay 07 and the inspector cleared the bay. Aisle 22 is open again."
+    },
+    {
+      "id": "13-forklift-back",
+      "t": 306,
+      "wearer": "jordan",
+      "room": "Charging bay",
+      "prompt": "A yellow forklift parked at a charging station with its charging cable plugged in; a large black stenciled \"FL-12\" on the mast and a green tag hanging from the overhead guard printed \"INSPECTED OK\".",
+      "read": [
+        "FL-12",
+        "INSPECTED"
+      ],
+      "note": "FL-12 passed its check, back on the floor after charging."
+    },
+    {
+      "id": "14-handoff-board",
+      "t": 362,
+      "wearer": "jordan",
+      "room": "Shipping office",
+      "pair": "board",
+      "prompt": "The shipping office whiteboard, rewritten for the next shift.",
+      "edit": "change only the whiteboard writing: header \"LATE SHIFT\", then the lines \"FZ-1 EVAP ICED - CONTRACTOR 7AM\", \"PRODUCT IN FZ-2\", and \"AISLE 22 OPEN\", in the same neat block-capital marker.",
+      "read": [
+        "LATE SHIFT",
+        "FZ-1"
+      ],
+      "note": "Board updated for late shift: FZ-1 still warm, contractor 7am."
     }
   ],
   "site": {
-    "lat": 32.935,
-    "lon": -97.03,
-    "radius_m": 150,
-    "label": "DFW logistics park (synthetic placement)",
+    "scene": "warehouse",
+    "lat": 32.93921,
+    "lon": -97.02089,
+    "radius_m": 80,
+    "label": "DFW Distribution Center (generated site)",
     "synthetic": true
   }
 }
