@@ -359,7 +359,7 @@ export class SiteScene {
       if (v.sig !== sig) {
         v.sig = sig; v.el.style.setProperty('--c', p.color); v.el.classList.toggle('alert', p.alert); v.el.classList.toggle('sel', p.selected); v.el.title = p.title;
         v.el.classList.toggle('badged', !!p.badge);
-        v.el.innerHTML = `${p.badge ? `<em>${p.badge.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c] as string))}</em>` : ''}${p.thumb ? `<img src="${p.thumb}" alt="">` : '<i></i>'}<b>${p.time}</b>`;
+        v.el.innerHTML = `${p.badge ? `<em>${p.badge.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c] as string))}</em>` : ''}${p.thumb ? `<img src="${p.thumb}" alt="">` : '<i></i>'}`;
       }
     }
     for (const [id, v] of this.pins) if (!keep.has(id)) { this.scene.remove(v.obj, v.pole); v.el.remove(); this.pins.delete(id); }

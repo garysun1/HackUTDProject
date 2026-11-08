@@ -11,10 +11,8 @@ import { view, setMode, onView } from './view';
 
 setUserViewSource(() => (view.mode === 'map' ? mapUserView() : floorUserView()));
 const dbEl = document.getElementById('db')!;
-const windowSel = document.getElementById('window') as HTMLSelectElement;
 const wearersEl = document.getElementById('wearers')!;
 
-windowSel.addEventListener('change', () => { state.windowMin = Number(windowSel.value === 'all' ? 0 : windowSel.value); notify(); });
 
 function renderChips() {
   // one chip per wearer name; a wearer with two devices (phone + glasses) is still one person
@@ -111,11 +109,10 @@ function emptyCopy() {
   if (shown || !total) return;
   const reasons: string[] = [];
   if (state.hiddenWearers.size) reasons.push(`${state.hiddenWearers.size} wearer${state.hiddenWearers.size > 1 ? 's' : ''} hidden`);
-  if (state.windowMin) reasons.push(`window is ${windowSel.options[windowSel.selectedIndex].text}`);
   if (state.assetFilter) reasons.push(`showing only ${state.entities.get(state.assetFilter)?.canonicalName ?? 'one asset'}`);
   const why = reasons.join(', ');
   tlEmpty.innerHTML = `No events match: ${why}. <a id="clear-filters" role="button" tabindex="0">Show everything</a>`;
   flEmpty.textContent = `Nothing to draw with the current filters.`;
-  tlEmpty.querySelector('#clear-filters')!.addEventListener('click', () => { state.hiddenWearers.clear(); state.windowMin = 0; state.assetFilter = null; windowSel.value = 'all'; notify(); });
+  tlEmpty.querySelector('#clear-filters')!.addEventListener('click', () => { state.hiddenWearers.clear(); state.assetFilter = null; notify(); });
 }
 onChange(emptyCopy);
