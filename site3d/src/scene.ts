@@ -292,13 +292,19 @@ export class SiteScene {
     const dt = this.clock.getDelta(); const t = performance.now();
     const c = this.mode === '3d' ? this.ctrl3d : this.ctrl2d;
     if (this.follow && this.followPos) {
-      const goal = this.followPos.clone(); goal.y = this.mode === '3d' ? 4 : 0;
-      const d = goal.clone().sub(c.target).multiplyScalar(Math.min(1, dt * 3)); c.target.add(d); c.object.position.add(d);
-      // and come in close enough to read the floor plan
+      // Follow keeps the wearer in frame without pinning them to the centre: the camera stays put
+      // while the dot moves through the middle of the view, and pans only when the dot nears an
+      // edge. Pinning made the dot look still at 1x, with the world sliding under it.
+      const ndc = this.followPos.clone().project(c.object as THREE.Camera); const edge = 0.5;
+      if (Math.abs(ndc.x) > edge || Math.abs(ndc.y) > edge || ndc.z > 1) {
+        const goal = this.followPos.clone(); goal.y = this.mode === '3d' ? 4 : 0;
+        const d = goal.clone().sub(c.target).multiplyScalar(Math.min(1, dt * 1.2)); c.target.add(d); c.object.position.add(d);
+      }
+      // come in close enough to read the floor plan, once
       if (this.mode === '3d') {
-        const off = this.persp.position.clone().sub(this.ctrl3d.target); const len = off.length(); const want = 95;
-        if (Math.abs(len - want) > 2) { off.setLength(len + (want - len) * Math.min(1, dt * 2)); if (off.y < 28) off.y = 28; this.persp.position.copy(this.ctrl3d.target).add(off); }
-      } else if (Math.abs(this.ortho.zoom - 3.2) > 0.05) { this.ortho.zoom += (3.2 - this.ortho.zoom) * Math.min(1, dt * 2); this.ortho.updateProjectionMatrix(); }
+        const off = this.persp.position.clone().sub(this.ctrl3d.target); const len = off.length(); const want = 110;
+        if (len > want + 2) { off.setLength(len + (want - len) * Math.min(1, dt * 2)); if (off.y < 28) off.y = 28; this.persp.position.copy(this.ctrl3d.target).add(off); }
+      } else if (this.ortho.zoom < 2.8) { this.ortho.zoom += (3 - this.ortho.zoom) * Math.min(1, dt * 2); this.ortho.updateProjectionMatrix(); }
     }
     c.update();
     for (const w of this.wearers.values()) {
