@@ -1,0 +1,600 @@
+{
+ "db": "wm-weekend",
+ "generatedAt": "2026-11-08T16:49:21.929Z",
+ "photos": [
+  {
+   "id": "wk-0810",
+   "deviceId": "edward-iphone",
+   "t": "2026-11-07T08:10:49-06:00",
+   "origin": "camera_roll (Meta AI app export)",
+   "sentAs": "camera_roll",
+   "note": false,
+   "fix": false
+  },
+  {
+   "id": "wk-0812",
+   "deviceId": "edward-iphone",
+   "t": "2026-11-07T08:12:51-06:00",
+   "origin": "camera_roll (Meta AI app export)",
+   "sentAs": "camera_roll",
+   "note": false,
+   "fix": false
+  },
+  {
+   "id": "wk-0822",
+   "deviceId": "edward-iphone",
+   "t": "2026-11-07T08:22:39-06:00",
+   "origin": "camera_roll (Meta AI app export)",
+   "sentAs": "camera_roll",
+   "note": false,
+   "fix": false
+  },
+  {
+   "id": "wk-0828",
+   "deviceId": "edward-iphone",
+   "t": "2026-11-07T08:28:08-06:00",
+   "origin": "camera_roll (Meta AI app export)",
+   "sentAs": "camera_roll",
+   "note": false,
+   "fix": false
+  },
+  {
+   "id": "wk-1059",
+   "deviceId": "edward-iphone",
+   "t": "2026-11-07T10:59:26-06:00",
+   "origin": "camera_roll (Meta AI app export)",
+   "sentAs": "camera_roll",
+   "note": false,
+   "fix": false
+  },
+  {
+   "id": "wk-1111",
+   "deviceId": "edward-iphone",
+   "t": "2026-11-07T11:11:14-06:00",
+   "origin": "camera_roll (Meta AI app export)",
+   "sentAs": "camera_roll",
+   "note": false,
+   "fix": false
+  },
+  {
+   "id": "wk-1133",
+   "deviceId": "edward-iphone",
+   "t": "2026-11-07T11:33:50-06:00",
+   "origin": "camera_roll (Meta AI app export)",
+   "sentAs": "camera_roll",
+   "note": false,
+   "fix": false
+  },
+  {
+   "id": "wk-1134",
+   "deviceId": "edward-iphone",
+   "t": "2026-11-07T11:34:30-06:00",
+   "origin": "camera_roll (Meta AI app export)",
+   "sentAs": "camera_roll",
+   "note": false,
+   "fix": false
+  },
+  {
+   "id": "wk-1136",
+   "deviceId": "edward-iphone",
+   "t": "2026-11-07T11:36:10-06:00",
+   "origin": "camera_roll (Meta AI app export)",
+   "sentAs": "camera_roll",
+   "note": false,
+   "fix": false
+  },
+  {
+   "id": "wk-1138",
+   "deviceId": "edward-iphone",
+   "t": "2026-11-07T11:38:10-06:00",
+   "origin": "camera_roll (Meta AI app export)",
+   "sentAs": "camera_roll",
+   "note": false,
+   "fix": false
+  },
+  {
+   "id": "wk-1154",
+   "deviceId": "edward-iphone",
+   "t": "2026-11-07T11:54:58-06:00",
+   "origin": "camera_roll (Meta AI app export)",
+   "sentAs": "camera_roll",
+   "note": false,
+   "fix": false
+  },
+  {
+   "id": "wk-1207",
+   "deviceId": "edward-iphone",
+   "t": "2026-11-07T12:07:05-06:00",
+   "origin": "camera_roll (Meta AI app export)",
+   "sentAs": "camera_roll",
+   "note": false,
+   "fix": false
+  },
+  {
+   "id": "wk-1325",
+   "deviceId": "edward-iphone",
+   "t": "2026-11-07T13:25:31-06:00",
+   "origin": "camera_roll (Meta AI app export)",
+   "sentAs": "camera_roll",
+   "note": false,
+   "fix": false
+  },
+  {
+   "id": "wk-1347",
+   "deviceId": "edward-iphone",
+   "t": "2026-11-07T13:47:26-06:00",
+   "origin": "camera_roll (Meta AI app export)",
+   "sentAs": "camera_roll",
+   "note": false,
+   "fix": false
+  },
+  {
+   "id": "wk-1359",
+   "deviceId": "edward-iphone",
+   "t": "2026-11-07T13:59:35-06:00",
+   "origin": "camera_roll (Meta AI app export)",
+   "sentAs": "camera_roll",
+   "note": false,
+   "fix": false
+  },
+  {
+   "id": "wk-1430",
+   "deviceId": "edward-iphone",
+   "t": "2026-11-07T14:30:00-06:00",
+   "origin": "camera_roll (Meta AI app export)",
+   "sentAs": "camera_roll",
+   "note": false,
+   "fix": false
+  },
+  {
+   "id": "wk-1431",
+   "deviceId": "edward-iphone",
+   "t": "2026-11-07T14:31:20-06:00",
+   "origin": "camera_roll (Meta AI app export)",
+   "sentAs": "camera_roll",
+   "note": false,
+   "fix": false
+  },
+  {
+   "id": "wk-1445",
+   "deviceId": "edward-iphone",
+   "t": "2026-11-07T14:45:40-06:00",
+   "origin": "camera_roll (Meta AI app export)",
+   "sentAs": "camera_roll",
+   "note": false,
+   "fix": false
+  },
+  {
+   "id": "wk-1506",
+   "deviceId": "edward-iphone",
+   "t": "2026-11-07T15:06:38-06:00",
+   "origin": "camera_roll (Meta AI app export)",
+   "sentAs": "camera_roll",
+   "note": false,
+   "fix": false
+  },
+  {
+   "id": "wk-1508",
+   "deviceId": "edward-iphone",
+   "t": "2026-11-07T15:08:10-06:00",
+   "origin": "camera_roll (Meta AI app export)",
+   "sentAs": "camera_roll",
+   "note": false,
+   "fix": false
+  },
+  {
+   "id": "wk-1520",
+   "deviceId": "edward-iphone",
+   "t": "2026-11-07T15:20:03-06:00",
+   "origin": "camera_roll (Meta AI app export)",
+   "sentAs": "camera_roll",
+   "note": false,
+   "fix": false
+  },
+  {
+   "id": "556129ee-1727-44fc-817b-976fbd32634b",
+   "deviceId": "phone-e4af7b",
+   "t": "2026-11-07T18:11:04.000-06:00",
+   "origin": "shutter_button",
+   "sentAs": "manual_upload",
+   "note": false,
+   "fix": false
+  },
+  {
+   "id": "21c4d502-f854-4942-9fa7-b147525d44f5",
+   "deviceId": "phone-e4af7b",
+   "t": "2026-11-07T18:15:06.000-06:00",
+   "origin": "sdk_capture",
+   "sentAs": "manual_upload",
+   "note": false,
+   "fix": false
+  },
+  {
+   "id": "d1044a8d-c64c-48a6-a84a-7696406f6054",
+   "deviceId": "edward-iphone",
+   "t": "2026-11-07T18:36:58.120-06:00",
+   "origin": "sdk_capture",
+   "sentAs": "manual_upload",
+   "note": false,
+   "fix": false
+  },
+  {
+   "id": "b640d072-00fe-4de4-be19-76e49ba33ae3",
+   "deviceId": "edward-iphone",
+   "t": "2026-11-07T18:50:49.227-06:00",
+   "origin": "shutter_button",
+   "sentAs": "manual_upload",
+   "note": false,
+   "fix": false
+  },
+  {
+   "id": "62cb95ad-73b4-4ea8-8834-0e3c3d5750d3",
+   "deviceId": "edward-iphone",
+   "t": "2026-11-07T18:51:46.457-06:00",
+   "origin": "shutter_button",
+   "sentAs": "manual_upload",
+   "note": false,
+   "fix": false
+  },
+  {
+   "id": "c464866e-9565-4824-aee1-023d198fc3cc",
+   "deviceId": "edward-iphone",
+   "t": "2026-11-07T18:52:37.213-06:00",
+   "origin": "shutter_button",
+   "sentAs": "manual_upload",
+   "note": false,
+   "fix": false
+  },
+  {
+   "id": "67619eb8-fb11-4a83-9568-9fcc928ced9a",
+   "deviceId": "edward-iphone",
+   "t": "2026-11-07T18:53:19.290-06:00",
+   "origin": "shutter_button",
+   "sentAs": "manual_upload",
+   "note": false,
+   "fix": false
+  },
+  {
+   "id": "fd70df44-2253-4312-9a01-db84e4331811",
+   "deviceId": "edward-iphone",
+   "t": "2026-11-07T18:53:58.499-06:00",
+   "origin": "shutter_button",
+   "sentAs": "manual_upload",
+   "note": false,
+   "fix": false
+  },
+  {
+   "id": "wk-2005",
+   "deviceId": "edward-iphone",
+   "t": "2026-11-07T20:05:30-06:00",
+   "origin": "camera_roll (Meta AI app export)",
+   "sentAs": "camera_roll",
+   "note": false,
+   "fix": false
+  },
+  {
+   "id": "wk-2008",
+   "deviceId": "edward-iphone",
+   "t": "2026-11-07T20:08:00-06:00",
+   "origin": "camera_roll (Meta AI app export)",
+   "sentAs": "camera_roll",
+   "note": false,
+   "fix": false
+  },
+  {
+   "id": "wk-2010",
+   "deviceId": "edward-iphone",
+   "t": "2026-11-07T20:10:20-06:00",
+   "origin": "camera_roll (Meta AI app export)",
+   "sentAs": "camera_roll",
+   "note": false,
+   "fix": false
+  },
+  {
+   "id": "wk-2012",
+   "deviceId": "edward-iphone",
+   "t": "2026-11-07T20:12:10-06:00",
+   "origin": "camera_roll (Meta AI app export)",
+   "sentAs": "camera_roll",
+   "note": false,
+   "fix": false
+  },
+  {
+   "id": "wk-2130",
+   "deviceId": "edward-iphone",
+   "t": "2026-11-07T21:30:00-06:00",
+   "origin": "camera_roll (Meta AI app export)",
+   "sentAs": "camera_roll",
+   "note": false,
+   "fix": false
+  },
+  {
+   "id": "wk-2250",
+   "deviceId": "edward-iphone",
+   "t": "2026-11-07T22:50:00-06:00",
+   "origin": "camera_roll (Meta AI app export)",
+   "sentAs": "camera_roll",
+   "note": false,
+   "fix": false
+  },
+  {
+   "id": "wk-2252",
+   "deviceId": "edward-iphone",
+   "t": "2026-11-07T22:52:00-06:00",
+   "origin": "camera_roll (Meta AI app export)",
+   "sentAs": "camera_roll",
+   "note": false,
+   "fix": false
+  },
+  {
+   "id": "wk-2255",
+   "deviceId": "edward-iphone",
+   "t": "2026-11-07T22:55:00-06:00",
+   "origin": "camera_roll (Meta AI app export)",
+   "sentAs": "camera_roll",
+   "note": false,
+   "fix": false
+  },
+  {
+   "id": "wk-2300",
+   "deviceId": "edward-iphone",
+   "t": "2026-11-07T23:00:00-06:00",
+   "origin": "camera_roll (Meta AI app export)",
+   "sentAs": "camera_roll",
+   "note": false,
+   "fix": false
+  },
+  {
+   "id": "88adc9d9-f5af-47a2-9082-e17597a464fb",
+   "deviceId": "edward-iphone",
+   "t": "2026-11-07T23:12:20.459-06:00",
+   "origin": "shutter_button",
+   "sentAs": "manual_upload",
+   "note": false,
+   "fix": true
+  },
+  {
+   "id": "b29ebe19-fca2-4aaf-914f-56ad219ee448",
+   "deviceId": "edward-iphone",
+   "t": "2026-11-07T23:13:00.954-06:00",
+   "origin": "shutter_button",
+   "sentAs": "manual_upload",
+   "note": false,
+   "fix": true
+  },
+  {
+   "id": "wk-2340",
+   "deviceId": "edward-iphone",
+   "t": "2026-11-07T23:40:00-06:00",
+   "origin": "camera_roll (Meta AI app export)",
+   "sentAs": "camera_roll",
+   "note": false,
+   "fix": false
+  },
+  {
+   "id": "wk-0030",
+   "deviceId": "edward-iphone",
+   "t": "2026-11-08T00:30:00-06:00",
+   "origin": "camera_roll (Meta AI app export)",
+   "sentAs": "camera_roll",
+   "note": false,
+   "fix": false
+  },
+  {
+   "id": "wk-0115",
+   "deviceId": "edward-iphone",
+   "t": "2026-11-08T01:15:00-06:00",
+   "origin": "camera_roll (Meta AI app export)",
+   "sentAs": "camera_roll",
+   "note": false,
+   "fix": false
+  },
+  {
+   "id": "wk-0233",
+   "deviceId": "edward-iphone",
+   "t": "2026-11-08T02:33:30-06:00",
+   "origin": "camera_roll (Meta AI app export)",
+   "sentAs": "camera_roll",
+   "note": false,
+   "fix": false
+  },
+  {
+   "id": "wk-0235",
+   "deviceId": "edward-iphone",
+   "t": "2026-11-08T02:35:30-06:00",
+   "origin": "camera_roll (Meta AI app export)",
+   "sentAs": "camera_roll",
+   "note": false,
+   "fix": false
+  },
+  {
+   "id": "0cea6c45-f157-4931-a216-ec1a5b26cd45",
+   "deviceId": "edward-iphone",
+   "t": "2026-11-08T02:35:55.957-06:00",
+   "origin": "shutter_button",
+   "sentAs": "manual_upload",
+   "note": true,
+   "fix": true
+  },
+  {
+   "id": "wk-0236",
+   "deviceId": "edward-iphone",
+   "t": "2026-11-08T02:36:10-06:00",
+   "origin": "camera_roll (Meta AI app export)",
+   "sentAs": "camera_roll",
+   "note": false,
+   "fix": false
+  },
+  {
+   "id": "409eb965-74d4-4485-997e-2e70ffbb9ed2",
+   "deviceId": "edward-iphone",
+   "t": "2026-11-08T02:36:37.057-06:00",
+   "origin": "shutter_button",
+   "sentAs": "manual_upload",
+   "note": false,
+   "fix": true
+  },
+  {
+   "id": "f7f409bb-e047-445f-8a28-428a6e3ca5da",
+   "deviceId": "edward-iphone",
+   "t": "2026-11-08T02:38:33.810-06:00",
+   "origin": "shutter_button",
+   "sentAs": "manual_upload",
+   "note": false,
+   "fix": true
+  },
+  {
+   "id": "wk-0238",
+   "deviceId": "edward-iphone",
+   "t": "2026-11-08T02:38:50-06:00",
+   "origin": "camera_roll (Meta AI app export)",
+   "sentAs": "camera_roll",
+   "note": false,
+   "fix": false
+  },
+  {
+   "id": "88cca85b-3bad-4cdb-8187-f674e80cd658",
+   "deviceId": "edward-iphone",
+   "t": "2026-11-08T02:39:18.863-06:00",
+   "origin": "shutter_button",
+   "sentAs": "manual_upload",
+   "note": false,
+   "fix": true
+  },
+  {
+   "id": "0c691381-b171-49d7-80fb-87641258902d",
+   "deviceId": "edward-iphone",
+   "t": "2026-11-08T02:40:14.384-06:00",
+   "origin": "shutter_button",
+   "sentAs": "manual_upload",
+   "note": false,
+   "fix": true
+  },
+  {
+   "id": "wk-0240",
+   "deviceId": "edward-iphone",
+   "t": "2026-11-08T02:40:30-06:00",
+   "origin": "camera_roll (Meta AI app export)",
+   "sentAs": "camera_roll",
+   "note": false,
+   "fix": false
+  },
+  {
+   "id": "23d2e0d5-79e4-4ec2-a1e0-409b8939eaf1",
+   "deviceId": "edward-iphone",
+   "t": "2026-11-08T02:40:58.845-06:00",
+   "origin": "shutter_button",
+   "sentAs": "manual_upload",
+   "note": false,
+   "fix": true
+  },
+  {
+   "id": "wk-0241",
+   "deviceId": "edward-iphone",
+   "t": "2026-11-08T02:41:30-06:00",
+   "origin": "camera_roll (Meta AI app export)",
+   "sentAs": "camera_roll",
+   "note": false,
+   "fix": false
+  },
+  {
+   "id": "wk-0241b",
+   "deviceId": "edward-iphone",
+   "t": "2026-11-08T02:41:45-06:00",
+   "origin": "camera_roll (Meta AI app export)",
+   "sentAs": "camera_roll",
+   "note": false,
+   "fix": false
+  },
+  {
+   "id": "ec1271f4-4271-44ce-b310-c4c4c033f00c",
+   "deviceId": "edward-iphone",
+   "t": "2026-11-08T02:41:57.723-06:00",
+   "origin": "shutter_button",
+   "sentAs": "manual_upload",
+   "note": false,
+   "fix": true
+  },
+  {
+   "id": "wk-0242",
+   "deviceId": "edward-iphone",
+   "t": "2026-11-08T02:42:20-06:00",
+   "origin": "camera_roll (Meta AI app export)",
+   "sentAs": "camera_roll",
+   "note": false,
+   "fix": false
+  },
+  {
+   "id": "wk-0242b",
+   "deviceId": "edward-iphone",
+   "t": "2026-11-08T02:42:40-06:00",
+   "origin": "camera_roll (Meta AI app export)",
+   "sentAs": "camera_roll",
+   "note": false,
+   "fix": false
+  },
+  {
+   "id": "153c764f-fa8b-46b5-80b6-5330b35ea213",
+   "deviceId": "edward-iphone",
+   "t": "2026-11-08T02:43:00.430-06:00",
+   "origin": "shutter_button",
+   "sentAs": "manual_upload",
+   "note": false,
+   "fix": true
+  },
+  {
+   "id": "wk-0310",
+   "deviceId": "edward-iphone",
+   "t": "2026-11-08T03:10:00-06:00",
+   "origin": "camera_roll (Meta AI app export)",
+   "sentAs": "camera_roll",
+   "note": false,
+   "fix": false
+  },
+  {
+   "id": "wk-0340",
+   "deviceId": "edward-iphone",
+   "t": "2026-11-08T03:40:00-06:00",
+   "origin": "camera_roll (Meta AI app export)",
+   "sentAs": "camera_roll",
+   "note": false,
+   "fix": false
+  },
+  {
+   "id": "wk-0420",
+   "deviceId": "edward-iphone",
+   "t": "2026-11-08T04:20:00-06:00",
+   "origin": "camera_roll (Meta AI app export)",
+   "sentAs": "camera_roll",
+   "note": false,
+   "fix": false
+  },
+  {
+   "id": "wk-0450",
+   "deviceId": "edward-iphone",
+   "t": "2026-11-08T04:50:00-06:00",
+   "origin": "camera_roll (Meta AI app export)",
+   "sentAs": "camera_roll",
+   "note": false,
+   "fix": false
+  },
+  {
+   "id": "wk-0500",
+   "deviceId": "edward-iphone",
+   "t": "2026-11-08T05:00:00-06:00",
+   "origin": "camera_roll (Meta AI app export)",
+   "sentAs": "camera_roll",
+   "note": false,
+   "fix": false
+  },
+  {
+   "id": "cb53d729-f18f-43da-832b-afaad13838db",
+   "deviceId": "edward-iphone",
+   "t": "2026-11-08T10:40:52.166-06:00",
+   "origin": "shutter_button",
+   "sentAs": "manual_upload",
+   "note": false,
+   "fix": true
+  }
+ ]
+}
