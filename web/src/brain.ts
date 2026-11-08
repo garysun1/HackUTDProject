@@ -9,7 +9,10 @@ import { haversineM } from './site3d/geo';
 import { overlayActive, badgeOf } from './overlay';
 
 const ms = (micros: bigint) => Number(micros) / 1000;
-export type Fix = { tMs: number; lat: number; lon: number; floor?: number; acc: number };
+export type Fix = { tMs: number; lat: number; lon: number; floor?: number; acc: number; gap: boolean /* no continuous tracking since the previous fix */ };
+// The phone samples every 5 m or 30 s while a shift is live; two minutes without a fix means it lost
+// location (deep indoors, pocketed, app killed). That stretch is drawn dashed and the dot waits.
+export const GAP_MS = 120_000;
 export type Shift = { key: string; deviceId: string; shiftId: string; startMs: number; endMs: number | null; lastMs: number; pts: TrackPoint[]; smooth: Fix[] };
 export type HandoffCard = { atMs: number; from: Shift; to: Shift | null; carried: { a: Alert; done: boolean }[]; said: string[]; text?: string };
 export type Snapshot = { shifts: Shift[]; active: Shift[]; latestIdle: Shift | null; open: Alert[]; resolved: Alert[]; raised: Alert[]; workOrders: Issue[]; events: Ev[]; handoff: HandoffCard | null };
@@ -54,7 +57,7 @@ export function filterTrack(points: TrackPoint[]): Fix[] {
     const add = (q: TrackPoint) => { const w = 1 / Math.max(3, q.accuracyM) ** 2; sw += w; la += w * q.lat; lo += w * q.lon; };
     for (let j = i; j >= 0 && t - ms(kept[j].tMicros) <= W; j--) add(kept[j]);
     for (let j = i + 1; j < kept.length && ms(kept[j].tMicros) - t <= W; j++) add(kept[j]);
-    return { tMs: t, lat: la / sw, lon: lo / sw, floor: p.floor, acc: p.accuracyM };
+    return { tMs: t, lat: la / sw, lon: lo / sw, floor: p.floor, acc: p.accuracyM, gap: i > 0 && t - ms(kept[i - 1].tMicros) > GAP_MS };
   });
 }
 /** The shifts in the console's wearer and time-window filters. */
@@ -126,7 +129,7 @@ export function positionAt(s: Shift, clock: number): { lat: number; lon: number;
   if (i < 0) return null;
   const a = p[i], b = p[i + 1];
   // between two fixes the dot moves at constant speed; across a gap of over two minutes it waits
-  if (!b || b.tMs - a.tMs > 120_000) return { lat: a.lat, lon: a.lon, floor: a.floor, acc: a.acc, i };
+  if (!b || b.gap) return { lat: a.lat, lon: a.lon, floor: a.floor, acc: a.acc, i };
   const f = (clock - a.tMs) / (b.tMs - a.tMs);
   return { lat: a.lat + (b.lat - a.lat) * f, lon: a.lon + (b.lon - a.lon) * f, floor: f < 0.5 ? a.floor : b.floor, acc: a.acc + (b.acc - a.acc) * f, i };
 }

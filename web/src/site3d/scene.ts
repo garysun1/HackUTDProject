@@ -1,12 +1,12 @@
 // The 3D site: imagery ground, campus buildings, ECSW as translucent floors over its OSM footprint
-// with the mapped ground-floor rooms, wearers as lit dots with a fading trail and a heat layer,
+// with the mapped ground-floor rooms, wearers as lit dots with a solid trail (dashed across gaps in tracking) and a heat layer,
 // photo pins. Top-down is the same scene through an orthographic camera.
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
-import { Line2 } from 'three/addons/lines/Line2.js';
+import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
+import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
-import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 import { Proj, tileXY, tileBounds, centroid } from './geo';
 const cssVar = (n: string) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 
@@ -37,7 +37,7 @@ export type Detail =
   | { kind: 'pond'; pts: LonLat[] };
 export type IssueSpec = { id: string; x: number; y: number; z: number; open: boolean; title: string; lift: number /* stacking order when several issues share a spot */ };
 export type PinSpec = { id: string; x: number; y: number; z: number; color: string; time: string; alert: boolean; thumb?: string; selected: boolean; title: string; badge?: string /* a line pinned above the photo, e.g. the judging beat */ };
-export type WearerSpec = { color: string; name: string; sub: string; pos: [number, number, number] | null; trail: number[] /* flat xyz */; acc?: number /* metres of GPS uncertainty, drawn as a ring */ };
+export type WearerSpec = { color: string; name: string; sub: string; pos: [number, number, number] | null; trail: number[] /* flat xyz */; gaps?: boolean[] /* per segment: true = no continuous tracking between these two points, drawn dashed */; acc?: number /* metres of GPS uncertainty, drawn as a ring */ };
 
 const IMAGERY = (z: number, x: number, y: number) => `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${z}/${y}/${x}`;
 const rot = <T extends THREE.Object3D>(o: T): T => { o.rotation.x = -Math.PI / 2; return o; };
@@ -67,7 +67,7 @@ export class HeatLayer {
 }
 function hexA(hex: string, a: number) { const c = new THREE.Color(hex); return `rgba(${Math.round(c.r * 255)},${Math.round(c.g * 255)},${Math.round(c.b * 255)},${a})`; }
 
-type WearerVis = { head: THREE.Mesh; ring: THREE.Mesh; accRing: THREE.Mesh; beam: THREE.Mesh; light: THREE.PointLight; line: Line2; geom: LineGeometry; label: CSS2DObject; labelEl: HTMLElement; color: THREE.Color; n: number; born: number };
+type WearerVis = { head: THREE.Mesh; ring: THREE.Mesh; accRing: THREE.Mesh; beam: THREE.Mesh; light: THREE.PointLight; walk: LineSegments2; jump: LineSegments2; label: CSS2DObject; labelEl: HTMLElement; color: THREE.Color; born: number };
 type PinVis = { obj: CSS2DObject; el: HTMLElement; pole: THREE.Mesh; sig: string };
 type IssueVis = { obj: CSS2DObject; el: HTMLElement; pole: THREE.Mesh; ring: THREE.Mesh; open: boolean | null; born: number; solvedAt: number };
 
@@ -145,7 +145,7 @@ export class SiteScene {
   }
   buildSite(data: SiteData) {
     this.disposeGroup(this.site); this.disposeGroup(this.ground); this.materials = this.materials.filter(e => e.role === 'pole'); this.roomLabels = []; this.bldLabels = []; this.upper = [];
-    for (const w of this.wearers.values()) { this.scene.remove(w.head, w.ring, w.beam, w.light, w.line, w.label); } this.wearers.clear();
+    for (const w of this.wearers.values()) { this.scene.remove(w.head, w.ring, w.accRing, w.beam, w.light, w.walk, w.jump, w.label); w.walk.geometry.dispose(); w.jump.geometry.dispose(); } this.wearers.clear();
     for (const p of this.pins.values()) { this.scene.remove(p.obj, p.pole); } this.pins.clear();
     for (const v of this.issues.values()) { this.scene.remove(v.obj, v.pole, v.ring); v.el.remove(); } this.issues.clear();
     if (this.heat) { this.scene.remove(this.heat.mesh); this.heat.tex.dispose(); this.heat.mesh.geometry.dispose(); this.heat = null; }
@@ -318,13 +318,16 @@ export class SiteScene {
       const accRing = rot(new THREE.Mesh(new THREE.RingGeometry(0.97, 1, 72), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.35, side: THREE.DoubleSide, depthWrite: false }))); accRing.renderOrder = 3;
       const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 1, 12, 1, true), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.2, depthWrite: false, side: THREE.DoubleSide })); beam.renderOrder = 4;
       const light = new THREE.PointLight(color, 60, 40, 2);
-      const geom = new LineGeometry(); const lm = new LineMaterial({ vertexColors: true, linewidth: 4, worldUnits: false, transparent: true, opacity: 0.95, depthTest: true }); lm.resolution.set(this.host.clientWidth, this.host.clientHeight); this.lineMats.push(lm);
-      geom.setPositions([0, 0, 0, 0, 0, 0]); geom.setColors([0, 0, 0, 0, 0, 0]);
-      const line = new Line2(geom, lm); line.renderOrder = 6; line.frustumCulled = false;
+      // continuous walking: one solid line in the wearer's color; a stretch with no tracking: dashed
+      const solid = new LineMaterial({ color, linewidth: 4, worldUnits: false, transparent: true, opacity: 0.95, depthTest: true });
+      const dashed = new LineMaterial({ color, linewidth: 2.5, worldUnits: false, transparent: true, opacity: 0.85, depthTest: true, dashed: true, dashSize: 2.2, gapSize: 1.8, dashScale: 1 });
+      for (const m of [solid, dashed]) { m.resolution.set(this.host.clientWidth, this.host.clientHeight); this.lineMats.push(m); }
+      const walk = new LineSegments2(new LineSegmentsGeometry(), solid); const jump = new LineSegments2(new LineSegmentsGeometry(), dashed);
+      for (const l of [walk, jump]) { l.renderOrder = 6; l.frustumCulled = false; l.visible = false; }
       const labelEl = document.createElement('div'); labelEl.className = 's3-wlbl'; labelEl.style.setProperty('--c', spec.color); labelEl.innerHTML = `<i></i><span></span><small></small>`;
       const label = new CSS2DObject(labelEl);
-      w = { head, ring, accRing, beam, light, line, geom, label, labelEl, color, n: 0, born: performance.now() };
-      this.scene.add(head, ring, accRing, beam, light, line, label); this.wearers.set(id, w);
+      w = { head, ring, accRing, beam, light, walk, jump, label, labelEl, color, born: performance.now() };
+      this.scene.add(head, ring, accRing, beam, light, walk, jump, label); this.wearers.set(id, w);
     }
     const on = !!spec.pos;
     for (const o of [w.head, w.ring, w.accRing, w.beam, w.light, w.label]) o.visible = on;
@@ -335,16 +338,16 @@ export class SiteScene {
       (w.labelEl.children[1] as HTMLElement).textContent = spec.name; (w.labelEl.children[2] as HTMLElement).textContent = spec.sub;
       if (this.follow && (this.followId === null || this.followId === id)) this.followPos = new THREE.Vector3(x, y, z);
     }
-    // trail with a fade toward the head
-    const n = spec.trail.length / 3; w.line.visible = n >= 2;
-    if (n >= 2) {
-      const bg = new THREE.Color(cssVar('--scene-bg') || '#e9ebe7'); const cols: number[] = []; const c = new THREE.Color();
-      for (let i = 0; i < n; i++) { const t = n === 1 ? 1 : i / (n - 1); c.copy(bg).lerp(w.color, 0.22 + 0.78 * Math.pow(t, 0.6)); cols.push(c.r, c.g, c.b); }
-      if (n !== w.n) { w.geom.dispose(); w.geom = new LineGeometry(); w.line.geometry = w.geom; w.n = n; }
-      w.geom.setPositions(spec.trail); w.geom.setColors(cols);
-    }
+    // trail: each segment goes to the solid walk or the dashed jump set
+    const t = spec.trail; const n = t.length / 3; const walkPts: number[] = [], jumpPts: number[] = [];
+    for (let i = 0; i + 1 < n; i++) (spec.gaps?.[i] ? jumpPts : walkPts).push(t[i * 3], t[i * 3 + 1], t[i * 3 + 2], t[i * 3 + 3], t[i * 3 + 4], t[i * 3 + 5]);
+    const fill = (l: LineSegments2, pts: number[], dash: boolean) => {
+      l.visible = pts.length >= 6; if (!l.visible) return;
+      l.geometry.dispose(); const g = new LineSegmentsGeometry(); g.setPositions(pts); l.geometry = g; if (dash) l.computeLineDistances();
+    };
+    fill(w.walk, walkPts, false); fill(w.jump, jumpPts, true);
   }
-  hideWearer(id: string) { const w = this.wearers.get(id); if (!w) return; for (const o of [w.head, w.ring, w.accRing, w.beam, w.light, w.label, w.line]) o.visible = false; if (id === this.followId) this.followPos = null; }
+  hideWearer(id: string) { const w = this.wearers.get(id); if (!w) return; for (const o of [w.head, w.ring, w.accRing, w.beam, w.light, w.label, w.walk, w.jump]) o.visible = false; if (id === this.followId) this.followPos = null; }
 
   // ---------- pins ----------
   setPins(list: PinSpec[]) {

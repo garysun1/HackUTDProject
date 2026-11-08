@@ -1,5 +1,5 @@
 // The map (#21, #26): the 3D site. Opaque neighbours, the main building translucent with its
-// floors, the mapped ground floor, imagery underneath; each wearer a lit dot with a fading trail
+// floors, the mapped ground floor, imagery underneath; each wearer a lit dot with a solid trail, dashed across gaps in tracking
 // and a heat layer where they lingered; photo pins where photos were taken, red while an alert is
 // open. Live, or driven by the replay clock. The shift-memory panel sits beside it. Reads the
 // console's store (subscriptions, capture time); nothing here is fetched separately.
@@ -149,21 +149,23 @@ function frameBody() {
     for (const s of [...list].reverse()) { // when two shifts of one device overlap (a live one over a reconstructed one), the later-started wins
       const pos = positionAt(s, clock); if (!pos) continue;
       const [x, z] = sc.proj.toXZ(pos.lon, pos.lat); const y = lvl(pos.floor) * sc.floorH + 1.1;
-      const trail: number[] = []; for (let i = 0; i <= pos.i; i++) { const q = s.smooth[i]; const [tx, tz] = sc.proj.toXZ(q.lon, q.lat); trail.push(tx, lvl(q.floor) * sc.floorH + 0.6, tz); } trail.push(x, y - 0.5, z);
+      const trail: number[] = []; const gaps: boolean[] = [];
+      for (let i = 0; i <= pos.i; i++) { const q = s.smooth[i]; const [tx, tz] = sc.proj.toXZ(q.lon, q.lat); if (i > 0) gaps.push(q.gap); trail.push(tx, lvl(q.floor) * sc.floorH + 0.6, tz); }
+      trail.push(x, y - 0.5, z); gaps.push(false); // the head only moves within a continuous run
       const where = locate(pos.lat, pos.lon, pos.floor); const last = s.smooth[pos.i]; const stale = clock - last.tMs > 90_000;
       const floorTxt = pos.floor !== undefined && pos.floor > 0 ? ` · L${pos.floor}` : '';
-      sc.setWearer(dev, { color: wearerColor(dev), name: wearerName(dev), sub: (where ? where : stale ? `last fix ${fmtTime(BigInt(Math.round(last.tMs)) * 1000n)}` : 'on shift') + floorTxt, pos: [x, y, z], trail, acc: pos.acc });
+      sc.setWearer(dev, { color: wearerColor(dev), name: wearerName(dev), sub: (where ? where : stale ? `last fix ${fmtTime(BigInt(Math.round(last.tMs)) * 1000n)}` : 'on shift') + floorTxt, pos: [x, y, z], trail, gaps, acc: pos.acc });
       drawn = true; break;
     }
     if (!drawn) {
       // a finished shift keeps its whole trail and its dot at the last point, with when it ended
       const s = [...list].reverse().find(s => s.startMs <= clock && s.smooth.length >= 1);
       if (s) {
-        const trail: number[] = []; let last = s.smooth[0];
-        for (const q of s.smooth) { if (q.tMs > clock) break; last = q; const [tx, tz] = sc.proj.toXZ(q.lon, q.lat); trail.push(tx, lvl(q.floor) * sc.floorH + 0.6, tz); }
+        const trail: number[] = []; const gaps: boolean[] = []; let last = s.smooth[0];
+        for (const q of s.smooth) { if (q.tMs > clock) break; last = q; const [tx, tz] = sc.proj.toXZ(q.lon, q.lat); if (trail.length) gaps.push(q.gap); trail.push(tx, lvl(q.floor) * sc.floorH + 0.6, tz); }
         const [x, z] = sc.proj.toXZ(last.lon, last.lat); const y = lvl(last.floor) * sc.floorH + 1.1;
         const where = locate(last.lat, last.lon, last.floor);
-        sc.setWearer(dev, { color: wearerColor(dev), name: wearerName(dev), sub: `${where ? where + ' · ' : ''}ended ${fmtTime(BigInt(Math.round(shiftEnd(s))) * 1000n)}`, pos: [x, y, z], trail });
+        sc.setWearer(dev, { color: wearerColor(dev), name: wearerName(dev), sub: `${where ? where + ' · ' : ''}ended ${fmtTime(BigInt(Math.round(shiftEnd(s))) * 1000n)}`, pos: [x, y, z], trail, gaps });
       } else sc.hideWearer(dev);
     }
   }
