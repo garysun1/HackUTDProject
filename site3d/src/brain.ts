@@ -69,7 +69,7 @@ export function sessionShifts(): Shift[] {
   const all = shifts();
   if (ALL_SHIFTS) return all;
   if (SHIFT_PARAM) return all.filter(s => s.shiftId.startsWith(SHIFT_PARAM));
-  if (DB_SHIFT) { const own = all.filter(s => s.shiftId.startsWith(DB_SHIFT)); if (own.length) { const end = Math.max(...own.map(s => s.endMs ?? s.lastMs)); return [...own, ...all.filter(s => !own.includes(s) && s.startMs >= end - 15 * 60_000)]; } }
+  if (DB_SHIFT) { const own = all.filter(s => s.shiftId.startsWith(DB_SHIFT)); if (own.length) { const end = Math.max(...own.map(s => s.endMs ?? s.lastMs)); return [...own, ...all.filter(s => !own.includes(s) && s.startMs >= end - 15 * 60_000 && !s.shiftId.startsWith('604144c2') /* the phone left running at the desk for hours */)]; } }
   const real = all.filter(s => s.lastMs - s.startMs >= 120_000 && s.smooth.length >= 5);
   const withFloor = real.filter(s => s.pts.some(p => p.floor !== undefined));
   const pool = withFloor.length ? withFloor : real.length ? real : all;
