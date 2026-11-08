@@ -4,7 +4,10 @@
 import { state, type Alert, type Ev, type TrackPoint, wearerColor, wearerName, fmtTime, loadPhoto, alertsFor, placeOf, changesTo } from './store';
 import { haversineM } from './geo';
 
-export type Shift = { key: string; deviceId: string; shiftId: string; startMs: number; endMs: number | null; lastMs: number; pts: TrackPoint[]; smooth: { tMs: number; lat: number; lon: number; floor?: number }[] };
+export type Fix = { tMs: number; lat: number; lon: number; floor?: number; acc: number };
+export type Shift = { key: string; deviceId: string; shiftId: string; startMs: number; endMs: number | null; lastMs: number; pts: TrackPoint[]; smooth: Fix[] };
+const params = new URLSearchParams(location.search);
+const SHIFT_PARAM = params.get('shift'); const ALL_SHIFTS = params.get('all') === '1';
 export type Snapshot = {
   shifts: Shift[]; active: Shift[]; latestIdle: Shift | null;
   open: Alert[]; resolvedRecently: Alert[]; events: Ev[]; handoff: HandoffCard | null;
@@ -23,20 +26,51 @@ export function shifts(): Shift[] {
   for (const [key, pts] of by) {
     const [deviceId, shiftId] = key.split('|'); pts.sort((a, b) => a.tMs - b.tMs);
     const locs = [...state.locations.values()].filter(l => l.deviceId === deviceId && l.shiftId === shiftId);
-    const points = pts.filter(p => p.kind === 'point' && p.accuracyM <= 40);
+    const points = pts.filter(p => p.kind === 'point');
     const times = [...points.map(p => p.tMs), ...locs.map(l => l.tMs)]; if (!times.length) continue;
     const end = pts.find(p => p.kind === 'shift_end');
-    const smooth = points.map((p, i) => { const w = points.slice(Math.max(0, i - 2), Math.min(points.length, i + 3)); return { tMs: p.tMs, lat: w.reduce((s, q) => s + q.lat, 0) / w.length, lon: w.reduce((s, q) => s + q.lon, 0) / w.length, floor: p.floor }; });
-    out.push({ key, deviceId, shiftId, startMs: Math.min(...times), endMs: end ? end.tMs : null, lastMs: Math.max(...times), pts: points, smooth });
+    out.push({ key, deviceId, shiftId, startMs: Math.min(...times), endMs: end ? end.tMs : null, lastMs: Math.max(...times), pts: points, smooth: filterTrack(points) });
   }
   out.sort((a, b) => a.startMs - b.startMs);
   shiftCache = { v: state.version, db: state.db, shifts: out }; return out;
 }
 /** A photo belongs to the session when a tracked shift of its wearer covers it (or its fix names the shift). */
-export function inSession(e: Ev, all: Shift[] = shifts()): boolean {
+export function inSession(e: Ev, all: Shift[] = sessionShifts()): boolean {
   const loc = state.locations.get(e.eventId);
   if (loc && all.some(s => s.shiftId === loc.shiftId && s.deviceId === loc.deviceId)) return true;
   return all.some(s => s.deviceId === e.deviceId && e.tMs >= s.startMs - 120_000 && e.tMs <= shiftEnd(s) + 120_000);
+}
+// The phone's fixes, made honest rather than pretty: a fix that implies a jump no walker makes
+// (over 4 m/s and farther than its own accuracy) is dropped as GPS noise; the rest are averaged
+// over ±6 s with each fix weighted by 1/accuracy², so a 4 m fix outweighs a 30 m one beside it.
+// Timestamps are the phone's; nothing is resampled.
+export function filterTrack(points: TrackPoint[]): Fix[] {
+  const kept: TrackPoint[] = [];
+  for (const p of points) {
+    const prev = kept[kept.length - 1];
+    if (prev) { const dt = (p.tMs - prev.tMs) / 1000; const d = haversineM(prev.lat, prev.lon, p.lat, p.lon); if (dt > 0 && d / dt > 4 && d > Math.max(p.accuracyM, prev.accuracyM, 10)) continue; }
+    kept.push(p);
+  }
+  const W = 6000;
+  return kept.map((p, i) => {
+    let sw = 0, la = 0, lo = 0;
+    const add = (q: TrackPoint) => { const w = 1 / Math.max(3, q.accuracyM) ** 2; sw += w; la += w * q.lat; lo += w * q.lon; };
+    for (let j = i; j >= 0 && p.tMs - kept[j].tMs <= W; j--) add(kept[j]);
+    for (let j = i + 1; j < kept.length && kept[j].tMs - p.tMs <= W; j++) add(kept[j]);
+    return { tMs: p.tMs, lat: la / sw, lon: lo / sw, floor: p.floor, acc: p.accuracyM };
+  });
+}
+/** The shifts this view is about: `?shift=<id prefix>` or `?all=1`, else the latest real shift (two
+ *  minutes or more of track), preferring one whose fixes carry a floor. Older shifts stay in the
+ *  database and out of the way. */
+export function sessionShifts(): Shift[] {
+  const all = shifts();
+  if (ALL_SHIFTS) return all;
+  if (SHIFT_PARAM) return all.filter(s => s.shiftId.startsWith(SHIFT_PARAM));
+  const real = all.filter(s => s.lastMs - s.startMs >= 120_000 && s.smooth.length >= 5);
+  const withFloor = real.filter(s => s.pts.some(p => p.floor !== undefined));
+  const pool = withFloor.length ? withFloor : real.length ? real : all;
+  return pool.length ? [pool[pool.length - 1]] : [];
 }
 export function shiftLive(s: Shift, clock: number) { return clock >= s.startMs && (s.endMs !== null ? clock <= s.endMs + 60_000 : clock <= s.lastMs + TEN_MIN); }
 export function shiftEnd(s: Shift) { return s.endMs ?? s.lastMs; }
@@ -45,15 +79,16 @@ export function openAt(a: Alert, clock: number) { return a.tMs <= clock && resol
 
 // where a wearer is at `clock`, interpolated along the smoothed track; null before the first fix or
 // once the shift is over
-export function positionAt(s: Shift, clock: number): { lat: number; lon: number; floor?: number; i: number } | null {
+export function positionAt(s: Shift, clock: number): { lat: number; lon: number; floor?: number; acc: number; i: number } | null {
   const p = s.smooth; if (!p.length || clock < p[0].tMs) return null;
   if (!shiftLive(s, clock)) return null;
   let i = p.length - 1; for (let k = 0; k < p.length; k++) if (p[k].tMs > clock) { i = k - 1; break; }
   if (i < 0) return null;
   const a = p[i], b = p[i + 1];
-  if (!b || b.tMs - a.tMs > TEN_MIN) return { lat: a.lat, lon: a.lon, floor: a.floor, i };
-  const f = (clock - a.tMs) / (b.tMs - a.tMs); const e = f * f * (3 - 2 * f);
-  return { lat: a.lat + (b.lat - a.lat) * e, lon: a.lon + (b.lon - a.lon) * e, floor: a.floor, i };
+  // between two fixes the dot moves at constant speed; across a gap of over two minutes it waits
+  if (!b || b.tMs - a.tMs > 120_000) return { lat: a.lat, lon: a.lon, floor: a.floor, acc: a.acc, i };
+  const f = (clock - a.tMs) / (b.tMs - a.tMs);
+  return { lat: a.lat + (b.lat - a.lat) * f, lon: a.lon + (b.lon - a.lon) * f, floor: f < 0.5 ? a.floor : b.floor, acc: a.acc + (b.acc - a.acc) * f, i };
 }
 export function walkedM(s: Shift, clock: number): number {
   let d = 0; const p = s.smooth;
@@ -61,7 +96,7 @@ export function walkedM(s: Shift, clock: number): number {
   return d;
 }
 export function snapshot(clock: number): Snapshot {
-  const all = shifts();
+  const all = sessionShifts();
   const active = all.filter(s => shiftLive(s, clock));
   const past = all.filter(s => shiftEnd(s) < clock);
   const latestIdle = active.length ? null : (past.length ? past[past.length - 1] : null);

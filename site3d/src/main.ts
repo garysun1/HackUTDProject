@@ -1,7 +1,7 @@
 import './styles.css';
 import { state, start, onChange, wearerColor, wearerName, fmtTime, fmtTimeS, alertsFor, loadPhoto, placeOf } from './store';
 import { SiteScene, type PinSpec, type SiteData } from './scene';
-import { shifts, positionAt, shiftEnd, renderBrain, inSession, type Shift } from './brain';
+import { sessionShifts, positionAt, shiftEnd, renderBrain, inSession, type Shift } from './brain';
 import { pointInRing, centroid, haversineM } from './geo';
 import ecsw from './data/ecsw.json';
 
@@ -48,9 +48,9 @@ const replay = { mode: 'live' as 'live' | 'replay', playing: false, speed: 60, c
 // The replay covers the tracked shifts: from just before the first fix to now. Photos outside any
 // shift (test uploads from other days) do not stretch it and are not drawn.
 function range(): [number, number] {
-  const all = shifts(); const now = Date.now();
+  const all = sessionShifts(); const now = Date.now();
   const ts = all.flatMap(s => [s.startMs, s.lastMs]);
-  const t0 = ts.length ? Math.min(...ts) - 30_000 : now - 3600_000; return [t0, Math.max(now, ...ts)];
+  const t0 = ts.length ? Math.min(...ts) - 5_000 : now - 3600_000; return [t0, Math.max(now, ...ts)];
 }
 function setMode(m: 'live' | 'replay') {
   replay.mode = m; $('#live').classList.toggle('on', m === 'live'); const md = $('#mode'); md.textContent = m === 'live' ? 'live' : 'replay'; md.classList.toggle('replay', m === 'replay');
@@ -111,7 +111,7 @@ onChange(() => {
 function drawMarks() {
   const [t0, t1] = range(); const f = (t: number) => `${((t - t0) / (t1 - t0)) * 100}%`;
   const evs = [...state.events.values()].filter(e => inSession(e)).map(e => `<i style="left:${f(e.tMs)}" class="${alertsFor(e.eventId).length ? 'a' : ''}"></i>`);
-  const hs = shifts().filter(s => s.endMs !== null || shifts().some(o => o.startMs > shiftEnd(s))).map(s => `<i class="h" style="left:${f(shiftEnd(s))}"></i>`);
+  const all = sessionShifts(); const hs = all.filter(s => s.endMs !== null || all.some(o => o.startMs > shiftEnd(s))).map(s => `<i class="h" style="left:${f(shiftEnd(s))}"></i>`);
   $('#marks').innerHTML = evs.join('') + hs.join('');
 }
 
@@ -126,17 +126,19 @@ function frame(now: number) {
   $('#clock').textContent = (replay.mode === 'live' ? '' : `${replay.speed}× · `) + fmtTimeS(clock);
   think.hidden = now > thinkUntil;
   if (!site) { ensureSite(); if (!site) { scene.frame(); return; } }
-  const all = shifts();
+  const all = sessionShifts();
+  const lvl = (f: number | undefined) => Math.max(0, Math.min(f ?? 0, scene.levels - 1)); // the phone may count past the roof
   // wearers: one dot per device, driven by whichever of its shifts is live at the clock
   const byDevice = new Map<string, Shift[]>(); for (const s of all) (byDevice.get(s.deviceId) ?? byDevice.set(s.deviceId, []).get(s.deviceId)!).push(s);
   for (const [dev, list] of byDevice) {
     let drawn = false;
     for (const s of list) {
       const pos = positionAt(s, clock); if (!pos) continue;
-      const [x, z] = scene.proj.toXZ(pos.lon, pos.lat); const y = (pos.floor ?? 0) * scene.floorH + 1.1;
-      const trail: number[] = []; for (let i = 0; i <= pos.i; i++) { const q = s.smooth[i]; const [tx, tz] = scene.proj.toXZ(q.lon, q.lat); trail.push(tx, (q.floor ?? 0) * scene.floorH + 0.6, tz); } trail.push(x, y - 0.5, z);
+      const [x, z] = scene.proj.toXZ(pos.lon, pos.lat); const y = lvl(pos.floor) * scene.floorH + 1.1;
+      const trail: number[] = []; for (let i = 0; i <= pos.i; i++) { const q = s.smooth[i]; const [tx, tz] = scene.proj.toXZ(q.lon, q.lat); trail.push(tx, lvl(q.floor) * scene.floorH + 0.6, tz); } trail.push(x, y - 0.5, z);
       const where = locate(pos.lat, pos.lon); const last = s.smooth[pos.i]; const stale = clock - last.tMs > 90_000;
-      scene.setWearer(dev, { color: wearerColor(dev), name: wearerName(dev), sub: where ? where : stale ? `last fix ${fmtTime(last.tMs)}` : 'on shift', pos: [x, y, z], trail });
+      const floorTxt = pos.floor !== undefined && pos.floor > 0 ? ` · L${pos.floor}` : '';
+      scene.setWearer(dev, { color: wearerColor(dev), name: wearerName(dev), sub: (where ? where : stale ? `last fix ${fmtTime(last.tMs)}` : 'on shift') + floorTxt, pos: [x, y, z], trail, acc: pos.acc });
       drawn = true; break;
     }
     if (!drawn) {
@@ -144,8 +146,8 @@ function frame(now: number) {
       const s = [...list].reverse().find(s => s.startMs <= clock && s.smooth.length >= 1);
       if (s) {
         const trail: number[] = []; let last = s.smooth[0];
-        for (const q of s.smooth) { if (q.tMs > clock) break; last = q; const [tx, tz] = scene.proj.toXZ(q.lon, q.lat); trail.push(tx, (q.floor ?? 0) * scene.floorH + 0.6, tz); }
-        const [x, z] = scene.proj.toXZ(last.lon, last.lat); const y = (last.floor ?? 0) * scene.floorH + 1.1;
+        for (const q of s.smooth) { if (q.tMs > clock) break; last = q; const [tx, tz] = scene.proj.toXZ(q.lon, q.lat); trail.push(tx, lvl(q.floor) * scene.floorH + 0.6, tz); }
+        const [x, z] = scene.proj.toXZ(last.lon, last.lat); const y = lvl(last.floor) * scene.floorH + 1.1;
         const where = locate(last.lat, last.lon);
         scene.setWearer(dev, { color: wearerColor(dev), name: wearerName(dev), sub: `${where ? where + ' · ' : ''}ended ${fmtTime(shiftEnd(s))}`, pos: [x, y, z], trail });
       } else scene.hideWearer(dev);
@@ -157,7 +159,7 @@ function frame(now: number) {
   for (const e of state.events.values()) {
     if (e.tMs > clock || !inSession(e, all)) continue; const l = state.locations.get(e.eventId); if (!l) continue;
     const [x, z] = scene.proj.toXZ(l.lon, l.lat); const url = state.photos.get(e.eventId); if (!url) loadPhoto(e.eventId);
-    pins.push({ id: e.eventId, x, y: (l.floor ?? 0) * scene.floorH, z, color: wearerColor(e.deviceId), time: fmtTime(e.tMs), alert: alertsFor(e.eventId).some(a => a.tMs <= clock && (!a.acked || (a.ackedMs ?? a.tMs) > clock)), thumb: url, selected: selected === e.eventId, title: e.summary });
+    pins.push({ id: e.eventId, x, y: lvl(l.floor) * scene.floorH, z, color: wearerColor(e.deviceId), time: fmtTime(e.tMs), alert: alertsFor(e.eventId).some(a => a.tMs <= clock && (!a.acked || (a.ackedMs ?? a.tMs) > clock)), thumb: url, selected: selected === e.eventId, title: e.summary });
   }
   scene.setPins(pins);
   if (now - brainAt > 250) { brainAt = now; renderBrain($('#brain-body'), { clock, selected, locate, onSelect: select, onJump: ms => { if (replay.mode === 'live') setMode('replay'); setClock(ms + 1000); } }); }

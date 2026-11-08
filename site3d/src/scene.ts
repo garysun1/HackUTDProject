@@ -22,7 +22,7 @@ export type SiteData = {
   tileRadius?: number;
 };
 export type PinSpec = { id: string; x: number; y: number; z: number; color: string; time: string; alert: boolean; thumb?: string; selected: boolean; title: string };
-export type WearerSpec = { color: string; name: string; sub: string; pos: [number, number, number] | null; trail: number[] /* flat xyz */ };
+export type WearerSpec = { color: string; name: string; sub: string; pos: [number, number, number] | null; trail: number[] /* flat xyz */; acc?: number /* metres of GPS uncertainty, drawn as a ring */ };
 
 const IMAGERY = (z: number, x: number, y: number) => `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${z}/${y}/${x}`;
 const rot = <T extends THREE.Object3D>(o: T): T => { o.rotation.x = -Math.PI / 2; return o; };
@@ -52,14 +52,14 @@ export class HeatLayer {
 }
 function hexA(hex: string, a: number) { const c = new THREE.Color(hex); return `rgba(${Math.round(c.r * 255)},${Math.round(c.g * 255)},${Math.round(c.b * 255)},${a})`; }
 
-type WearerVis = { head: THREE.Mesh; ring: THREE.Mesh; beam: THREE.Mesh; light: THREE.PointLight; line: Line2; geom: LineGeometry; label: CSS2DObject; labelEl: HTMLElement; color: THREE.Color; n: number; born: number };
+type WearerVis = { head: THREE.Mesh; ring: THREE.Mesh; accRing: THREE.Mesh; beam: THREE.Mesh; light: THREE.PointLight; line: Line2; geom: LineGeometry; label: CSS2DObject; labelEl: HTMLElement; color: THREE.Color; n: number; born: number };
 type PinVis = { obj: CSS2DObject; el: HTMLElement; pole: THREE.Mesh; sig: string };
 
 export class SiteScene {
   renderer: THREE.WebGLRenderer; labels: CSS2DRenderer; scene = new THREE.Scene();
   persp: THREE.PerspectiveCamera; ortho: THREE.OrthographicCamera; ctrl3d: OrbitControls; ctrl2d: OrbitControls;
   mode: '3d' | '2d' = '3d'; follow = false; followPos: THREE.Vector3 | null = null;
-  proj!: Proj; floorH = 3.6; beamH = 24; site = new THREE.Group(); ground = new THREE.Group(); heat: HeatLayer | null = null;
+  proj!: Proj; floorH = 3.6; beamH = 24; levels = 1; site = new THREE.Group(); ground = new THREE.Group(); heat: HeatLayer | null = null;
   wearers = new Map<string, WearerVis>(); pins = new Map<string, PinVis>(); roomLabels: CSS2DObject[] = []; bldLabels: CSS2DObject[] = []; upper: THREE.Object3D[] = [];
   onPinClick: (id: string) => void = () => {}; onPinHover: (id: string | null, x: number, y: number) => void = () => {};
   private clock = new THREE.Clock(); private materials: { m: THREE.Material; role: string }[] = []; private lineMats: LineMaterial[] = [];
@@ -146,7 +146,7 @@ export class SiteScene {
     }
     // main building
     if (data.main) {
-      const M = data.main; this.floorH = M.height / M.levels; this.beamH = M.height + 3;
+      const M = data.main; this.floorH = M.height / M.levels; this.beamH = M.height + 3; this.levels = M.levels;
       const shape = this.shape(M.outer, M.inner)!;
       const glass = this.mat(new THREE.MeshPhysicalMaterial({ transparent: true, opacity: 0.13, roughness: 0.15, metalness: 0, side: THREE.DoubleSide, depthWrite: false }), 'glass');
       const walls = new THREE.ExtrudeGeometry(shape, { depth: M.height, bevelEnabled: false });
@@ -180,7 +180,7 @@ export class SiteScene {
       this.heat = new HeatLayer(minX, maxX, minZ, maxZ, cssVar('--heat') || '#eb6834'); this.scene.add(this.heat.mesh);
       this.ctrl3d.target.set(x, 4, z); this.persp.position.set(x + 150, 125, z + 185); this.ctrl2d.target.set(x, 0, z); this.ortho.position.set(x, 600, z + 0.001);
     } else {
-      this.floorH = 3.6; this.beamH = 9;
+      this.floorH = 3.6; this.beamH = 9; this.levels = 1;
       this.heat = new HeatLayer(-160, 160, -160, 160, cssVar('--heat') || '#eb6834'); this.scene.add(this.heat.mesh);
     }
     this.applyTheme();
@@ -219,6 +219,8 @@ export class SiteScene {
       const color = new THREE.Color(spec.color);
       const head = new THREE.Mesh(new THREE.SphereGeometry(1.05, 28, 18), new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.9, roughness: 0.4 })); head.castShadow = true;
       const ring = rot(new THREE.Mesh(new THREE.RingGeometry(1.2, 2.2, 48), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.7, side: THREE.DoubleSide, depthWrite: false }))); ring.renderOrder = 3;
+      // GPS uncertainty: a thin ring whose radius is the fix's accuracy, so a 30 m fix reads as 30 m
+      const accRing = rot(new THREE.Mesh(new THREE.RingGeometry(0.97, 1, 72), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.35, side: THREE.DoubleSide, depthWrite: false }))); accRing.renderOrder = 3;
       const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 1, 12, 1, true), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.2, depthWrite: false, side: THREE.DoubleSide })); beam.renderOrder = 4;
       const light = new THREE.PointLight(color, 60, 40, 2);
       const geom = new LineGeometry(); const lm = new LineMaterial({ vertexColors: true, linewidth: 4, worldUnits: false, transparent: true, opacity: 0.95, depthTest: true }); lm.resolution.set(innerWidth, innerHeight); this.lineMats.push(lm);
@@ -226,13 +228,14 @@ export class SiteScene {
       const line = new Line2(geom, lm); line.renderOrder = 6; line.frustumCulled = false;
       const labelEl = document.createElement('div'); labelEl.className = 'wlbl'; labelEl.style.setProperty('--c', spec.color); labelEl.innerHTML = `<i></i><span></span><small></small>`;
       const label = new CSS2DObject(labelEl);
-      w = { head, ring, beam, light, line, geom, label, labelEl, color, n: 0, born: performance.now() };
-      this.scene.add(head, ring, beam, light, line, label); this.wearers.set(id, w);
+      w = { head, ring, accRing, beam, light, line, geom, label, labelEl, color, n: 0, born: performance.now() };
+      this.scene.add(head, ring, accRing, beam, light, line, label); this.wearers.set(id, w);
     }
     const on = !!spec.pos;
-    for (const o of [w.head, w.ring, w.beam, w.light, w.label]) o.visible = on;
+    for (const o of [w.head, w.ring, w.accRing, w.beam, w.light, w.label]) o.visible = on;
     if (spec.pos) {
-      const [x, y, z] = spec.pos; w.head.position.set(x, y, z); w.ring.position.set(x, 0.18, z); w.light.position.set(x, y + 2, z);
+      const [x, y, z] = spec.pos; w.head.position.set(x, y, z); w.ring.position.set(x, y - 0.9, z); w.light.position.set(x, y + 2, z);
+      const acc = Math.max(1.5, spec.acc ?? 0); w.accRing.visible = on && spec.acc !== undefined; w.accRing.scale.setScalar(acc); w.accRing.position.set(x, y - 0.88, z);
       w.beam.scale.y = this.beamH; w.beam.position.set(x, this.beamH / 2, z); w.label.position.set(x, y + 1.6, z);
       (w.labelEl.children[1] as HTMLElement).textContent = spec.name; (w.labelEl.children[2] as HTMLElement).textContent = spec.sub;
       if (this.follow) this.followPos = new THREE.Vector3(x, y, z);
@@ -246,7 +249,7 @@ export class SiteScene {
       w.geom.setPositions(spec.trail); w.geom.setColors(cols);
     }
   }
-  hideWearer(id: string) { const w = this.wearers.get(id); if (!w) return; for (const o of [w.head, w.ring, w.beam, w.light, w.label, w.line]) o.visible = false; }
+  hideWearer(id: string) { const w = this.wearers.get(id); if (!w) return; for (const o of [w.head, w.ring, w.accRing, w.beam, w.light, w.label, w.line]) o.visible = false; }
 
   // ---------- pins ----------
   setPins(list: PinSpec[]) {
