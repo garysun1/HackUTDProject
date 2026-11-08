@@ -1,7 +1,7 @@
 # 0028 location on every photo, a shift track, and the map as the console's canvas
 
 - Date: 2026-11-08
-- Status: active (extends 0026; contract v3.1)
+- Status: active (extends 0026; contract v3.1). The map is now the 3D site (#24, #26); sample workspaces get generated sites (0032)
 - Source: Edward (phone side, `#log` decision 2026-11-07 19:40), Gary (console direction, chat)
 
 **Decision.** The phone supplies location: a Core Location fix on every photo and a continuous

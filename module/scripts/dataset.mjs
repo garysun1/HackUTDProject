@@ -12,11 +12,11 @@ const DIRECTORY = 'wm-physical';
 const KNOWN = {
   live: { db: 'wm-physical', what: 'the real capture: our photos, Edward\'s walk' },
   'wm-physical': { db: 'wm-physical', what: 'the real capture: our photos, Edward\'s walk' },
-  'wm-nmc2': { db: 'wm-nmc2', what: 'NMC² data center night shift (synthetic, 9 photos, PDU-A PSU2 OK → FAULT)' },
-  'wm-plant': { db: 'wm-plant', what: 'automotive plant, CNC-07 spindle alarm (synthetic)' },
-  'wm-hospital': { db: 'wm-hospital', what: 'hospital biomed rounds, blood bank fridge alarm (synthetic)' },
-  'wm-substation': { db: 'wm-substation', what: 'utility substation, breaker CB-12 trips (synthetic)' },
-  'wm-warehouse': { db: 'wm-warehouse', what: 'distribution center, forklift-damaged racking (synthetic)' },
+  'wm-nmc2': { db: 'wm-nmc2', what: 'NMC² data center night shift (synthetic, 10 photos, PDU-A PSU2 OK → FAULT → OK)' },
+  'wm-plant': { db: 'wm-plant', what: 'automotive plant second shift: CNC-07 spindle overtemp fixed, HP-2 leak left open (synthetic, 14 photos)' },
+  'wm-hospital': { db: 'wm-hospital', what: 'hospital biomed rounds: BBR-2 fridge alarm fixed, pump 10442 tagged out (synthetic, 15 photos)' },
+  'wm-substation': { db: 'wm-substation', what: 'Northlake substation: CB-12 trip found and restored, T2 oil low left open (synthetic, 15 photos)' },
+  'wm-warehouse': { db: 'wm-warehouse', what: 'distribution center early shift: aisle 22 upright replaced, FZ-1 freezer left open (synthetic, 15 photos)' },
 };
 const token = process.env.ADMIN_TOKEN || process.env.INGEST_TOKEN;
 const arg = process.argv[2];
