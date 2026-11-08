@@ -19,9 +19,9 @@ import MWDATCore
 import Observation
 import UIKit
 
-/// Diagnostic log line; lands in the phone syslog (`idevicesyslog | grep "\[Glasses\]"`) and the Xcode console.
+/// Diagnostic log line; lands in Application Support/debug.log (see `DebugLog`) and the syslog.
 func glassesLog(_ message: String) {
-  NSLog("[Glasses] %@", message)
+  DebugLog.write("Glasses", message)
 }
 
 /// Everything we can learn about an SDK error's underlying cause, for the syslog.
@@ -122,6 +122,11 @@ final class GlassesController {
   private var photoStartRequested = false
   /// Finishing this ends the current `waitForPhotoStarted` as a failure (a setup error arrived).
   private var photoStartWaiter: AsyncStream<PhotoState>.Continuation?
+  /// Set once the camera reported `.started`. A camera is born `.stopped` too, so only one that was
+  /// up and went down is a loss worth reviving (BirdSpotter's `cameraHasStarted`).
+  private var cameraHasStarted = false
+  /// The in-flight revival (see `revive(reason:)`); one at a time.
+  private var revival: Task<Void, Never>?
 
   private struct PendingCapture {
     let id: String
@@ -334,10 +339,18 @@ final class GlassesController {
     let photo = camera.photo
     self.photo = photo
     photoStartRequested = false
+    cameraHasStarted = camera.state == .started
+    revival?.cancel()
+    revival = nil
 
-    // Register every listener before start(); the publishers do not replay.
-    camera.statePublisher.listen { state in
+    // Register every listener before start(); the publishers do not replay (and a camera that is
+    // already where it is going to be says nothing, so its state is also read directly above).
+    camera.statePublisher.listen { [weak self] state in
       glassesLog("camera state -> \(state)")
+      Task { @MainActor in
+        guard let self, self.camera === camera else { return }
+        self.cameraStateChanged(state)
+      }
     }.store(in: sessionTokens)
     // Ignition. On real glasses `Photo.start()` on a cold camera does not come up (it hangs in
     // `.starting` or fails with sessionSetupFailed): the Camera parent does not power the sensor,
@@ -416,6 +429,8 @@ final class GlassesController {
   func endShift(reason: String? = nil) {
     pending?.timeout?.cancel()
     pending = nil
+    revival?.cancel()
+    revival = nil
     camera?.stop()
     session?.stop()
     camera = nil
@@ -491,7 +506,16 @@ final class GlassesController {
     case .paused:
       if phase.isLive { phase = .paused }
     case .started:
-      if phase == .paused { phase = photoState == .started ? .ready : .starting }
+      if phase == .paused {
+        if photoState == .started {
+          phase = .ready
+        } else {
+          // The session is back but the photo child is not: ask the camera back (issue #10 risk:
+          // a pause/resume used to leave the phase at `.starting` with nothing restarting Photo).
+          phase = .starting
+          revive(reason: "session resumed with photo child \(photoState.map { "\($0)" } ?? "nil")")
+        }
+      }
     case .stopped:
       let reason = stopReason ?? lastError ?? "The glasses ended the session (folded, out of range, or another app took the camera)."
       onEvent?(.sessionStopped(reason: reason))
@@ -540,10 +564,91 @@ final class GlassesController {
     case .started:
       releaseIgnitionStream()
       if phase == .starting || phase == .paused { phase = .ready }
-    case .stopped:
-      if phase == .capturing || phase == .ready { phase = session?.state == .started ? .starting : .stopped }
+    case .stopped, .stopping:
+      // During startup a stop is `startPhotoChild`'s business (its waiter fails and retries).
+      guard phase.isLive else { break }
+      // Asked again the next time the ignition frames flow (BirdSpotter does the same).
+      photoStartRequested = false
+      failPendingCapture("The glasses' camera stopped before the photo arrived.")
+      if session?.state == .started {
+        phase = .starting
+        revive(reason: "photo child \(state) while live")
+      } else if phase != .paused {
+        phase = .stopped
+      }
     default:
       break
+    }
+  }
+
+  private func cameraStateChanged(_ state: CameraState) {
+    switch state {
+    case .started:
+      cameraHasStarted = true
+    case .stopped, .stopping:
+      // Only a camera that was up and went down means anything; the one the retry just replaced
+      // is filtered out by the caller's identity check.
+      guard cameraHasStarted, phase.isLive || phase == .starting else { return }
+      cameraHasStarted = false
+      photoStartRequested = false
+      failPendingCapture("The glasses' camera stopped before the photo arrived.")
+      if phase.isLive, phase != .paused { phase = .starting }
+      if session?.state == .started { revive(reason: "camera \(state) without being asked to") }
+    default:
+      break
+    }
+  }
+
+  /// Fail the in-flight app capture (if any) with `message`; the wearer sees it as `lastError`.
+  private func failPendingCapture(_ message: String) {
+    guard pending != nil else { return }
+    pending?.timeout?.cancel()
+    pending = nil
+    transferFraction = nil
+    transferBytes = nil
+    lastError = message
+  }
+
+  /// Ask the camera back after it, or its Photo child, went down under a live session, the way
+  /// Meta's DAT 1.0.1 sample does (BirdSpotter `reviveCamera` / `bringCameraBack`): restart the
+  /// ignition stream, which powers the sensor; its `.streaming` state re-runs `photo.start()`
+  /// (`requestPhotoStart`), and Photo reaching `.started` puts the stream down again and moves the
+  /// phase back to `.ready` (`photoStateChanged`). `start()` answers only on the state publishers,
+  /// so each attempt is given a few seconds before the next; three attempts, then the shift ends.
+  private func revive(reason: String) {
+    guard revival == nil else { glassesLog("revive (\(reason)): already in progress"); return }
+    guard let camera, let session, session.state == .started else {
+      glassesLog("revive (\(reason)) skipped: camera=\(camera != nil) session.state=\(session.map { "\($0.state)" } ?? "nil")")
+      return
+    }
+    glassesLog("revive: \(reason); camera.state=\(camera.state) stream.state=\(camera.stream.state) photoState=\(self.photoState.map { "\($0)" } ?? "nil")")
+    revival = Task { [weak self] in
+      defer { Task { @MainActor [weak self] in self?.revival = nil } }
+      for attempt in 1...3 {
+        // A beat for the crossing to settle; a stop that arrived late about a camera already back is a no-op.
+        try? await Task.sleep(for: .milliseconds(750))
+        guard let self, !Task.isCancelled, self.camera === camera, self.phase == .starting else { return }
+        if self.photoState == .started { self.phase = .ready; return }
+        glassesLog("revive attempt \(attempt)/3: camera.state=\(camera.state) stream.state=\(camera.stream.state) photoState=\(self.photoState.map { "\($0)" } ?? "nil")")
+        self.photoStartRequested = false
+        camera.stream.start()
+        for _ in 0..<16 {   // up to 8 s per attempt (startup takes ~2 s on 016N)
+          try? await Task.sleep(for: .milliseconds(500))
+          guard !Task.isCancelled, self.camera === camera else { return }
+          if self.photoState == .started {
+            glassesLog("revive: photo child back up after attempt \(attempt)")
+            if self.phase == .starting { self.phase = .ready }
+            return
+          }
+          if self.phase != .starting { return }   // ended or failed elsewhere
+        }
+      }
+      guard let self, !Task.isCancelled, self.camera === camera else { return }
+      let message = "The glasses' camera stopped and did not come back; start the shift again."
+      glassesLog("revive FAILED: \(message)")
+      self.lastError = message
+      self.onEvent?(.sessionStopped(reason: message))
+      self.endShift(reason: message)
     }
   }
 

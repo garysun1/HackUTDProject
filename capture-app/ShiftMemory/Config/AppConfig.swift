@@ -27,7 +27,15 @@ final class AppConfig {
   var database: String { didSet { defaults.set(database, forKey: Keys.database); endpointSnapshot.set(endpoint) } }
   /// Thread-safe copy of `endpoint` for callers off the main actor (IngestClient).
   let endpointSnapshot = EndpointSnapshot()
-  var ingestToken: String { didSet { keychain.set(ingestToken, for: Keys.ingestToken) } }
+  var ingestToken: String {
+    didSet {
+      keychain.set(ingestToken, for: Keys.ingestToken)
+      onIngestTokenChanged?()
+    }
+  }
+  /// Called after every token edit (per keystroke); the app debounces it into a queue retry, so
+  /// events rejected with `invalid_token` resend once the right token is in.
+  var onIngestTokenChanged: (() -> Void)?
 
   // MARK: Identity (attribution on every event)
   var wearerName: String { didSet { defaults.set(wearerName, forKey: Keys.wearerName) } }

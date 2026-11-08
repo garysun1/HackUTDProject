@@ -46,7 +46,9 @@ actor UploadQueue {
   private let emit: AsyncStream<Update>.Continuation
   private let wake: AsyncStream<Void>
   private let wakeContinuation: AsyncStream<Void>.Continuation
-  private let log = Logger(subsystem: "com.edwardkim.hackutd.shiftmemory", category: "UploadQueue")
+  /// Diagnostic log line in Application Support/debug.log (see `DebugLog`); `Logger` output from this
+  /// subsystem never surfaced over `idevicesyslog` on the device, and NSLog arrives redacted.
+  private nonisolated func log(_ message: String) { DebugLog.write("UploadQueue", message) }
 
   private var items: [String: CaptureEvent] = [:]
   private var pollers: [String: Task<Void, Never>] = [:]
@@ -82,7 +84,7 @@ actor UploadQueue {
       try jpeg.write(to: jpegURL(event.id), options: .atomic)
       try write(event)
     } catch {
-      log.error("enqueue persist failed: \(error.localizedDescription, privacy: .public)")
+      log("enqueue persist failed: \(error.localizedDescription)")
     }
     items[event.id] = event
     enforceCapacity()
@@ -161,7 +163,7 @@ actor UploadQueue {
   private func send(_ queued: CaptureEvent) async {
     guard var event = items[queued.id] else { return }
     guard let jpeg = try? Data(contentsOf: jpegURL(event.id)) else {
-      log.error("jpeg missing for \(event.id, privacy: .public); dropping")
+      log("jpeg missing for \(event.id); dropping")
       finish(event, stage: .failed, serverT: nil, error: "Photo bytes were lost before upload.")
       return
     }
@@ -176,7 +178,7 @@ actor UploadQueue {
     do {
       let result = try await client.ingest(eventJSON: eventJSON, photoBase64: jpeg.base64EncodedString())
       let ms = Int(Date().timeIntervalSince(started) * 1000)
-      log.info("ingest \(event.id, privacy: .public) → \(result.status, privacy: .public) in \(ms)ms after \(event.attempts) attempt(s)")
+      log("ingest \(event.id) → \(result.status) in \(ms)ms after \(event.attempts) attempt(s)")
       let stage = Self.stage(forIngestStatus: result.status)
       finish(event, stage: stage, serverT: result.serverT, error: nil)
       if !stage.isTerminal { startPolling(eventId: event.id) }
@@ -189,7 +191,7 @@ actor UploadQueue {
         event.nextAttemptAt = Date().addingTimeInterval(backoff)
         items[event.id] = event
         try? write(event)
-        log.notice("ingest \(event.id, privacy: .public) retry in \(Int(backoff))s: \(message, privacy: .public)")
+        log("ingest \(event.id) retry in \(Int(backoff))s: \(message)")
         emit.yield(.stage(eventId: event.id, stage: .queued, serverT: nil, error: message, attempts: event.attempts))
       } else {
         // Keep the files: fixing the token in Settings and tapping Retry should resend, not re-shoot.
@@ -198,7 +200,7 @@ actor UploadQueue {
         event.nextAttemptAt = .distantFuture
         items[event.id] = event
         try? write(event)
-        log.error("ingest \(event.id, privacy: .public) rejected: \(message, privacy: .public)")
+        log("ingest \(event.id) rejected: \(message)")
         emit.yield(.stage(eventId: event.id, stage: .failed, serverT: nil, error: message, attempts: event.attempts))
       }
     }
@@ -220,7 +222,10 @@ actor UploadQueue {
       try? await Task.sleep(for: policy.pollInterval)
       guard let row = try? await client.status(eventId: eventId) else { continue }
       emit.yield(.polled(eventId: eventId, status: row.status, summary: row.summary))
-      if ["in_graph", "failed", "duplicate"].contains(row.status) { return }
+      if ["in_graph", "failed", "duplicate"].contains(row.status) {
+        log("poll \(eventId) → \(row.status): \(row.summary.prefix(120))")
+        return
+      }
     }
   }
 
@@ -252,7 +257,7 @@ actor UploadQueue {
     let overflow = items.count - policy.capacity
     guard overflow > 0 else { return }
     for event in ordered().prefix(overflow) {
-      log.notice("queue full; dropping oldest \(event.id, privacy: .public)")
+      log("queue full; dropping oldest \(event.id)")
       finish(event, stage: .failed, serverT: nil, error: "Dropped: upload queue was full.")
     }
   }
@@ -269,7 +274,7 @@ actor UploadQueue {
   }
 
   private func load() {
-    guard let names = try? FileManager.default.contentsOfDirectory(atPath: directory.path()) else { return }
+    guard let names = try? FileManager.default.contentsOfDirectory(atPath: directory.path(percentEncoded: false)) else { return }
     let decoder = JSONDecoder()
     decoder.dateDecodingStrategy = .iso8601
     for name in names where name.hasSuffix(".json") {
@@ -278,7 +283,7 @@ actor UploadQueue {
         try? FileManager.default.removeItem(at: url)
         continue
       }
-      guard FileManager.default.fileExists(atPath: jpegURL(event.id).path()) else {
+      guard FileManager.default.fileExists(atPath: jpegURL(event.id).path(percentEncoded: false)) else {
         try? FileManager.default.removeItem(at: url)
         continue
       }

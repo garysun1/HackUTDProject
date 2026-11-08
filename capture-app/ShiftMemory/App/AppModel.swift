@@ -30,6 +30,8 @@ final class AppModel {
   private(set) var isStarted = false
   private var monitor: NWPathMonitor?
   private var tasks: [Task<Void, Never>] = []
+  /// Debounce for token edits → `queue.kick()`.
+  private var tokenRetry: Task<Void, Never>?
 
   init() {
     let support = (try? FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true))
@@ -65,12 +67,26 @@ final class AppModel {
     glasses.onEvent = { [weak self] event in self?.record(event) }
     glasses.startObserving()
 
+    config.onIngestTokenChanged = { [weak self] in
+      guard let self else { return }
+      tokenRetry?.cancel()
+      tokenRetry = Task { [weak self] in
+        try? await Task.sleep(for: .seconds(1.5))
+        guard let self, !Task.isCancelled else { return }
+        await self.queue.kick()
+        await self.ping()
+      }
+    }
+
     importer.onlyGlassesPhotos = config.cameraRollOnlyGlassesPhotos
     importer.onPhoto = { [weak self] photo in await self?.coordinator.handleImported(photo) }
 
     tasks.append(Task { [weak self] in
       guard let self else { return }
-      for await update in self.queue.updates { self.store.apply(update) }
+      for await update in self.queue.updates {
+        self.store.apply(update)
+        self.recordUploadStage(update)
+      }
     })
     await queue.start()
 
@@ -154,6 +170,34 @@ final class AppModel {
 
   func importPicked(_ data: Data) async {
     await coordinator.handleManual(data, creationDate: nil)
+  }
+
+  /// Mirror upload progress into the #10 diagnostics row (`acceptedAt`, `inGraphAt`, `error`), which
+  /// the CSV reports; the event store keeps the wearer-facing copy.
+  private func recordUploadStage(_ update: UploadQueue.Update) {
+    let now = Date()
+    switch update {
+    case let .stage(eventId, stage, _, error, _):
+      diagnostics.update(id: eventId) { m in
+        switch stage {
+        case .accepted, .duplicate: if m.acceptedAt == nil { m.acceptedAt = now }
+        case .inGraph:
+          if m.acceptedAt == nil { m.acceptedAt = now }
+          if m.inGraphAt == nil { m.inGraphAt = now }
+        case .failed: m.error = error ?? "upload failed"
+        default: break
+        }
+      }
+    case let .polled(eventId, status, _):
+      diagnostics.update(id: eventId) { m in
+        switch status {
+        case "in_graph": if m.inGraphAt == nil { m.inGraphAt = now }
+        case "failed": m.error = m.error ?? "module: perception failed"
+        default: break
+        }
+      }
+    default: break
+    }
   }
 
   private func record(_ event: GlassesEvent) {
