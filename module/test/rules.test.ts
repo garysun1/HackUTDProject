@@ -151,6 +151,9 @@ test('model output is grounded: bullets stripped, ranges split, unknown ids drop
     ['NEEDS ATTENTION', 'none', '', 'WHAT CHANGED', 'none', '', 'ROUNDS', 'ok [event:e1]']);
   assert.equal(groundModelSections('NEEDS ATTENTION\nx [event:e1]\nROUNDS\ny [event:e2]', known), null);
   assert.equal(groundModelSections('NEEDS ATTENTION\nnone\nWHAT CHANGED\nnone\nROUNDS\nnone', known), null);
+  // work orders cite their own id; unknown ones are dropped
+  assert.deepEqual(groundModelSections('NEEDS ATTENTION\nCRAC-2 high return temp, in progress [wo:WO-1043] [wo:WO-9]\nWHAT CHANGED\nnone\nROUNDS\nok [event:e1]', known, new Set(['WO-1043'])),
+    ['NEEDS ATTENTION', 'CRAC-2 high return temp, in progress [wo:WO-1043]', '', 'WHAT CHANGED', 'none', '', 'ROUNDS', 'ok [event:e1]']);
 });
 
 test('the most specific asset wins when a name mentions several', () => {
@@ -160,7 +163,7 @@ test('the most specific asset wins when a name mentions several', () => {
 });
 
 // ---------- episodes (#6) ----------
-import { segmentEvents, plainEpisodeTitle } from '../spacetimedb/src/rules.ts';
+import { segmentEvents, plainEpisodeTitle, isRecovery, FIXED_NOTE_RE } from '../spacetimedb/src/rules.ts';
 
 test('episodes split on place change, long gaps and embedding jumps', () => {
   const m = (n: number) => 1794110400000000n + BigInt(n) * 60_000_000n;
@@ -177,4 +180,21 @@ test('episodes split on place change, long gaps and embedding jumps', () => {
   assert.equal(segs[0].place, 'Cold Aisle 3');
   assert.equal(segs[1].place, 'no place identified');
   assert.deepEqual(plainEpisodeTitle(segs[2]), { title: 'no place identified, Dev', summary: 'ups' });
+});
+
+test('recovery and fixed-note signals (#23)', () => {
+  assert.equal(isRecovery('PSU2 FAULT', 'PSU2 OK'), true);
+  assert.equal(isRecovery('FAULT', 'normal'), true);
+  assert.equal(isRecovery('OK', 'FAULT'), false);
+  assert.equal(isRecovery('FAULT', 'FAULT'), false);
+  assert.equal(isRecovery('10.9 kW', '11.8 kW'), false);
+  assert.equal(isRecovery('FAULT', 'unknown'), false);
+  assert.equal(FIXED_NOTE_RE.test('Swapped PSU2 under INC-4821; PDU-A back to normal'), true);
+  assert.equal(FIXED_NOTE_RE.test('still faulting, parts on order'), false);
+  const withIssues = assembleHandoff(graphSections({ ...snap, issues: [
+    { id: 'WO-1', title: 'CRAC-2 high return temp', asset: 'CRAC unit 2', status: 'open', openedBy: 'Dana', resolvedEventId: '', resolutionNote: '' },
+    { id: 'WO-2', title: 'PDU A breaker tripped', asset: 'PDU A (Rack R12)', status: 'resolved', openedBy: 'Dana', resolvedEventId: 'e3', resolutionNote: 'reset' },
+  ] }), snap);
+  assert.match(withIssues, /Work order WO-1 open: CRAC-2 high return temp \(CRAC unit 2, opened by Dana\)/);
+  assert.match(withIssues, /Work order WO-2 resolved: PDU A breaker tripped, reset \[event:e3\]/);
 });

@@ -66,6 +66,16 @@ export function matchAssets(texts: string[], assets: AssetLike[]): AssetMatch[] 
 export const FAULT_RE =
   /\b(FAULT(?:Y|ED)?|FAIL(?:ED|URE|ING)?|ALARM(?:ING)?|CRITICAL|OVER[- ]?TEMP(?:ERATURE)?|OVERHEAT(?:ING)?|OVERLOAD(?:ED)?|DEGRADED|TRIPPED|LEAK(?:ING)?|OFFLINE|DOWN|ERROR|ERR)\b/i;
 
+// Values that mean "healthy"; a change from a FAULT_RE value to one of these is a recovery.
+export const HEALTHY_RE = /\b(OK|OKAY|NORMAL|GOOD|ONLINE|UP|GREEN|HEALTHY|RUNNING|ACTIVE|READY|CLEAR(?:ED)?|NOMINAL|RESTORED|CLOSED|PASS(?:ED)?)\b/i;
+// A wearer note that says the problem was dealt with.
+export const FIXED_NOTE_RE = /\b(fixed|repaired|reset|resolved|replaced|swapped|reseated|back (?:on|online|up|to normal)|cleared|restored|working again)\b/i;
+
+/** A change that takes an asset out of a fault state: "PSU2 FAULT" -> "PSU2 OK". */
+export function isRecovery(from: string, to: string): boolean {
+  return FAULT_RE.test(from) && !FAULT_RE.test(to) && HEALTHY_RE.test(to);
+}
+
 export interface ChangeLike {
   entity?: unknown;
   attr?: unknown;
@@ -264,12 +274,22 @@ export interface HAlert {
   eventId: string;
   wearer: string;
 }
+export interface HIssue {
+  id: string;
+  title: string;
+  asset: string;
+  status: string; // open | in_progress | resolved
+  openedBy: string;
+  resolvedEventId: string;
+  resolutionNote: string;
+}
 export interface HandoffSnap {
   sinceMicros: bigint;
   anchor: string;
   events: HEvent[];
   alerts: HAlert[];
   total: number;
+  issues?: HIssue[]; // work orders: open ones however old, resolved ones in the window
 }
 
 export const cite = (id: string) => `[event:${id}]`;
@@ -296,11 +316,20 @@ export function quietLines(snap: HandoffSnap): string[] {
 export function graphSections(snap: HandoffSnap): string[] {
   const L: string[] = [];
   const open = snap.alerts.filter(a => a.open);
+  const issues = snap.issues ?? [];
+  const openIssues = issues.filter(i => i.status !== 'resolved');
   L.push('NEEDS ATTENTION');
-  L.push(...(open.length ? open.map(a => `${a.asset}: ${a.text} (${clockCT(a.t)}, ${a.wearer}) ${cite(a.eventId)}`) : ['none']));
+  const attention = [
+    ...open.map(a => `${a.asset}: ${a.text} (${clockCT(a.t)}, ${a.wearer}) ${cite(a.eventId)}`),
+    ...openIssues.map(i => `Work order ${i.id} ${i.status.replace('_', ' ')}: ${i.title} (${i.asset}, opened by ${i.openedBy})`),
+  ];
+  L.push(...(attention.length ? attention : ['none']));
   L.push('', 'WHAT CHANGED');
   const changed = snap.events.flatMap(e => e.changes.map(c => `${c} (${clockCT(e.t)}) ${cite(e.id)}`));
-  const resolved = snap.alerts.filter(a => !a.open).map(a => `${a.asset}: ${a.text}, resolved ${cite(a.eventId)}`);
+  const resolved = [
+    ...snap.alerts.filter(a => !a.open).map(a => `${a.asset}: ${a.text}, resolved ${cite(a.eventId)}`),
+    ...issues.filter(i => i.status === 'resolved').map(i => `Work order ${i.id} resolved: ${i.title}${i.resolutionNote ? ', ' + i.resolutionNote : ''}${i.resolvedEventId ? ' ' + cite(i.resolvedEventId) : ''}`),
+  ];
   L.push(...(changed.length || resolved.length ? [...changed, ...resolved] : ['none']));
   L.push('', 'ROUNDS');
   const byWearer = new Map<string, HEvent[]>();
@@ -327,7 +356,7 @@ export function graphSections(snap: HandoffSnap): string[] {
  * left with no citation is dropped). Returns null when a section is missing or nothing
  * grounded survives, so the caller falls back to the graph.
  */
-export function groundModelSections(text: string, known: Set<string>): string[] | null {
+export function groundModelSections(text: string, known: Set<string>, knownWorkOrders: Set<string> = new Set()): string[] | null {
   const out: string[] = [];
   const present = new Set<string>();
   let current = '';
@@ -350,12 +379,19 @@ export function groundModelSections(text: string, known: Set<string>): string[] 
       continue;
     }
     let ok = 0;
-    const cleaned = line.replace(/\[event:([^\]]+)\]/g, (_m, inner: string) => {
-      const ids = inner.split(/[\s,]+/).map(x => x.replace(/^event:/, '')).filter(x => x && x !== 'through' && x !== 'to' && x !== 'and');
-      const good = ids.filter(id => known.has(id));
-      ok += good.length;
-      return good.map(cite).join(' ');
-    });
+    const cleaned = line
+      .replace(/\[event:([^\]]+)\]/g, (_m, inner: string) => {
+        const ids = inner.split(/[\s,]+/).map(x => x.replace(/^event:/, '')).filter(x => x && x !== 'through' && x !== 'to' && x !== 'and');
+        const good = ids.filter(id => known.has(id));
+        ok += good.length;
+        return good.map(cite).join(' ');
+      })
+      .replace(/\[wo:([^\]]+)\]/g, (_m, inner: string) => {
+        // a work order has no photo of its own; its id is the citation
+        const good = inner.split(/[\s,]+/).map(x => x.replace(/^wo:/, '')).filter(id => knownWorkOrders.has(id));
+        ok += good.length;
+        return good.map(id => `[wo:${id}]`).join(' ');
+      });
     if (!ok) continue;
     out.push(cleaned.replace(/\s{2,}/g, ' ').trim());
     bodyLines++;

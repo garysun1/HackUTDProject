@@ -1,7 +1,7 @@
 {
   "id": "nmc2-datacenter",
   "title": "NMC² data center night shift",
-  "summary": "One operator's rounds through a colo hall: cold aisle, rack R12, its PDU, cooling, cable work on the core switch, a PSU fault on PDU-A, a handwritten ticket note, and the UPS room. Drives the alert beat (PDU-A PSU2 OK → FAULT) and the shift handoff.",
+  "summary": "One operator's rounds through a colo hall: cold aisle, rack R12, its PDU, cooling, cable work on the core switch, a PSU fault on PDU-A, a handwritten ticket note, and the UPS room. Drives the alert beat (PDU-A PSU2 OK → FAULT), the fix that closes it (PSU2 back to OK with a spoken note), and the shift handoff.",
   "shift_start": "2026-11-07T22:00:00-06:00",
   "style": "Unedited first-person snapshot from a head-mounted wearable camera at eye level, deep focus with everything sharp, no bokeh, inside an enterprise colocation data center, slightly off-level framing, cool white LED lighting, light sensor noise, mild wide-angle lens distortion, realistic textures, no people or faces in frame.",
   "wearers": [
@@ -166,6 +166,43 @@
         "UPS-1",
         "ONLINE"
       ]
+    },
+    {
+      "id": "10-pdu-a-fixed",
+      "t": 64,
+      "wearer": "maria",
+      "pair": "pdu-a",
+      "prompt": "Close-up of a vertical rack power distribution unit mounted inside rack R12; a white sticker label reads \"PDU-A\" in black block letters; its small backlit LCD shows \"10.9 kW\" and below it \"PSU2 OK\" with a green status light.",
+      "edit": "change only the small backlit LCD so it reads \"10.9 kW\" and \"PSU2 OK\", and make its status light green instead of red.",
+      "read": [
+        "PDU-A",
+        "OK"
+      ],
+      "note": "Swapped PSU2 under INC-4821; PDU-A back to normal, load steady at 10.9 kW.",
+      "expect": "resolves alert"
+    }
+  ],
+  "issues": [
+    {
+      "issue_id": "WO-1042",
+      "title": "PDU A breaker tripped, R12 half dark",
+      "asset_id": "PDU-A",
+      "opened_by": "Night shift (Dana)",
+      "status": "open"
+    },
+    {
+      "issue_id": "WO-1043",
+      "title": "CRAC-2 high return temperature",
+      "asset_id": "CRAC-2",
+      "opened_by": "Night shift (Dana)",
+      "status": "open"
+    },
+    {
+      "issue_id": "WO-1044",
+      "title": "UPS-1 running on bypass",
+      "asset_id": "UPS-1",
+      "opened_by": "Facilities",
+      "status": "open"
     }
   ]
 }

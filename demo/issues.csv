@@ -1,0 +1,4 @@
+issue_id,title,asset_id,opened_by,opened_at,status
+WO-1042,"PDU A breaker tripped, R12 half dark",PDU-A,Night shift (Dana),,open
+WO-1043,CRAC-2 high return temperature,CRAC-2,Night shift (Dana),,open
+WO-1044,UPS-1 running on bypass,UPS-1,Facilities,,open

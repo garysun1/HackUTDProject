@@ -123,3 +123,15 @@ test('wearer_rounds answers questions about a person on shift by name', () => {
   assert.ok((runTool(idx, 'wearer_rounds', { wearer: 'Nobody' }) as any).error);
   assert.equal((runTool(idx, 'search_memory', { query: 'Dev' }) as any).matches[0].event, 'e4');
 });
+
+test('work orders appear in alerts and context (#23)', () => {
+  const withWo = makeIndex(idx.now, events, entities, alerts, [], null, [
+    { id: 'WO-1', title: 'CRAC-2 high return temp', assetId: 'CRAC-2', assetName: 'CRAC unit 2', status: 'in_progress', openedBy: 'Dana', openedMicros: T0 - min(180), resolvedEventId: '', resolutionNote: '' },
+    { id: 'WO-2', title: 'UPS-1 on bypass', assetId: 'UPS-1', assetName: 'UPS 1', status: 'resolved', openedBy: 'Dana', openedMicros: T0 - min(180), resolvedEventId: 'e4', resolutionNote: 'back online' },
+  ]);
+  const r = runTool(withWo, 'list_open_alerts', {}) as any;
+  assert.equal(r.work_orders_open[0].work_order, 'WO-1');
+  assert.equal(r.work_orders_resolved[0].resolved_by_event, 'e4');
+  assert.equal((runTool(withWo, 'get_current_context', {}) as any).open_work_orders.length, 1);
+  assert.match((runTool(withWo, 'summarize_handoff', {}) as any).handoff, /Work order WO-1 in progress: CRAC-2 high return temp/);
+});

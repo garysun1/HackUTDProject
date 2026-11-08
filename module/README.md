@@ -133,6 +133,21 @@ changed episodes get a title (at most 7 words) and a one-sentence summary from N
 in one batched call, gpt-5 on failure, and a plain "place, wearers" title if both fail.
 `resegment(adminToken)` forces a full pass, for example after `reperceive`.
 
+## Work orders and fires going out (#23)
+
+`issue` is the work-order table, seeded from `demo/issues.csv` (`issue_id,title,asset_id,opened_by,
+opened_at,status`; `opened_at` ISO or empty for three hours ago) by the seed script or
+`upsert_issue`. In `perceive`, after the alert rule: a photo that involves an asset with an open
+work order moves it to `in_progress`; a photo that shows the asset healthy again (a `CHANGES`
+edge out of a fault state, `PSU2 FAULT -> PSU2 OK`) or carries a wearer note that says it was
+fixed (`swapped`, `reset`, `back to normal`, ...) acknowledges the asset's open alerts, writes an
+`alert_resolution` row (`alert_id, event_id, device_id, t_micros, how`:
+`photo_shows_recovery | wearer_note | manual`) and resolves its work orders with the photo and the
+note. Never from the photo that raised the finding. `ack_alert_with_evidence(alert_id, event_id)`
+and `set_issue_status(issue_id, status, note, event_id)` do the same by hand. The handoff lists
+open and in-progress work orders under NEEDS ATTENTION (cited as `[wo:<id>]`) and resolved ones
+under WHAT CHANGED; the agent's `list_open_alerts` returns them too.
+
 ## Admin and UI reducers
 
 | Name (HTTP) | Args | Notes |
@@ -144,6 +159,9 @@ in one batched call, gpt-5 on failure, and a plain "place, wearers" title if bot
 | `resegment` (procedure) | token | recompute and retitle episodes now |
 | `slack_test` (procedure) | token | posts a test message |
 | `ack_alert` | alert_id (u64) | for the web view |
+| `ack_alert_with_evidence` | alert_id (u64), event_id | ack plus an `alert_resolution` row citing the photo |
+| `upsert_issue` | token, issue_id, title, asset_id, opened_by, opened_at, status | seed a work order |
+| `set_issue_status` | issue_id, status, note, event_id | open, in_progress or resolved by hand |
 | `set_label`, `set_note` | event_id, value | |
 
 After setting the keys, re-run the events that only got the stub:

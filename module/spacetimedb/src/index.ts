@@ -1,7 +1,7 @@
 // Working Memory for the Physical World — SpacetimeDB module (TypeScript).
 // Tables: event, photo, entity, edge, episode, handoff, alert, asset, wearer, perceive_job.
 // Procedures: ping, ingestPhoto (ingest_photo), ingestTrack, perceive (scheduled), segment (scheduled), resegment, handoff, ask, slackTest (slack_test).
-// Reducers: setLabel, setNote, ackAlert; admin: upsertAsset, deleteAsset, upsertWearer.
+// Reducers: setLabel, setNote, ackAlert, ackAlertWithEvidence, setIssueStatus; admin: upsertAsset, deleteAsset, upsertWearer, upsertIssue, reperceive.
 // See docs/DESIGN.md §5–§8 and docs/CONTRACT.md. Pure rules (alerts, asset matching) in rules.ts.
 
 import { schema, table, t, SenderError, Range } from 'spacetimedb/server';
@@ -25,6 +25,9 @@ import {
   type HEvent,
   type HAlert,
   type HandoffSnap,
+  type HIssue,
+  isRecovery,
+  FIXED_NOTE_RE,
   segmentEvents,
   plainEpisodeTitle,
   type SegEvent,
@@ -45,6 +48,7 @@ import {
   type AAlert,
   type AEpisode,
   type AChange,
+  type AIssue,
 } from './agent_tools';
 
 // ---------- tables ----------
@@ -172,6 +176,36 @@ const wearer = table(
   }
 );
 
+// #23: work orders. Seeded from demo/issues.csv, moved to in_progress when a photo involves the
+// asset, resolved by perceive when a later photo shows the asset healthy or the note says fixed.
+const issue = table(
+  { name: 'issue', public: true },
+  {
+    issueId: t.string().primaryKey(),
+    title: t.string(),
+    assetId: t.string().index('btree'),
+    openedBy: t.string(),
+    openedMicros: t.u64(),
+    status: t.string(), // open | in_progress | resolved
+    resolvedEventId: t.option(t.string()),
+    resolvedMicros: t.option(t.u64()),
+    resolutionNote: t.option(t.string()),
+  }
+);
+
+// #23: how an alert was closed, citing the photo: written by perceive (auto) or ack_alert_with_evidence.
+const alertResolution = table(
+  { name: 'alert_resolution', public: true },
+  {
+    id: t.u64().primaryKey().autoInc(),
+    alertId: t.u64().index('btree'),
+    eventId: t.string(),
+    deviceId: t.string(),
+    tMicros: t.u64(),
+    how: t.string(), // photo_shows_recovery | wearer_note | manual
+  }
+);
+
 // #6: one pending row re-segments the record a few seconds after a burst of photos settles.
 const segmentJob = table(
   { name: 'segment_job' },
@@ -232,7 +266,7 @@ const trackPoint = table(
 );
 
 const spacetimedb = schema(
-  { event, photo, entity, edge, episode, handoff: handoffTable, alert, asset, wearer, perceiveJob, segmentJob, eventLocation, trackPoint },
+  { event, photo, entity, edge, episode, handoff: handoffTable, alert, asset, wearer, issue, alertResolution, perceiveJob, segmentJob, eventLocation, trackPoint },
   {
     // #14: secrets live in the database's environment, set with
     //   spacetime publish wm-physical --env-only --server maincloud  (see module/README.md)
@@ -826,7 +860,6 @@ export const perceive = spacetimedb.procedure(
         return !r.isAsset || inPhoto(r.name);
       });
       const candidates = detectAlerts(texts, realChanges, realAnomalies);
-      if (!candidates.length) return [];
       const w = tx.db.wearer.deviceId.find(ev.deviceId);
       const wearerName = w ? w.name : '';
       const recent = [...tx.db.alert.tMicros.filter(
@@ -912,6 +945,31 @@ export const perceive = spacetimedb.procedure(
           slackStatus: env.SLACK_WEBHOOK_URL ? 'pending' : 'no_webhook',
         });
         inserted.push({ alertId: row.alertId, text, kind: g.kind, entityName: g.entityName, location: g.location });
+      }
+
+      // #23: fires going out. A later photo of an asset that shows it healthy (a change out of a
+      // fault state) or a wearer note that says it is fixed closes the asset's open alerts and
+      // work orders, citing this photo. A photo that only looks at the asset moves its work
+      // orders to in_progress. Never from the photo that raised the finding.
+      const photoAssets = new Set<string>(sceneAssets.map(m => slug(m.assetId)));
+      if (labelAsset && labelAsset.isAsset) photoAssets.add(labelAsset.id);
+      const noteFixed = !!ev.note && FIXED_NOTE_RE.test(ev.note);
+      for (const aid of photoAssets) {
+        if (groups.has(aid)) continue; // this photo flagged it
+        const recovery = realChanges.find(c => resolve(String(c.entity)).id === aid && isRecovery(String(c.from ?? ''), String(c.to ?? '')));
+        const how = recovery ? 'photo_shows_recovery' : noteFixed ? 'wearer_note' : '';
+        const openIssues = [...tx.db.issue.iter()].filter(i => i.status !== 'resolved' && slug(i.assetId) === aid);
+        if (!how) {
+          for (const i of openIssues) if (i.status === 'open') tx.db.issue.issueId.update({ ...i, status: 'in_progress' });
+          continue;
+        }
+        const note = ev.note ?? (recovery ? `${recovery.entity} ${recovery.attr ?? ''}: ${recovery.from} -> ${recovery.to}`.replace(/\s+/g, ' ').trim() : '');
+        for (const a of [...tx.db.alert.iter()]) {
+          if (a.acked || a.entityId !== aid || a.eventId === eventId) continue;
+          tx.db.alert.alertId.update({ ...a, acked: true, ackedMicros: now });
+          tx.db.alertResolution.insert({ id: 0n, alertId: a.alertId, eventId, deviceId: ev.deviceId, tMicros: now, how });
+        }
+        for (const i of openIssues) tx.db.issue.issueId.update({ ...i, status: 'resolved', resolvedEventId: eventId, resolvedMicros: now, resolutionNote: note || undefined });
       }
       return inserted.map(i => ({ ...i, wearerName, deviceId: ev.deviceId, tMicros: now }));
     });
@@ -1058,8 +1116,8 @@ const HANDOFF_PROMPT =
   'Rules: use only facts in the log and never invent; every line you write must end with the event ids it rests on, each written as [event:<id>] with the full id, one bracket per id, never ranges; ' +
   'never name or describe people, refer to wearers only by the name given in the log; plain text, no markdown, no em dashes; short lines; at most 180 words. ' +
   'Write exactly three sections in this order, each a line in capitals followed by its lines, or the word none: ' +
-  'NEEDS ATTENTION (open alerts and anything abnormal, most urgent first, with the asset and where it is), ' +
-  'WHAT CHANGED (state changes asset by asset; alerts marked resolved belong here, not above), ' +
+  'NEEDS ATTENTION (open alerts, work orders that are open or in progress, and anything abnormal, most urgent first, with the asset and where it is; a work order is cited as [wo:<id>] when no event applies), ' +
+  'WHAT CHANGED (state changes asset by asset; alerts and work orders marked resolved belong here, not above), ' +
   'ROUNDS (which assets and areas were checked, by whom, in time order, at most one line per wearer). ' +
   'Do not write a notes or quiet section; the system adds those from the record. ' +
   'Line formats to follow: NEEDS ATTENTION line "PDU A (Rack R12), Cold Aisle 3: PSU2 FAULT, open since 22:42, seen by Maria [event:<id>]"; ' +
@@ -1112,11 +1170,16 @@ export const handoff = spacetimedb.procedure({ since: t.string() }, t.string(), 
       .filter(a => !a.acked || a.tMicros >= sinceMicros) // anything still open needs attention, however old
       .sort((a, b) => (a.tMicros < b.tMicros ? -1 : a.tMicros > b.tMicros ? 1 : 0))
       .map(a => ({ t: a.tMicros, open: !a.acked, asset: a.entityName || a.entityId || 'unassigned', text: a.text, eventId: a.eventId, wearer: a.wearerName || nameOf(a.deviceId) }));
-    return { sinceMicros, anchor, events, alerts, total: all.length };
+    const assetName = (id: string) => tx.db.asset.assetId.find(id)?.name || id;
+    const issues: HIssue[] = [...tx.db.issue.iter()]
+      .filter(i => i.status !== 'resolved' || (i.resolvedMicros ?? 0n) >= sinceMicros)
+      .map(i => ({ id: i.issueId, title: i.title, asset: assetName(i.assetId), status: i.status, openedBy: i.openedBy, resolvedEventId: i.resolvedEventId ?? '', resolutionNote: i.resolutionNote ?? '' }));
+    return { sinceMicros, anchor, events, alerts, total: all.length, issues };
   });
 
   const openAlerts = snap.alerts.filter(a => a.open).length;
-  if (!snap.events.length && !openAlerts) return `No photos since ${snap.anchor}.`;
+  const openIssues = (snap.issues ?? []).filter(i => i.status !== 'resolved').length;
+  if (!snap.events.length && !openAlerts && !openIssues) return `No photos since ${snap.anchor}.`;
 
   // 2. digest -> model (Nemotron, then gpt-5); graph-built sections if both fail or stray
   const wearers = [...new Set(snap.events.map(e => e.wearer))];
@@ -1125,6 +1188,7 @@ export const handoff = spacetimedb.procedure({ since: t.string() }, t.string(), 
     (snap.total > snap.events.length ? ` (${snap.events.length} newest shown)` : '') +
     ` by ${wearers.join(', ') || 'nobody'}. Open alerts: ${openAlerts}.`;
   const digest = [
+    ...(snap.issues ?? []).map(i => `WORK ORDER ${i.id} ${i.status} | ${i.asset} | ${i.title} | opened by ${i.openedBy}${i.resolvedEventId ? ` | resolved by event ${i.resolvedEventId}${i.resolutionNote ? ': ' + i.resolutionNote : ''}` : ''}`),
     ...snap.alerts.map(a => `ALERT ${a.open ? 'OPEN' : 'resolved'} | ${clockCT(a.t)} | ${a.asset} | ${a.text} | seen by ${a.wearer} | event ${a.eventId}`),
     ...snap.events.map(
       e =>
@@ -1138,7 +1202,8 @@ export const handoff = spacetimedb.procedure({ since: t.string() }, t.string(), 
   for (const f of r.failures) console.warn(`handoff: ${f}`);
   const known = new Set(snap.events.map(e => e.id));
   for (const a of snap.alerts) known.add(a.eventId);
-  const grounded = r.text ? groundModelSections(r.text, known) : null;
+  for (const i of snap.issues ?? []) if (i.resolvedEventId) known.add(i.resolvedEventId);
+  const grounded = r.text ? groundModelSections(r.text, known, new Set((snap.issues ?? []).map(i => i.id))) : null;
   if (r.text && !grounded) console.warn('handoff: model text rejected, using graph sections');
   const model = grounded ? r.model : 'graph';
   const text = assembleHandoff(grounded ?? graphSections(snap), snap) + `\n\n${snap.events.length} photos since ${snap.anchor}, written ${clockCT(now)} by ${model}.`;
@@ -1330,7 +1395,8 @@ export const ask = spacetimedb.procedure({ question: t.string() }, AskResult, (c
     const episodes: AEpisode[] = [...tx.db.episode.iter()].map(ep => ({ start: ep.tStartMicros, end: ep.tEndMicros, title: ep.title, summary: ep.summary, eventIds: ep.eventIds }));
     let lastHandoff: { generatedMicros: bigint; text: string } | null = null;
     for (const h of tx.db.handoff.iter()) if (!lastHandoff || h.generatedMicros > lastHandoff.generatedMicros) lastHandoff = h;
-    return makeIndex(now, events, [...ent.values()], alerts, episodes, lastHandoff ? lastHandoff.text : null);
+    const issues: AIssue[] = [...tx.db.issue.iter()].map(i => ({ id: i.issueId, title: i.title, assetId: i.assetId, assetName: tx.db.asset.assetId.find(i.assetId)?.name ?? i.assetId, status: i.status, openedBy: i.openedBy, openedMicros: i.openedMicros, resolvedEventId: i.resolvedEventId ?? '', resolutionNote: i.resolutionNote ?? '' }));
+    return makeIndex(now, events, [...ent.values()], alerts, episodes, lastHandoff ? lastHandoff.text : null, issues);
   });
 
   const k = chatKeys(ctx.env);
@@ -1535,3 +1601,61 @@ export const reperceive = spacetimedb.reducer(
     }
   }
 );
+
+// ---------- work orders (#23) ----------
+
+// Admin: seed or update a work order. openedAt is ISO-8601, or '' for three hours ago.
+export const upsertIssue = spacetimedb.reducer(
+  { adminToken: t.string(), issueId: t.string(), title: t.string(), assetId: t.string(), openedBy: t.string(), openedAt: t.string(), status: t.string() },
+  (ctx, { adminToken, issueId, title, assetId, openedBy, openedAt, status }) => {
+    if (adminToken !== (ctx.env.ADMIN_TOKEN ?? ctx.env.INGEST_TOKEN)) throw new SenderError('unauthorized');
+    const id = issueId.trim();
+    if (!id) throw new SenderError('missing_issue_id');
+    const st = ['open', 'in_progress', 'resolved'].includes(status) ? status : 'open';
+    const now = ctx.timestamp.microsSinceUnixEpoch;
+    const openedMicros = microsFromIso(openedAt) ?? now - 3n * 3600n * 1_000_000n;
+    const existing = ctx.db.issue.issueId.find(id);
+    const row = {
+      issueId: id,
+      title,
+      assetId: assetId.trim(),
+      openedBy,
+      openedMicros,
+      status: st,
+      resolvedEventId: st === 'resolved' ? existing?.resolvedEventId : undefined,
+      resolvedMicros: st === 'resolved' ? (existing?.resolvedMicros ?? now) : undefined,
+      resolutionNote: st === 'resolved' ? existing?.resolutionNote : undefined,
+    };
+    if (existing) ctx.db.issue.issueId.update(row);
+    else ctx.db.issue.insert(row);
+  }
+);
+
+// UI: set a work order's status by hand, optionally citing the photo that justifies it.
+export const setIssueStatus = spacetimedb.reducer(
+  { issueId: t.string(), status: t.string(), note: t.string(), eventId: t.string() },
+  (ctx, { issueId, status, note, eventId }) => {
+    const i = ctx.db.issue.issueId.find(issueId);
+    if (!i) throw new SenderError('not_found');
+    if (!['open', 'in_progress', 'resolved'].includes(status)) throw new SenderError('bad_status');
+    const resolved = status === 'resolved';
+    ctx.db.issue.issueId.update({
+      ...i,
+      status,
+      resolvedEventId: resolved ? (eventId || i.resolvedEventId) : undefined,
+      resolvedMicros: resolved ? ctx.timestamp.microsSinceUnixEpoch : undefined,
+      resolutionNote: resolved ? (note || i.resolutionNote) : undefined,
+    });
+  }
+);
+
+// UI: acknowledge an alert and record the photo that shows why.
+export const ackAlertWithEvidence = spacetimedb.reducer({ alertId: t.u64(), eventId: t.string() }, (ctx, { alertId, eventId }) => {
+  const a = ctx.db.alert.alertId.find(alertId);
+  if (!a) throw new SenderError('not_found');
+  const ev = ctx.db.event.eventId.find(eventId);
+  if (!ev) throw new SenderError('event_not_found');
+  const now = ctx.timestamp.microsSinceUnixEpoch;
+  if (!a.acked) ctx.db.alert.alertId.update({ ...a, acked: true, ackedMicros: now });
+  ctx.db.alertResolution.insert({ id: 0n, alertId, eventId, deviceId: ev.deviceId, tMicros: now, how: 'manual' });
+});

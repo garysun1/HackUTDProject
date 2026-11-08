@@ -53,6 +53,17 @@ export interface AEpisode {
   summary: string;
   eventIds: string[];
 }
+export interface AIssue {
+  id: string;
+  title: string;
+  assetId: string;
+  assetName: string;
+  status: string; // open | in_progress | resolved
+  openedBy: string;
+  openedMicros: bigint;
+  resolvedEventId: string;
+  resolutionNote: string;
+}
 export interface AgentIndex {
   now: bigint;
   events: AEvent[]; // oldest first
@@ -61,12 +72,13 @@ export interface AgentIndex {
   alerts: AAlert[];
   episodes: AEpisode[];
   lastHandoff: string | null;
+  issues: AIssue[];
 }
 
-export function makeIndex(now: bigint, events: AEvent[], entities: AEntity[], alerts: AAlert[], episodes: AEpisode[], lastHandoff: string | null): AgentIndex {
+export function makeIndex(now: bigint, events: AEvent[], entities: AEntity[], alerts: AAlert[], episodes: AEpisode[], lastHandoff: string | null, issues: AIssue[] = []): AgentIndex {
   const sorted = [...events].sort((a, b) => (a.t < b.t ? -1 : a.t > b.t ? 1 : 0));
   const eps = [...episodes].sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0));
-  return { now, events: sorted, byId: new Map(sorted.map(e => [e.id, e])), entities, alerts, episodes: eps, lastHandoff };
+  return { now, events: sorted, byId: new Map(sorted.map(e => [e.id, e])), entities, alerts, episodes: eps, lastHandoff, issues };
 }
 
 // ---------- small helpers ----------
@@ -179,7 +191,7 @@ export const TOOL_SPECS = [
   { name: 'explain_change', description: 'How an asset got to its current state: its recorded changes in order with the events that evidence them.', parameters: { type: 'object', properties: { entity: { type: 'string' } }, required: ['entity'] } },
   { name: 'get_provenance', description: 'The full record behind an event id (or its first 8 characters): wearer, place, perception fields, text read, changes, note.', parameters: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] } },
   { name: 'wearer_rounds', description: 'What one wearer did: their photos in order, where they were last, which assets and places they covered. Use for questions about a person on shift by the name the record uses.', parameters: { type: 'object', properties: { wearer: { type: 'string' }, since: { type: 'string' } }, required: ['wearer'] } },
-  { name: 'list_open_alerts', description: 'Alerts that nobody has acknowledged: asset, what was seen, since when, by whom, event id.', parameters: { type: 'object', properties: {} } },
+  { name: 'list_open_alerts', description: 'Alerts nobody has acknowledged and work orders not yet resolved: asset, what was seen or reported, since when, by whom, event id. Resolved ones are listed with the photo that closed them.', parameters: { type: 'object', properties: {} } },
   { name: 'summarize_handoff', description: 'The shift handoff: needs attention, what changed, rounds, notes, quiet assets, every line citing an event.', parameters: { type: 'object', properties: { since: { type: 'string', description: 'window start; empty for the latest handoff' } } } },
 ] as const;
 
@@ -191,10 +203,15 @@ function openAlertsOut(idx: AgentIndex) {
   return idx.alerts.filter(a => !a.acked).map(a => ({ alert_id: a.alertId.toString(), asset: a.entityName || 'unassigned', text: a.text, since: clockCT(a.t), wearer: a.wearer, event: a.eventId }));
 }
 
+function issuesOut(idx: AgentIndex) {
+  return idx.issues.map(i => ({ work_order: i.id, title: i.title, asset: i.assetName || i.assetId, status: i.status, opened_by: i.openedBy, opened: clockCT(i.openedMicros), ...(i.resolvedEventId ? { resolved_by_event: i.resolvedEventId, resolution: i.resolutionNote } : {}) }));
+}
+
 function toHandoffSnap(idx: AgentIndex, from: bigint): HandoffSnap {
   const events: HEvent[] = idx.events.filter(e => e.t >= from).map(e => ({ id: e.id, t: e.t, wearer: e.wearer, assets: e.assets, place: e.place, summary: e.summary, note: e.note, label: e.label, changes: e.changes.map(c => `${c.entity}${c.attr ? ' ' + c.attr : ''}: ${c.from} -> ${c.to}`) }));
   const alerts: HAlert[] = idx.alerts.filter(a => !a.acked || a.t >= from).map(a => ({ t: a.t, open: !a.acked, asset: a.entityName || a.entityId || 'unassigned', text: a.text, eventId: a.eventId, wearer: a.wearer }));
-  return { sinceMicros: from, anchor: from > 0n ? clockCT(from) : 'the start of the record', events, alerts, total: events.length };
+  const issues = idx.issues.map(i => ({ id: i.id, title: i.title, asset: i.assetName || i.assetId, status: i.status, openedBy: i.openedBy, resolvedEventId: i.resolvedEventId, resolutionNote: i.resolutionNote }));
+  return { sinceMicros: from, anchor: from > 0n ? clockCT(from) : 'the start of the record', events, alerts, total: events.length, issues };
 }
 
 /** Run one tool. Always returns a JSON-able object; unknown tools and bad arguments return an error field. */
@@ -256,7 +273,7 @@ export function runTool(idx: AgentIndex, name: string, args: Record<string, unkn
       const last = idx.events[idx.events.length - 1];
       if (!last) return { note: 'no events yet' };
       const ageMin = Number((idx.now - last.t) / 60_000_000n);
-      return { latest: eventOut(last, true), minutes_ago: ageMin, open_alerts: openAlertsOut(idx) };
+      return { latest: eventOut(last, true), minutes_ago: ageMin, open_alerts: openAlertsOut(idx), open_work_orders: issuesOut(idx).filter(w => w.status !== 'resolved') };
     }
     case 'explain_change': {
       const entity = String(a.entity ?? '').trim();
@@ -292,8 +309,11 @@ export function runTool(idx: AgentIndex, name: string, args: Record<string, unkn
       }
       return { wearer: match[0], photos: mine.length, first: { time: clockCT(mine[0].t), event: mine[0].id }, last_seen: eventOut(mine[mine.length - 1]), places, assets, recent: mine.slice(-6).map(e => eventOut(e)) };
     }
-    case 'list_open_alerts':
-      return { open: openAlertsOut(idx) };
+    case 'list_open_alerts': {
+      const resolved = idx.alerts.filter(a => a.acked).slice(-10).map(a => ({ asset: a.entityName || 'unassigned', text: a.text, since: clockCT(a.t), event: a.eventId, acknowledged: true }));
+      const wo = issuesOut(idx);
+      return { open: openAlertsOut(idx), work_orders_open: wo.filter(w => w.status !== 'resolved'), work_orders_resolved: wo.filter(w => w.status === 'resolved'), alerts_acknowledged: resolved };
+    }
     case 'summarize_handoff': {
       const since = typeof a.since === 'string' ? a.since.trim() : '';
       if (!since && idx.lastHandoff) return { handoff: idx.lastHandoff, source: 'cached' };
