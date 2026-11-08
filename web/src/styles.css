@@ -352,3 +352,4 @@ body[data-conn="connecting"] .col, body[data-conn="error"] .col { opacity: .7; }
 .map-wearers .chip[aria-pressed="false"] { border: 0; background: transparent; }
 @media (max-width: 1100px) { .map-wearers { right: calc(300px + 24px); } }
 .floor:has(.drawer:not([hidden])) .map-wearers { right: 12px; }
+.s3-brain .s3-credit { flex: 0 0 auto; padding: 5px 14px; border-top: 1px solid var(--line-soft); color: var(--ink-4); font-size: 10.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
