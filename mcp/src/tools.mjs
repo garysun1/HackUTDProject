@@ -1,7 +1,7 @@
 // The eight memory tools plus alert helpers. Facts come from the graph; prose is minimal
 // and every line carries a citation that resolves to an event and its photo.
 import { z } from 'zod';
-import { snapshot, matchEntity, cite, imageBlock, fmtTime, fmtDateTime, parseSince, perception, hasProcedure, call, handoffs, eventsWithEmbedding } from './db.mjs';
+import { snapshot, matchEntity, cite, imageBlock, fmtTime, fmtDateTime, parseSince, perception, hasProcedure, call, handoffs, eventsWithEmbedding, logQuestion, citedIds } from './db.mjs';
 
 const text = t => ({ type: 'text', text: t });
 const json = o => ({ type: 'text', text: JSON.stringify(o, null, 2) });
@@ -29,7 +29,17 @@ async function textEmbedding(q) {
 }
 const cosine = (a, b) => { let d = 0, na = 0, nb = 0; for (let i = 0; i < Math.min(a.length, b.length); i++) { d += a[i] * b[i]; na += a[i] * a[i]; nb += b[i] * b[i]; } return na && nb ? d / Math.sqrt(na * nb) : 0; };
 
+// Tools that answer a question are logged to the module's question table with the moments they
+// cited, so the console can show the memory being used (decision 0031). Best effort, needs a token.
+const QUESTION_OF = { search_memory: a => a.query, what_changed: a => `what changed on ${a.entity}`, find_object: a => `where is ${a.name}`, explain_change: a => `explain the change on ${a.entity}`, ask_floor: a => a.question, get_current_context: () => 'what is happening right now', summarize_handoff: a => `handoff${a?.since ? ` since ${a.since}` : ''}` };
 export function register(server) {
+  const registerRaw = server.registerTool.bind(server);
+  server.registerTool = (name, cfg, handler) => registerRaw(name, cfg, async (args, extra) => {
+    const res = await handler(args, extra);
+    const q = QUESTION_OF[name];
+    if (q) { const txt = (res?.content || []).filter(c => c.type === 'text').map(c => c.text).join('\n'); snapshot().then(snap => logQuestion(name, q(args || {}), txt, citedIds(snap, txt), extra?.requestInfo?.headers?.['user-agent'] ? 'mcp client' : 'Claude Desktop')).catch(() => {}); }
+    return res;
+  });
   server.registerTool('search_memory', {
     title: 'Search the floor memory',
     description: 'Find photographed events matching a query (text in the scene, objects, places, notes, summaries). Returns ranked events with citations and the top photo.',

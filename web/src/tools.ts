@@ -3,6 +3,7 @@
 import { state, displayName, notify } from './store';
 import { esc } from './timeline';
 import { view, setMode, startReplay, stopReplay, scrubReplay, emitView, shownEvents, onView } from './view';
+import { vocab } from './workspaces';
 
 const tools = document.getElementById('floor-tools') as HTMLElement;
 export let fitRequested = 0; // bumped when the user asks to fit; the views compare against their own copy
@@ -22,7 +23,7 @@ export function renderTools(userView: boolean) {
   const traced = state.assetFilter && state.entities.get(state.assetFilter); const tracedName = traced ? displayName(traced) : '';
   const tracedCount = traced ? shownEvents().filter(e => state.edges.some(x => x.fromId === e.eventId && x.toId === traced.entityId)).length : 0;
   const hasMap = state.locations.size > 0;
-  const k = `${view.mode}|${hasMap}|${view.replay.on}|${view.replay.playing}|${tracedName}|${tracedCount}|${userView}`;
+  const k = `${view.mode}|${vocab().session}|${hasMap}|${view.replay.on}|${view.replay.playing}|${tracedName}|${tracedCount}|${userView}`;
   if (k !== key) {
     key = k;
     tools.innerHTML =
@@ -31,7 +32,7 @@ export function renderTools(userView: boolean) {
         ? `<label class="scrub" title="Scrub the shift"><input type="range" min="0" max="1000" value="${Math.round(view.replay.progress * 1000)}" data-scrub aria-label="Replay position"></label><button type="button" class="btn ghost" data-live>Live</button>`
         : `<button type="button" class="btn ghost" data-replay title="Rebuild the shift from the first photo">▶ Replay</button>`) +
       (userView ? `<button type="button" class="btn ghost" data-fit title="Fit everything in view">Fit</button>` : '') +
-      `<span class="seg" role="group" aria-label="View"><button type="button" data-mode="map" aria-pressed="${view.mode === 'map'}" ${hasMap ? '' : 'title="No photo has a position yet"'}>Map</button><button type="button" data-mode="graph" aria-pressed="${view.mode === 'graph'}">Shift</button></span>`;
+      `<span class="seg" role="group" aria-label="View"><button type="button" data-mode="map" aria-pressed="${view.mode === 'map'}" ${hasMap ? '' : 'title="No photo has a position yet"'}>Map</button><button type="button" data-mode="graph" aria-pressed="${view.mode === 'graph'}">${esc(vocab().session)}</button></span>`;
   }
   const s = tools.querySelector('[data-scrub]') as HTMLInputElement | null; if (s && view.replay.playing) s.value = String(Math.round(view.replay.progress * 1000));
 }

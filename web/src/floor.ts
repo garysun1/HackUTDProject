@@ -10,6 +10,7 @@ import { select, esc } from './timeline';
 import { view as vs, shownEvents, setScope, onView } from './view';
 import { photoCard, showTip, hideTip } from './card';
 import { fitRequested } from './tools';
+import { vocab, typeWords } from './workspaces';
 
 const canvas = document.getElementById('floor') as HTMLCanvasElement;
 const empty = document.getElementById('floor-empty') as HTMLElement;
@@ -33,6 +34,8 @@ let drag: { sx: number; sy: number; tx: number; ty: number; moved: boolean } | n
 
 type Node = { id: string; kind: 'equipment' | 'issue'; label: string; sub: string; photos: string[]; alert?: Alert; x: number; y: number; w: number; lane: number; open: boolean };
 type Note = { id: string; text: string; x: number; y: number; w: number; lane: number };
+type Q = { id: string; text: string; answer: string; photos: string[]; x: number; y: number; w: number; lane: number; t: bigint };
+const Q_W = 230, Q_H = 46;
 type Hit = { kind: 'photo' | 'node'; id: string; x0: number; y0: number; x1: number; y1: number };
 let hits: Hit[] = [];
 
@@ -57,14 +60,13 @@ readTokens(); matchMedia('(prefers-color-scheme: dark)').addEventListener('chang
 const withAlpha = (hex: string, a: number) => { const m = /^#([0-9a-f]{6})$/i.exec(hex); if (!m) return hex; const n = parseInt(m[1], 16); return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${a})`; };
 
 // ---------- plain words ----------
-const TYPE_WORDS: Record<string, string> = { pdu: 'power distribution unit', rack: 'server rack', crac: 'cooling unit', switch: 'network switch', ups: 'battery backup', breaker: 'circuit breaker', transformer: 'transformer', freezer: 'freezer', fridge: 'refrigerator', refrigerator: 'refrigerator', cnc: 'machining center', machine: 'machine', racking: 'storage racking', dock: 'loading dock', panel: 'electrical panel', generator: 'generator', chiller: 'chiller', pump: 'pump', valve: 'valve', sensor: 'sensor', camera: 'camera', door: 'door' };
 const slug = (name: string) => name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
 const registryOf = (ent: Ent) => state.assets.get(ent.entityId.toUpperCase().replace(/_/g, '-'));
 /** "Power unit A, Rack R12" + "power distribution unit · PDU-A". The code is secondary. */
 function equipmentWords(ent: Ent): { label: string; sub: string } {
   const a = registryOf(ent);
-  if (a) { const kind = TYPE_WORDS[(a.assetType || '').toLowerCase()] ?? (a.assetType || '').toLowerCase(); const loc = a.location ? a.location.split('/').pop()!.trim() : ''; return { label: a.name, sub: [kind, loc && !a.name.toLowerCase().includes(loc.toLowerCase()) ? loc : '', a.assetId].filter(Boolean).join(' · ') }; }
-  return { label: ent.canonicalName, sub: ent.kind === 'asset' ? 'equipment' : 'labelled by the wearer' };
+  if (a) { const kind = typeWords(a.assetType); const loc = a.location ? a.location.split('/').pop()!.trim() : ''; return { label: a.name, sub: [kind, loc && !a.name.toLowerCase().includes(loc.toLowerCase()) ? loc : '', a.assetId].filter(Boolean).join(' · ') }; }
+  return { label: ent.canonicalName, sub: ent.kind === 'asset' ? vocab().tracked.toLowerCase() : 'labelled by the wearer' };
 }
 /** "PSU 2 fault" from alert text like "FAULT" / "PSU2 OK → PSU2 FAULT" / "status: ... → ..." */
 function issueWords(a: Alert): string {
@@ -96,7 +98,7 @@ addEventListener('mouseup', e => {
   if (!drag) return; const moved = drag.moved; drag = null; if (moved || e.target !== canvas) return;
   const r = canvas.getBoundingClientRect(); const h = hit(e.clientX - r.left, e.clientY - r.top);
   if (!h) { if (state.selected) select(null); return; }
-  if (h.kind === 'photo') select(h.id); else { const n = nodeById.get(h.id); const ent = n?.kind === 'issue' ? n.alert?.assetId : h.id; if (ent) { state.assetFilter = state.assetFilter === ent ? null : ent; notify(); } }
+  if (h.kind === 'photo') select(h.id); else if (h.id.startsWith('q:')) { const q = state.questions.get(h.id.slice(2)); if (q?.eventIds[0]) select(q.eventIds[0]); } else { const n = nodeById.get(h.id); const ent = n?.kind === 'issue' ? n.alert?.assetId : h.id; if (ent) { state.assetFilter = state.assetFilter === ent ? null : ent; notify(); } }
 });
 canvas.addEventListener('mouseleave', () => { hover = null; hideTip(); frame(); });
 canvas.addEventListener('dblclick', () => { userView = false; frame(); });
@@ -119,6 +121,7 @@ addEventListener('resize', () => frame());
 
 const nodeById = new Map<string, Node>();
 function nodeCard(id: string): string {
+  if (id.startsWith('q:')) { const q = state.questions.get(id.slice(2)); if (!q) return ''; return `<div class="tb"><div class="tt"><b>Asked ${fmtTime(q.tMicros)}</b> · ${esc(q.asker || q.source)} · ${esc(q.tool.replace(/_/g, ' '))}</div><div class="ts">${esc(q.text)}</div><div class="tn">${esc(q.answer)}</div></div>`; }
   const n = nodeById.get(id); if (!n) return '';
   const last = n.photos.map(p => state.events.get(p)!).sort((a, b) => (a.tMicros < b.tMicros ? 1 : -1))[0];
   const head = n.kind === 'issue' ? `<span class="ta">${esc(n.label)}</span>` : `<b>${esc(n.label)}</b>`;
@@ -126,7 +129,7 @@ function nodeCard(id: string): string {
 }
 
 // ---------- layout ----------
-type Layout = { chrono: Ev[]; xOf: Map<string, number>; breaks: { x: number; minutes: number }[]; nodes: Node[]; notes: Note[]; changes: { from: string; to: string; text: string; entity: string }[]; lanesUp: number; lanesDown: number; spineY: number; width: number };
+type Layout = { chrono: Ev[]; xOf: Map<string, number>; breaks: { x: number; minutes: number }[]; nodes: Node[]; notes: Note[]; questions: Q[]; changes: { from: string; to: string; text: string; entity: string }[]; lanesUp: number; lanesDown: number; spineY: number; width: number };
 function layout(evs: Ev[]): Layout {
   const chrono = [...evs].reverse();
   const xOf = new Map<string, number>(); const breaks: Layout['breaks'] = []; let x = 90;
@@ -151,7 +154,7 @@ function layout(evs: Ev[]): Layout {
     const until = a.acked && a.ackedMicros ? a.ackedMicros : null;
     for (const e of chrono) if (e.eventId !== a.eventId && e.tMicros > raised.tMicros && (until === null || e.tMicros <= until) && a.assetId && edgesFrom(e.eventId, 'INVOLVES').some(ed => ed.toId === a.assetId)) photos.push(e.eventId);
     const ent = a.assetId ? state.entities.get(a.assetId) : undefined; const where = ent ? equipmentWords(ent).label : a.assetName || '';
-    issues.push({ id: `alert:${a.id}`, kind: 'issue', label: issueWords(a), sub: where ? `on ${where}` : 'problem seen', photos, alert: a, x: 0, y: 0, w: 0, lane: 0, open: !a.acked });
+    issues.push({ id: `alert:${a.id}`, kind: 'issue', label: issueWords(a), sub: where ? `${vocab().flag.toLowerCase()} on ${where}` : vocab().flag.toLowerCase(), photos, alert: a, x: 0, y: 0, w: 0, lane: 0, open: !a.acked });
   }
   // open issues nearest the line, then equipment by first appearance; lanes packed by horizontal overlap
   ctx.font = '500 12.5px Inter, sans-serif';
@@ -175,10 +178,20 @@ function layout(evs: Ev[]): Layout {
     changes.push({ from: prev.eventId, to: e.eventId, text: text.length > 48 ? text.slice(0, 47) + '…' : text, entity: name });
   }
   const arcTop = changes.length ? 92 : 40; // room for change arcs and their text between the line and the first lane
+  // questions asked of this memory, placed under the photos that answered them
+  const questions: Q[] = []; const qrows: { x0: number; x1: number }[][] = [];
+  for (const q of [...state.questions.values()].sort((a, b) => (a.tMicros < b.tMicros ? -1 : 1))) {
+    const photos = q.eventIds.filter(id => xOf.has(id)); if (!photos.length) continue;
+    const xs = photos.map(p => xOf.get(p)!); const cx = (Math.min(...xs) + Math.max(...xs)) / 2; const x0 = cx - Q_W / 2;
+    let l = 0; for (; ; l++) { const row = qrows[l] ?? (qrows[l] = []); if (!row.some(r => x0 < r.x1 + 12 && x0 + Q_W > r.x0 - 12)) { row.push({ x0, x1: x0 + Q_W }); break; } }
+    questions.push({ id: q.questionId, text: q.text, answer: q.answer, photos, x: cx, y: 0, w: Q_W, lane: l, t: q.tMicros });
+  }
   const spineY = Math.max(170, 40 + lanesUp * LANE + arcTop + PH / 2);
   for (const n of nodes) n.y = spineY - PH / 2 - arcTop - n.lane * LANE;
   for (const n of notes) n.y = spineY + PH / 2 + 44 + n.lane * (NOTE_H + 10);
-  return { chrono, xOf, breaks, nodes, notes, changes, lanesUp, lanesDown: rows.length, spineY, width };
+  const qTop = spineY + PH / 2 + 44 + rows.length * (NOTE_H + 10) + (rows.length ? 16 : 0);
+  for (const q of questions) q.y = qTop + q.lane * (Q_H + 12);
+  return { chrono, xOf, breaks, nodes, notes, questions, changes, lanesUp, lanesDown: rows.length + questions.length, spineY, width };
 }
 
 // ---------- render ----------
@@ -208,7 +221,7 @@ export function renderFloor() {
   const px = new Map<string, { x: number; a: number; t0: number }>(); for (const e of L.chrono) px.set(e.eventId, ax(e.eventId));
 
   // view: fit while readable; otherwise keep the newest at the right or centre the selection
-  const contentH = L.spineY + PH / 2 + 44 + L.lanesDown * (NOTE_H + 10) + 40; const x0 = 0, x1 = L.width;
+  const contentH = (L.questions.length ? Math.max(...L.questions.map(q => q.y)) + Q_H : L.spineY + PH / 2 + 44 + L.lanesDown * (NOTE_H + 10)) + 40; const x0 = 0, x1 = L.width;
   if (!userView) {
     const m = 24; const kFit = Math.min((W - 2 * m) / Math.max(200, x1 - x0), (H - 2 * m) / Math.max(200, contentH));
     const MIN = 0.62; const selX = state.selected && L.xOf.has(state.selected) ? L.xOf.get(state.selected)! : null;
@@ -320,6 +333,17 @@ export function renderFloor() {
     ctx.font = '11px "JetBrains Mono", monospace'; ctx.fillStyle = C.ink3; ctx.textAlign = 'center'; ctx.textBaseline = 'top'; ctx.fillText(fmtTime(e.tMicros), p.x, y0 + PH + 6);
     ctx.font = '10.5px Inter, sans-serif'; ctx.fillStyle = C.ink4; ctx.fillText(fit(wearerName(e.deviceId), PW + 30), p.x, y0 + PH + 20); ctx.textBaseline = 'middle';
     hits.push({ kind: 'photo', id: e.eventId, x0, y0, x1: x0 + PW, y1: y0 + PH + 32 });
+  }
+  // questions: dashed threads up to the moments that answered, then the card
+  for (const q of L.questions) {
+    const fresh = state.fresh.has('q:' + q.id); const accent = cssVar('--accent');
+    for (const p of q.photos) { const pp = px.get(p)!; ctx.globalAlpha = 0.7 * dim(p); ctx.strokeStyle = accent; ctx.lineWidth = 1; ctx.setLineDash([3, 4]); const y0 = L.spineY + PH / 2 + 34, y1 = q.y; const my = (y0 + y1) / 2; ctx.beginPath(); ctx.moveTo(pp.x, y0); ctx.bezierCurveTo(pp.x, my, q.x, my, q.x, y1); ctx.stroke(); ctx.setLineDash([]); }
+    ctx.globalAlpha = 1; const x0 = q.x - q.w / 2;
+    ctx.fillStyle = withAlpha(accent, C.dark ? 0.16 : 0.07); ctx.strokeStyle = withAlpha(accent, fresh ? 0.9 : 0.45); ctx.lineWidth = fresh ? 1.5 : 1; roundRect(x0, q.y, q.w, Q_H, 7); ctx.fill(); ctx.stroke();
+    ctx.font = '600 10px Inter, sans-serif'; ctx.fillStyle = accent; ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText('ASKED', x0 + 10, q.y + 6);
+    ctx.font = '500 11.5px Inter, sans-serif'; ctx.fillStyle = C.ink; ctx.fillText(fit(q.text.charAt(0).toUpperCase() + q.text.slice(1), q.w - 60), x0 + 50, q.y + 5);
+    ctx.font = '11px Inter, sans-serif'; ctx.fillStyle = C.ink3; ctx.fillText(fit(q.answer, q.w - 20), x0 + 10, q.y + 25); ctx.textBaseline = 'middle';
+    hits.push({ kind: 'node', id: 'q:' + q.id, x0, y0: q.y, x1: x0 + q.w, y1: q.y + Q_H });
   }
   // notes below the line
   for (const n of L.notes) {

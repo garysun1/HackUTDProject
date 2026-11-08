@@ -8,12 +8,15 @@
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
-  <script type="module" crossorigin src="/assets/index-JNWNxR9K.js"></script>
-  <link rel="stylesheet" crossorigin href="/assets/index-BhbTKvko.css">
+  <script type="module" crossorigin src="/assets/index-C_525aPe.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-DWcSCd-o.css">
 </head>
 <body>
 <header class="top">
-  <div class="brand"><span class="mark" aria-hidden="true"></span><h1>Shift Memory</h1><span class="db" id="db"></span></div>
+  <div class="brand"><span class="mark" aria-hidden="true"></span><h1>Shift Memory</h1>
+    <div class="ws"><button class="ws-btn" id="ws-btn" type="button" aria-haspopup="menu" aria-expanded="false"><span class="ws-name" id="ws-name">Workspace</span><span class="ws-sub" id="ws-sub"></span><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 4.5 6 7.5 9 4.5"/></svg></button>
+      <div class="ws-menu" id="ws-menu" role="menu" hidden></div></div>
+    <span class="db" id="db" hidden></span></div>
   <div class="status" id="conn" data-state="connecting"><span class="dot"></span><span id="conn-text">connecting</span></div>
   <div class="filters">
     <label class="sel">Window <select id="window"><option value="all">all time</option><option value="720">this shift (12 h)</option><option value="60">last 60 min</option><option value="180">last 3 h</option><option value="480">last 8 h</option></select></label>

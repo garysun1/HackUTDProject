@@ -27,7 +27,7 @@ cd module && node --experimental-strip-types --test test/rules.test.ts
    posting again.
 5. New alerts post to Slack through `SLACK_WEBHOOK_URL`; the result is in `alert.slack_status`.
 
-## Datasets (decision 0029)
+## Datasets and workspaces (decisions 0029, 0031)
 
 Six databases run this module: `wm-physical` (the real capture) and five synthetic floors,
 `wm-nmc2`, `wm-plant`, `wm-hospital`, `wm-substation`, `wm-warehouse`, replayed from
@@ -47,6 +47,11 @@ with a synthetic walk and shift track, waits for perception):
 ```bash
 INGEST_TOKEN=... node demo/synth/replay.mjs nmc2-datacenter --db wm-nmc2
 ```
+
+The console also has a workspace switcher in its top bar (names, vocabulary and type words in
+`web/src/workspaces.ts`) that swaps databases client-side; `demo_config` remains the default for
+any console that has not chosen. Questions asked over MCP land in the `question` table through
+`log_question` (ingest token) and appear on the shift line under the photos that answered them.
 
 Publishing a new module version goes to all six (`spacetime publish <db> -s maincloud`); each
 database keeps its own env, so pass the keys on the first publish of a new database.

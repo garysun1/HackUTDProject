@@ -5,7 +5,9 @@ import { DbConnection } from './module_bindings';
 // (decision 0029). `?db=` in the URL pins one and ignores the switch.
 export const DIRECTORY_DB = 'wm-physical';
 const pinned = new URLSearchParams(location.search).get('db');
-export let DB = pinned || DIRECTORY_DB;
+let chosen: string | null = null; try { chosen = localStorage.getItem('wm.db'); } catch { /* private mode */ }
+export let DB = pinned || chosen || DIRECTORY_DB;
+export function dbChosen() { return !!(pinned || chosen); }
 export const HOST = 'https://maincloud.spacetimedb.com';
 export const WS = 'wss://maincloud.spacetimedb.com';
 
@@ -22,6 +24,7 @@ export type Alert = { id: string; alertId: bigint; eventId: string; kind: 'criti
 export type Wearer = { deviceId: string; name: string; role: string; shift: string };
 export type Asset = { assetId: string; name: string; assetType: string; location: string; patterns: string[] };
 export type Loc = { eventId: string; deviceId: string; shiftId: string; tMicros: bigint; lat: number; lon: number; accuracyM: number; altM?: number; floor?: number; fixT: string; ageMs?: number };
+export type Question = { questionId: string; tMicros: bigint; source: string; tool: string; text: string; answer: string; eventIds: string[]; asker: string };
 export type TrackPoint = { pointId: string; deviceId: string; shiftId: string; tMicros: bigint; kind: string; lat: number; lon: number; accuracyM: number; floor?: number };
 
 export const state = {
@@ -36,6 +39,7 @@ export const state = {
   photos: new Map<string, string>(), // eventId -> data URL
   locations: new Map<string, Loc>(), // eventId -> where the photo was taken (#20)
   track: new Map<string, TrackPoint>(), // pointId -> shift track point (#20)
+  questions: new Map<string, Question>(), // what was asked of the memory (decision 0031)
   selected: null as string | null,
   windowMin: 0 as number, // 0 = all
   hiddenWearers: new Set<string>(),
@@ -133,7 +137,7 @@ type OnState = (s: 'connecting' | 'live' | 'error', msg?: string) => void;
 let generation = 0; let dataConn: any = null;
 function resetState() {
   state.events.clear(); state.entities.clear(); state.edges = []; state.episodes.clear(); state.handoffs = []; state.alerts.clear();
-  state.wearers.clear(); state.assets.clear(); state.photos.clear(); state.locations.clear(); state.track.clear();
+  state.wearers.clear(); state.assets.clear(); state.photos.clear(); state.locations.clear(); state.track.clear(); state.questions.clear();
   state.selected = null; state.fresh.clear(); state.assetFilter = null; state.hiddenWearers.clear();
 }
 function connectData(onState: OnState) {
@@ -173,19 +177,31 @@ function connectData(onState: OnState) {
       const toPt = (r: any): TrackPoint => ({ pointId: String(r.pointId), deviceId: r.deviceId, shiftId: r.shiftId, tMicros: BigInt(r.tMicros), kind: r.kind, lat: Number(r.lat), lon: Number(r.lon), accuracyM: Number(r.accuracyM), floor: r.floor ?? undefined });
       conn.db.trackPoint.onInsert(on((_c: any, r: any) => { const p = toPt(r); state.track.set(p.pointId, p); notify(); }));
       conn.db.trackPoint.onDelete(on((_c: any, r: any) => { state.track.delete(String(r.pointId)); notify(); }));
+      const toQ = (r: any): Question => ({ questionId: String(r.questionId), tMicros: BigInt(r.tMicros), source: r.source, tool: r.tool, text: r.text, answer: r.answer, eventIds: [...r.eventIds], asker: r.asker });
+      conn.db.question.onInsert(on((_c: any, r: any) => { const q = toQ(r); state.questions.set(q.questionId, q); state.fresh.add('q:' + q.questionId); setTimeout(() => { state.fresh.delete('q:' + q.questionId); notify(); }, 1500); notify(); }));
+      conn.db.question.onDelete(on((_c: any, r: any) => { state.questions.delete(String(r.questionId)); notify(); }));
       conn.db.wearer.onInsert(on((_c: any, r: any) => { state.wearers.set(r.deviceId, { ...r }); notify(); }));
       conn.db.wearer.onUpdate(on((_c: any, _o: any, r: any) => { state.wearers.set(r.deviceId, { ...r }); notify(); }));
       conn.db.asset.onInsert(on((_c: any, r: any) => { state.assets.set(r.assetId, { ...r, patterns: [...r.patterns] }); notify(); }));
       conn.db.asset.onUpdate(on((_c: any, _o: any, r: any) => { state.assets.set(r.assetId, { ...r, patterns: [...r.patterns] }); notify(); }));
       conn.subscriptionBuilder()
         .onApplied(() => { if (live()) notify(); })
-        .subscribe(['SELECT * FROM event', 'SELECT * FROM entity', 'SELECT * FROM edge', 'SELECT * FROM episode', 'SELECT * FROM handoff', 'SELECT * FROM alert', 'SELECT * FROM wearer', 'SELECT * FROM asset', 'SELECT * FROM event_location', 'SELECT * FROM track_point']);
+        .subscribe(['SELECT * FROM event', 'SELECT * FROM entity', 'SELECT * FROM edge', 'SELECT * FROM episode', 'SELECT * FROM handoff', 'SELECT * FROM alert', 'SELECT * FROM wearer', 'SELECT * FROM asset', 'SELECT * FROM event_location', 'SELECT * FROM track_point', 'SELECT * FROM question']);
     })
     .onConnectError((_ctx, err) => { if (live()) { state.connected = false; onState('error', String(err?.message ?? err)); } })
     .onDisconnect(() => { if (live()) { state.connected = false; onState('connecting', 'reconnecting'); } })
     .build();
 }
+let lastOnState: OnState | null = null;
+/** Switch the workspace from the UI. null = follow the server's demo_config again. */
+export function setDb(db: string | null) {
+  chosen = db; try { if (db) localStorage.setItem('wm.db', db); else localStorage.removeItem('wm.db'); } catch { /* ignore */ }
+  const next = pinned || chosen || serverDb || DIRECTORY_DB;
+  if (next !== DB) { DB = next; if (lastOnState) connectData(lastOnState); } else notify();
+}
+let serverDb: string | null = null;
 export function connect(onState: OnState) {
+  lastOnState = onState;
   connectData(onState);
   if (pinned) return;
   // Follow the switch: demo_config.active_dataset on the directory database. Changing it live
@@ -194,7 +210,7 @@ export function connect(onState: OnState) {
     .withUri(WS)
     .withDatabaseName(DIRECTORY_DB)
     .onConnect((conn) => {
-      const apply = (r: any) => { if (r.key !== 'active_dataset') return; const next = String(r.value || '').trim() || DIRECTORY_DB; if (next !== DB) { DB = next; connectData(onState); } };
+      const apply = (r: any) => { if (r.key !== 'active_dataset') return; serverDb = String(r.value || '').trim() || DIRECTORY_DB; if (chosen) return; if (serverDb !== DB) { DB = serverDb; connectData(onState); } };
       conn.db.demoConfig.onInsert((_c: any, r: any) => apply(r));
       conn.db.demoConfig.onUpdate((_c: any, _o: any, r: any) => apply(r));
       conn.subscriptionBuilder().subscribe(['SELECT * FROM demo_config']);

@@ -148,6 +148,18 @@ export const Pong = __t.object("Pong", {
 });
 export type Pong = __Infer<typeof Pong>;
 
+export const Question = __t.object("Question", {
+  questionId: __t.u64(),
+  tMicros: __t.u64(),
+  source: __t.string(),
+  tool: __t.string(),
+  text: __t.string(),
+  answer: __t.string(),
+  eventIds: __t.array(__t.string()),
+  asker: __t.string(),
+});
+export type Question = __Infer<typeof Question>;
+
 export const SlackTestResult = __t.object("SlackTestResult", {
   status: __t.string(),
 });

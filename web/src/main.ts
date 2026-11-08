@@ -1,4 +1,5 @@
-import { connect, onChange, state, visibleEvents, wearerColor, wearerName, notify, DB, fmtTime } from './store';
+import { connect, onChange, state, visibleEvents, wearerColor, wearerName, notify, DB, fmtTime, setDb, dbChosen, HOST } from './store';
+import { WORKSPACES, current, vocab } from './workspaces';
 import { renderTimeline } from './timeline';
 import { renderFloor, floorUserView } from './floor';
 import { renderRail } from './rail';
@@ -6,7 +7,7 @@ import { renderMap, mapUserView } from './map';
 import { renderTools } from './tools';
 import { view, setMode } from './view';
 
-const dbEl = document.getElementById('db')!; dbEl.textContent = DB;
+const dbEl = document.getElementById('db')!;
 const conn = document.getElementById('conn')!; const connText = document.getElementById('conn-text')!;
 const windowSel = document.getElementById('window') as HTMLSelectElement;
 const wearersEl = document.getElementById('wearers')!;
@@ -32,9 +33,33 @@ function renderChips() {
 }
 wearersEl.addEventListener('click', e => { const b = (e.target as HTMLElement).closest('.chip') as HTMLElement | null; if (!b) return; const ids = b.dataset.id!.split(','); const hidden = ids.every(id => state.hiddenWearers.has(id)); for (const id of ids) { if (hidden) state.hiddenWearers.delete(id); else state.hiddenWearers.add(id); } notify(); });
 
+// ---- workspace switcher: swaps the dataset client-side; the words follow the workspace ----
+const wsBtn = document.getElementById('ws-btn') as HTMLButtonElement; const wsMenu = document.getElementById('ws-menu') as HTMLElement;
+const wsName = document.getElementById('ws-name')!; const wsSub = document.getElementById('ws-sub')!;
+const counts = new Map<string, number>(); let countsAt = 0;
+async function refreshCounts() {
+  if (Date.now() - countsAt < 30_000) return; countsAt = Date.now();
+  await Promise.all(WORKSPACES.map(async w => { try { const r = await fetch(`${HOST}/v1/database/${w.db}/sql`, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: 'SELECT event_id FROM event' }); const [res] = await r.json(); counts.set(w.db, res?.rows?.length ?? 0); } catch { /* offline */ } }));
+  renderMenu();
+}
+function renderMenu() {
+  const cur = current();
+  wsMenu.innerHTML = `<div class="ws-head">Workspaces</div>` + WORKSPACES.map(w => `<button type="button" class="ws-item" role="menuitemradio" aria-checked="${w.db === cur.db}" data-db="${w.db}"><span class="n">${w.db === cur.db ? '<i class="dot"></i>' : ''}${w.name}${w.sample ? '<span class="tag">sample</span>' : ''}</span><span class="s">${w.subtitle}</span><span class="c">${counts.has(w.db) ? `${counts.get(w.db)} photo${counts.get(w.db) === 1 ? '' : 's'}` : ''}</span></button>`).join('') +
+    `<div class="ws-foot"><span>${dbChosen() ? 'Chosen here' : 'Following the server default'}</span>${dbChosen() ? '<button type="button" data-follow>Follow server default</button>' : ''}</div>`;
+}
+function renderWorkspace() { const w = current(); wsName.textContent = w.name; wsSub.textContent = w.subtitle; wsBtn.title = `${w.name} · ${w.db}`; dbEl.textContent = DB;
+  const h2 = document.querySelector('.floor .colhead h2'); if (h2) h2.textContent = vocab().session;
+  const lg = document.querySelector('.floor .legend'); if (lg) { const v = vocab(); lg.innerHTML = `<i class="k k-ph"></i>photo <i class="k k-as"></i>${v.tracked.toLowerCase()} <i class="k k-al"></i>${v.flag.toLowerCase()} <i class="k k-chg"></i>change <i class="k k-nt"></i>${v.note.toLowerCase()}${state.questions.size ? ' <i class="k k-q"></i>question' : ''}`; }
+}
+function openMenu(open: boolean) { wsMenu.hidden = !open; wsBtn.setAttribute('aria-expanded', String(open)); if (open) { renderMenu(); refreshCounts(); (wsMenu.querySelector('[aria-checked="true"]') as HTMLElement | null)?.focus(); } }
+wsBtn.addEventListener('click', () => openMenu(wsMenu.hidden));
+wsMenu.addEventListener('click', e => { const t = e.target as HTMLElement; const it = t.closest('[data-db]') as HTMLElement | null; if (it) { setDb(it.dataset.db!); openMenu(false); return; } if (t.closest('[data-follow]')) { setDb(null); openMenu(false); } });
+document.addEventListener('click', e => { if (!wsMenu.hidden && !(e.target as HTMLElement).closest('.ws')) openMenu(false); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && !wsMenu.hidden) { openMenu(false); wsBtn.focus(); } });
+
 onChange(() => {
   if (!view.modeChosen && state.locations.size && view.mode !== 'map') setMode('map', false); // the first positioned photo brings the map up
-  dbEl.textContent = DB; // follows the dataset switch
+  renderWorkspace(); // follows the dataset switch
   renderChips(); renderTimeline(); renderRail(); // detail panel first: it changes the canvas width
   renderTools(view.mode === 'map' ? mapUserView() : floorUserView()); renderMap(); renderFloor();
 });

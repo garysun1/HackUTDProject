@@ -112,9 +112,28 @@ export function matchEntity(snap, query) {
     .sort((a, b) => (b.kind === 'asset') - (a.kind === 'asset'));
 }
 
-export function cite(snap, e) { return `[event:${e.event_id.slice(0, 8)} ${fmtTime(e.t_micros)} ${snap.wearerName(e.device_id)}]`; }
+/** Shortest prefix (at least 8 chars) that names one event in this snapshot; synthetic ids share long prefixes. */
+export function shortId(snap, id) {
+  for (let n = 8; n <= id.length; n++) { const pre = id.slice(0, n); if (snap.events.filter(e => e.event_id.startsWith(pre)).length <= 1) return pre; }
+  return id;
+}
+export function cite(snap, e) { return `[event:${shortId(snap, e.event_id)} ${fmtTime(e.t_micros)} ${snap.wearerName(e.device_id)}]`; }
 
 export async function imageBlock(eventId) {
   const p = await photo(eventId); if (!p) return null;
   return { type: 'image', data: p.b64, mimeType: p.mime || 'image/jpeg' };
+}
+
+// ---------- questions: what was asked, answered by which moments (decision 0031) ----------
+// Needs INGEST_TOKEN (or ADMIN_TOKEN) in the environment; without it, nothing is logged.
+const QTOKEN = process.env.ADMIN_TOKEN || process.env.INGEST_TOKEN || '';
+export async function logQuestion(tool, text, answerText, eventIds, asker = 'mcp client') {
+  if (!QTOKEN || !text) return;
+  const answer = String(answerText || '').split('\n').find(l => l.trim()) || '';
+  try { await call('log_question', [QTOKEN, 'mcp', tool, String(text).slice(0, 400), answer.slice(0, 400), [...new Set(eventIds)].slice(0, 20), asker]); } catch { /* best effort */ }
+}
+/** Event ids cited in a block of answer text: [event:<id8> ...] back to full ids. */
+export function citedIds(snap, text) {
+  const out = []; for (const m of String(text || '').matchAll(/\[event:([0-9a-z-]{4,})/gi)) { const hits = snap.events.filter(x => x.event_id.startsWith(m[1])); if (hits.length === 1) out.push(hits[0].event_id); }
+  return out;
 }

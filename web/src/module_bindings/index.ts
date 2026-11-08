@@ -37,7 +37,9 @@ import {
 import AckAlertReducer from "./ack_alert_reducer";
 import DeleteAssetReducer from "./delete_asset_reducer";
 import DeleteEventReducer from "./delete_event_reducer";
+import DeleteQuestionReducer from "./delete_question_reducer";
 import DeleteTrackReducer from "./delete_track_reducer";
+import LogQuestionReducer from "./log_question_reducer";
 import ReperceiveReducer from "./reperceive_reducer";
 import SetConfigReducer from "./set_config_reducer";
 import SetLabelReducer from "./set_label_reducer";
@@ -62,6 +64,7 @@ import EventRow from "./event_table";
 import EventLocationRow from "./event_location_table";
 import HandoffRow from "./handoff_table";
 import PhotoRow from "./photo_table";
+import QuestionRow from "./question_table";
 import TrackPointRow from "./track_point_table";
 import WearerRow from "./wearer_table";
 
@@ -206,6 +209,20 @@ const tablesSchema = __schema({
       { name: 'photo_event_id_key', constraint: 'unique', columns: ['eventId'] },
     ],
   }, PhotoRow),
+  question: __table({
+    name: 'question',
+    indexes: [
+      { accessor: 'questionId', name: 'question_question_id_idx_btree', algorithm: 'btree', columns: [
+        'questionId',
+      ] },
+      { accessor: 'tMicros', name: 'question_t_micros_idx_btree', algorithm: 'btree', columns: [
+        'tMicros',
+      ] },
+    ],
+    constraints: [
+      { name: 'question_question_id_key', constraint: 'unique', columns: ['questionId'] },
+    ],
+  }, QuestionRow),
   trackPoint: __table({
     name: 'track_point',
     indexes: [
@@ -242,7 +259,9 @@ const reducersSchema = __reducers(
   __reducerSchema("ack_alert", AckAlertReducer),
   __reducerSchema("delete_asset", DeleteAssetReducer),
   __reducerSchema("delete_event", DeleteEventReducer),
+  __reducerSchema("delete_question", DeleteQuestionReducer),
   __reducerSchema("delete_track", DeleteTrackReducer),
+  __reducerSchema("log_question", LogQuestionReducer),
   __reducerSchema("reperceive", ReperceiveReducer),
   __reducerSchema("set_config", SetConfigReducer),
   __reducerSchema("set_label", SetLabelReducer),
