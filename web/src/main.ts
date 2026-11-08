@@ -6,7 +6,7 @@ import { renderRail } from './rail';
 import { renderMap, mapUserView } from './map';
 import { renderTools } from './tools';
 import { renderSite } from './site';
-import { view, setMode } from './view';
+import { view, setMode, onView } from './view';
 
 const dbEl = document.getElementById('db')!;
 const conn = document.getElementById('conn')!; const connText = document.getElementById('conn-text')!;
@@ -67,12 +67,19 @@ onChange(() => {
 
 // Timeline collapse: the floor takes the width. Remembered per browser.
 const grid = document.querySelector('.grid') as HTMLElement; const tlToggle = document.getElementById('tl-toggle') as HTMLButtonElement;
-function setTimeline(open: boolean) {
+function setTimeline(open: boolean, remember = true) {
   grid.dataset.tl = open ? 'open' : 'collapsed';
   tlToggle.setAttribute('aria-expanded', String(open)); tlToggle.title = open ? 'Hide timeline' : 'Show timeline';
-  try { localStorage.setItem('wm.timeline', open ? 'open' : 'collapsed'); } catch { /* private mode */ }
+  if (remember) { try { localStorage.setItem('wm.timeline', open ? 'open' : 'collapsed'); } catch { /* private mode */ } }
   renderFloor(); renderMap();
 }
+// One list on screen: the Site tab embeds a view with its own event panel, so the console's
+// timeline folds away while it is up and comes back when you leave (not remembered).
+let autoFolded = false;
+onView(() => {
+  if (view.mode === 'site' && grid.dataset.tl !== 'collapsed') { autoFolded = true; setTimeline(false, false); }
+  else if (view.mode !== 'site' && autoFolded) { autoFolded = false; setTimeline(true, false); }
+});
 tlToggle.addEventListener('click', () => setTimeline(grid.dataset.tl === 'collapsed'));
 grid.addEventListener('transitionend', e => { if (e.propertyName === 'grid-template-columns') { renderFloor(); renderMap(); } });
 try { if (localStorage.getItem('wm.timeline') === 'collapsed') setTimeline(false); } catch { /* ignore */ }
