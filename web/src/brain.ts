@@ -58,15 +58,15 @@ export function filterTrack(points: TrackPoint[]): Fix[] {
   });
 }
 /** The shifts in the console's wearer and time-window filters. */
-function filteredShifts(): Shift[] {
+function filteredShifts(withHidden = false): Shift[] {
   const cutoff = state.windowMin ? Date.now() - state.windowMin * 60_000 : 0;
-  return shifts().filter(s => !state.hiddenWearers.has(s.deviceId) && s.lastMs >= cutoff);
+  return shifts().filter(s => (withHidden || !state.hiddenWearers.has(s.deviceId)) && s.lastMs >= cutoff);
 }
 /** The shifts this view is about: `?shift=<id prefix>` or `?all=1`, else the latest real shift (two
  *  minutes or more of track), preferring one whose fixes carry a floor. Older shifts stay in the
  *  database and out of the way. */
-export function sessionShifts(): Shift[] {
-  const all = filteredShifts();
+export function sessionShifts(withHidden = false): Shift[] {
+  const all = filteredShifts(withHidden);
   if (ALL_SHIFTS || overlayActive()) return all; // a workspace with an overlay is about the whole record
   if (SHIFT_PARAM) return all.filter(s => s.shiftId.startsWith(SHIFT_PARAM));
   const wsShift = current().shift; if (wsShift) { const own = all.filter(s => s.shiftId.startsWith(wsShift)); if (own.length) return own; }

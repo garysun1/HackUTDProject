@@ -1,6 +1,7 @@
 import { connect, onChange, state, visibleEvents, wearerColor, wearerName, notify, DB, fmtTime, setWorkspace, dbChosen, HOST } from './store';
 import './overlay'; // registers the overlay loader with the store
 import { WORKSPACES, current, vocab } from './workspaces';
+import { sessionShifts, inSession } from './brain';
 import { renderTimeline } from './timeline';
 import { renderFloor, floorUserView } from './floor';
 import { renderRail } from './rail';
@@ -17,16 +18,20 @@ windowSel.addEventListener('change', () => { state.windowMin = Number(windowSel.
 
 function renderChips() {
   // one chip per wearer name; a wearer with two devices (phone + glasses) is still one person
+  // only the wearers of the walk this view is about (the same session the map, pins and panel
+  // show), counted on its photos; hidden wearers stay listed so they can be shown again
+  const session = sessionShifts(true);
+  const cutoff = state.windowMin ? BigInt(Date.now() - state.windowMin * 60_000) * 1000n : 0n;
+  const shown = [...state.events.values()].filter(e => e.tMicros >= cutoff && (!session.length || inSession(e, session)));
   const byName = new Map<string, string[]>();
-  for (const id of new Set([...state.events.values()].map(e => e.deviceId))) { const n = wearerName(id); (byName.get(n) ?? byName.set(n, []).get(n)!).push(id); }
+  for (const id of new Set(shown.map(e => e.deviceId))) { const n = wearerName(id); (byName.get(n) ?? byName.set(n, []).get(n)!).push(id); }
   const focused = (document.activeElement as HTMLElement | null)?.dataset?.id;
   for (const [name, ids] of byName) {
     const key = ids.join(',');
     let b = wearersEl.querySelector(`[data-id="${CSS.escape(key)}"]`) as HTMLButtonElement | null;
     if (!b) { b = document.createElement('button'); b.className = 'chip'; b.type = 'button'; b.dataset.id = key; wearersEl.appendChild(b); }
     b.setAttribute('aria-pressed', String(!ids.every(id => state.hiddenWearers.has(id))));
-    const cutoff = state.windowMin ? BigInt(Date.now() - state.windowMin * 60_000) * 1000n : 0n;
-    const n = [...state.events.values()].filter(e => ids.includes(e.deviceId) && e.tMicros >= cutoff).length;
+    const n = shown.filter(e => ids.includes(e.deviceId)).length;
     b.innerHTML = `<i style="background:${wearerColor(ids[0])}"></i>${name}<span class="n">${n}</span>`;
   }
   for (const b of [...wearersEl.children] as HTMLElement[]) if (![...byName.values()].some(ids => ids.join(',') === b.dataset.id)) b.remove();
