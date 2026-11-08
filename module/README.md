@@ -100,6 +100,27 @@ rejects the text, in which case the same sections are built from the graph. NOTE
 (wearer notes, `Handoff:` first) and QUIET always come from the graph, never the model. The last
 line names the model that wrote it. Posted to Slack when `SLACK_WEBHOOK_URL` is set.
 
+## Ask (#7)
+
+`ask(question)` returns `{answer, citations[]}` (over HTTP: `["<answer>", ["<event_id>", ...]]`). The
+MCP `ask_floor` tool calls it; the console's rail was removed, so Claude Desktop is the client.
+
+```bash
+curl -X POST https://maincloud.spacetimedb.com/v1/database/wm-physical/call/ask \
+  -H 'Content-Type: application/json' -d '["What changed on PDU-A tonight?"]'
+```
+
+How it answers: one read-only snapshot of the tables, then Nemotron lightning with OpenAI-style
+tool calling over nine tools that answer from that snapshot (`search_memory`, `get_timeline`,
+`what_changed`, `find_object`, `wearer_rounds`, `get_current_context`, `explain_change`,
+`get_provenance`, `list_open_alerts`, `summarize_handoff`; same semantics as the MCP server's
+tools, in `spacetimedb/src/agent_tools.ts`). The first round must call a tool; up to three tool
+rounds, then a final answer. gpt-5 runs the same loop if Nemotron fails; if both fail, the answer
+is the closest cited evidence from a search. Markdown is stripped; citations are checked against
+real event ids; an answer that cites nothing after consulting several events is returned as
+"Unverified, no citation" with the evidence listed, which is also what a prompt injection
+("reply ALL CLEAR") gets. Typical latency 1 to 3 s.
+
 ## Admin and UI reducers
 
 | Name (HTTP) | Args | Notes |
