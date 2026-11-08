@@ -75,6 +75,13 @@ struct CaptureEvent: Identifiable, Codable, Sendable, Hashable {
   let height: Int
   let jpegBytes: Int
   let facesBlurred: Int
+  /// Where the photo was taken (contract v3.1 `location`), and the shift it belongs to. Optional so
+  /// events persisted by older builds still decode.
+  var location: LocationFix?
+  /// Age of `location` at the moment the photo was taken, on the phone's clock (contract `age_ms`).
+  /// Negative only when the closest usable fix came just after the press. Nil for imports.
+  var locationAgeMs: Int?
+  var shiftId: String?
 
   var stage: EventStage
   var serverT: Date?
@@ -102,6 +109,9 @@ struct CaptureEvent: Identifiable, Codable, Sendable, Hashable {
     height: Int,
     jpegBytes: Int,
     facesBlurred: Int = 0,
+    location: LocationFix? = nil,
+    locationAgeMs: Int? = nil,
+    shiftId: String? = nil,
     stage: EventStage = .queued,
     createdAt: Date = Date()
   ) {
@@ -118,6 +128,9 @@ struct CaptureEvent: Identifiable, Codable, Sendable, Hashable {
     self.height = height
     self.jpegBytes = jpegBytes
     self.facesBlurred = facesBlurred
+    self.location = location
+    self.locationAgeMs = locationAgeMs
+    self.shiftId = shiftId
     self.stage = stage
     self.attempts = 0
     self.createdAt = createdAt

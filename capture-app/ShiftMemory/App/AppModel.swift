@@ -36,6 +36,17 @@ final class AppModel {
   let narrator: VoiceNarrator
   let speaker: BriefingSpeaker
   let floor: FloorStore
+  let location: LocationTracker
+  let trackStore: TrackStore
+  let trackUploader: TrackUploader
+  /// Recent fixes (last 10 min) so a photo is placed where it was taken, not where the wearer stood
+  /// when its bytes finished arriving.
+  private var recentFixes: [LocationFix] = []
+  /// The last shift that was closed, so a photo pressed before End shift but delivered after it still
+  /// carries that shift's id.
+  private var lastClosedShift: (id: String, start: Date, end: Date)?
+  /// A shift is closed automatically after this long (a forgotten End shift must not track overnight).
+  static let maxShiftDuration: TimeInterval = 16 * 3600
 
   // MARK: Shift briefing / handoff (UI state)
   enum BriefingMode: Equatable { case shiftStart, review }
@@ -97,6 +108,17 @@ final class AppModel {
       do { try audio.activateForPlayback() } catch { DebugLog.write("Audio", "activate for briefing failed: \(error)") }
     })
     floor = FloorStore(repository: FloorRepository(client: client), log: { DebugLog.write("Floor", $0) })
+    location = LocationTracker(log: { DebugLog.write("Location", $0) })
+    let trackStore = TrackStore(directory: support.appending(path: "Track"))
+    self.trackStore = trackStore
+    trackUploader = TrackUploader(
+      store: trackStore, client: client,
+      context: { [config] in
+        guard config.isBackendConfigured, config.hasIngestToken else { return nil }
+        return TrackUploader.Context(deviceId: config.deviceId, ingestToken: config.ingestToken, appVersion: config.appVersion)
+      },
+      log: { DebugLog.write("Track", $0) }
+    )
   }
 
   /// Call once, from the root view's `.task`.
@@ -134,6 +156,16 @@ final class AppModel {
       guard let self else { return nil }
       return await self.narrator.takeNarration(timeout: .seconds(35))
     }
+    coordinator.locationAt = { [weak self] date in self?.fix(near: date) }
+    coordinator.shiftIdAt = { [weak self] date in self?.shiftId(at: date) }
+    coordinator.locationAllowed = { [weak self] in self?.config.locationEnabled ?? false }
+    location.onTrackPoint = { [weak self] fix in
+      guard let self else { return }
+      self.enforceShiftLimit()
+      guard let shiftId = self.config.activeShiftId else { return }
+      self.remember(fix)
+      Task { await self.trackStore.append(fix, shiftId: shiftId) }
+    }
     coordinator.onGlassesPhotoQueued = { [weak self] event in
       guard let self, self.handoffPending else { return }
       self.handoffPending = false
@@ -157,6 +189,9 @@ final class AppModel {
         guard let self, !Task.isCancelled else { return }
         await self.queue.kick()
         await self.ping()
+        self.trackUploader.kick()
+        self.enforceShiftLimit()
+        self.startLocation()
       }
     }
 
@@ -180,7 +215,7 @@ final class AppModel {
         guard let self else { return }
         let cameBack = online && !self.isOnline
         self.isOnline = online
-        if cameBack { await self.queue.kick(); await self.ping() }
+        if cameBack { await self.queue.kick(); await self.ping(); self.trackUploader.kick() }
       }
     }
     monitor.start(queue: DispatchQueue(label: "shiftmemory.network"))
@@ -203,6 +238,16 @@ final class AppModel {
     })
 
     syncShutterSettings()
+    trackUploader.start()
+    // A shift left open for more than 16 h was forgotten, not worked: close it rather than track on.
+    enforceShiftLimit()
+    startLocation()
+    tasks.append(Task { [weak self] in
+      while !Task.isCancelled {
+        try? await Task.sleep(for: .seconds(300))
+        self?.enforceShiftLimit()
+      }
+    })
     await ping()
     if config.cameraRollImportEnabled { await importer.setEnabled(true) }
   }
@@ -214,6 +259,8 @@ final class AppModel {
   }
 
   private func startListening() {
+    // The press is the moment the photo is taken: keep the fix from now for placing it.
+    if let fix = location.freshFix() { remember(fix) }
     narrator.isEnabled = config.voiceContext
     audio.useGlassesMic = config.useGlassesMic
     if config.voiceContext { narrator.begin() }
@@ -225,6 +272,13 @@ final class AppModel {
   /// the briefing; the wearer confirms they are up to speed before they start working.
   func beginShift() {
     notice = nil
+    // A handoff requested earlier but never taken must not end this (resumed) shift with its first photo.
+    if handoffPending || config.pendingNotePrefix == "Handoff:" {
+      DebugLog.write("Shift", "discarding an unfinished handoff request")
+      handoffPending = false
+      if config.pendingNotePrefix == "Handoff:" { config.pendingNotePrefix = "" }
+    }
+    openShiftIfNeeded()
     Task { await glasses.startShift() }
     if config.voiceContext { Task { _ = await narrator.requestAuthorization() } }
     if config.briefingOnStart { presentBriefing(.shiftStart) }
@@ -313,6 +367,131 @@ final class AppModel {
     notice = nil
     glasses.endShift(reason: reason)
     config.lastShiftEndedAt = Date()
+    closeShift()
+  }
+
+  // MARK: - Shift identity and location (#19)
+
+  /// A shift lasts from Start shift until End shift, across glasses dropouts and relaunches. A new
+  /// id is minted only when none is open, or the open one is older than 16 h (forgotten End shift).
+  private func openShiftIfNeeded() {
+    let now = Date()
+    if let id = config.activeShiftId, let started = config.activeShiftStartedAt, now.timeIntervalSince(started) < Self.maxShiftDuration {
+      DebugLog.write("Shift", "continuing shift \(id.prefix(8))")
+    } else {
+      if let stale = config.activeShiftId {
+        Task { [trackStore] in await trackStore.mark("shift_end", shiftId: stale, at: now) }
+      }
+      let id = UUID().uuidString.lowercased()
+      config.activeShiftId = id
+      config.activeShiftStartedAt = now
+      Task { [trackStore] in await trackStore.mark("shift_start", shiftId: id, at: now) }
+      DebugLog.write("Shift", "started shift \(id.prefix(8))")
+    }
+    startLocation()
+  }
+
+  private func closeShift() {
+    guard let id = config.activeShiftId else { return }
+    let now = Date()
+    lastClosedShift = (id, config.activeShiftStartedAt ?? now, now)
+    config.activeShiftId = nil
+    config.activeShiftStartedAt = nil
+    Task { [trackStore, trackUploader] in
+      await trackStore.mark("shift_end", shiftId: id, at: now)
+      trackUploader.kick()
+    }
+    DebugLog.write("Shift", "ended shift \(id.prefix(8))")
+    startLocation()
+  }
+
+  /// Location mode follows the shift: tracking while one is open (also in the background), else
+  /// foreground fixes only, so photos taken outside a shift are still placed. Off when disabled.
+  func startLocation() {
+    guard config.locationEnabled else { location.stop(); return }
+    if location.authorization == .notDetermined { location.requestAuthorization() }
+    if config.activeShiftId != nil {
+      if location.mode != .shift { location.startShift() }
+    } else if location.mode == .shift {
+      location.stopShift()
+    } else if location.mode == .off {
+      location.startForeground()
+    }
+  }
+
+  /// Closes the open shift once it is older than `maxShiftDuration` (checked on every track point,
+  /// on foreground, every 5 min, and at launch).
+  func enforceShiftLimit(now: Date = Date()) {
+    guard let started = config.activeShiftStartedAt, config.activeShiftId != nil,
+          now.timeIntervalSince(started) > Self.maxShiftDuration else { return }
+    DebugLog.write("Shift", "shift open for more than \(Int(Self.maxShiftDuration / 3600)) h; closing it")
+    handoffPending = false
+    if glasses.isSessionLive { glasses.endShift(reason: "Shift closed automatically after 16 hours") }
+    config.lastShiftEndedAt = now
+    closeShift()
+  }
+
+  /// Whether a location shift is open (it can outlive a glasses session that dropped).
+  var isShiftOpen: Bool { config.activeShiftId != nil }
+
+  /// The shift that was open at `date`: the current one if it had started, else the one closed most
+  /// recently if `date` falls inside it.
+  func shiftId(at date: Date) -> String? {
+    if let id = config.activeShiftId, let started = config.activeShiftStartedAt, date >= started.addingTimeInterval(-5) { return id }
+    if let last = lastClosedShift, date >= last.start.addingTimeInterval(-5), date <= last.end.addingTimeInterval(5) { return last.id }
+    return nil
+  }
+
+  func setLocationEnabled(_ on: Bool) {
+    config.locationEnabled = on
+    startLocation()
+  }
+
+  /// The open shift (or, between shifts, the most recent one) as GeoJSON in a temporary file, for the
+  /// share sheet: track line, shift marks, and every photo of that shift that has a position.
+  func exportTrackGeoJSON() async -> URL? {
+    let ids = await trackStore.shiftIds()
+    guard let shiftId = config.activeShiftId ?? ids.first else { return nil }
+    let history = await trackStore.history(shiftId: shiftId)
+    let pins: [PhotoPin] = store.events.compactMap { e in
+      guard e.shiftId == shiftId, let fix = e.location else { return nil }
+      return PhotoPin(eventId: e.id, t: e.clientT, fix: fix, source: e.source.rawValue, note: e.note, summary: e.summary)
+    }
+    let data = ShiftGeoJSON.featureCollection(
+      shiftId: shiftId, deviceId: config.deviceId, wearer: config.wearerName.isEmpty ? nil : config.wearerName,
+      points: history.points, marks: history.marks, photos: pins)
+    let url = FileManager.default.temporaryDirectory.appending(path: "shift-\(shiftId.prefix(8)).geojson")
+    do {
+      try data.write(to: url, options: .atomic)
+      return url
+    } catch {
+      DebugLog.write("Track", "GeoJSON export failed: \(error)")
+      return nil
+    }
+  }
+
+  private func remember(_ fix: LocationFix) {
+    if let last = recentFixes.last, fix.t <= last.t { return }
+    recentFixes.append(fix)
+    let cutoff = fix.t.addingTimeInterval(-600)
+    recentFixes.removeAll { $0.t < cutoff }
+  }
+
+  /// The fix closest in time to `date` among recent ones that is valid for an event taken then; falls
+  /// back to the tracker's freshest fix.
+  func fix(near date: Date) -> LocationFix? {
+    guard config.locationEnabled else { return nil }
+    if let latest = location.latest { remember(latest) }
+    return Self.bestFix(for: date, among: recentFixes) ?? location.freshFix(at: date).flatMap { Self.bestFix(for: date, among: [$0]) }
+  }
+
+  /// Where the wearer was when the photo was taken: the newest usable fix taken at or before the
+  /// press (2 s tolerance for delivery jitter); only if none exists, the earliest usable fix after it
+  /// (the wearer may have walked on, so later fixes are a last resort).
+  nonisolated static func bestFix(for date: Date, among fixes: [LocationFix]) -> LocationFix? {
+    let usable = fixes.filter { $0.isUsableForEvent(capturedAt: date) }
+    if let before = usable.filter({ $0.t <= date.addingTimeInterval(2) }).max(by: { $0.t < $1.t }) { return before }
+    return usable.filter { $0.t > date }.min { $0.t < $1.t }
   }
 
   /// From the floor map: the next photo is about this asset/issue. Labels it, and captures now when

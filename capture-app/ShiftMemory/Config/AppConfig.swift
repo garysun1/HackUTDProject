@@ -68,6 +68,12 @@ final class AppConfig {
   /// When this wearer last ended a shift / acknowledged a briefing (local only).
   var lastShiftEndedAt: Date? { didSet { defaults.set(lastShiftEndedAt, forKey: Keys.lastShiftEndedAt) } }
   var lastBriefingAckAt: Date? { didSet { defaults.set(lastBriefingAckAt, forKey: Keys.lastBriefingAckAt) } }
+  /// Attach the phone's position to photos and record the walking track during a shift (#19).
+  var locationEnabled: Bool { didSet { defaults.set(locationEnabled, forKey: Keys.locationEnabled) } }
+  /// The shift in progress on this device (contract v3.1 `shift_id`); nil between shifts. Persisted
+  /// so a relaunch mid-shift keeps the same id and resumes the track.
+  var activeShiftId: String? { didSet { defaults.set(activeShiftId, forKey: Keys.activeShiftId) } }
+  var activeShiftStartedAt: Date? { didSet { defaults.set(activeShiftStartedAt, forKey: Keys.activeShiftStartedAt) } }
 
   // MARK: Camera-roll import (issue #2)
   var cameraRollImportEnabled: Bool { didSet { defaults.set(cameraRollImportEnabled, forKey: Keys.cameraRollImportEnabled) } }
@@ -98,6 +104,9 @@ final class AppConfig {
     static let briefingOnStart = "shift.briefingOnStart"
     static let lastShiftEndedAt = "shift.lastShiftEndedAt"
     static let lastBriefingAckAt = "shift.lastBriefingAckAt"
+    static let locationEnabled = "location.enabled"
+    static let activeShiftId = "shift.activeShiftId"
+    static let activeShiftStartedAt = "shift.activeShiftStartedAt"
     static let cameraRollImportEnabled = "import.enabled"
     static let cameraRollOnlyGlassesPhotos = "import.onlyGlassesPhotos"
     static let seeded = "config.seededFromPlist"
@@ -135,6 +144,9 @@ final class AppConfig {
     briefingOnStart = defaults.object(forKey: Keys.briefingOnStart) as? Bool ?? true
     lastShiftEndedAt = defaults.object(forKey: Keys.lastShiftEndedAt) as? Date
     lastBriefingAckAt = defaults.object(forKey: Keys.lastBriefingAckAt) as? Date
+    locationEnabled = defaults.object(forKey: Keys.locationEnabled) as? Bool ?? true
+    activeShiftId = defaults.string(forKey: Keys.activeShiftId)
+    activeShiftStartedAt = defaults.object(forKey: Keys.activeShiftStartedAt) as? Date
     cameraRollImportEnabled = defaults.bool(forKey: Keys.cameraRollImportEnabled)
     cameraRollOnlyGlassesPhotos = defaults.object(forKey: Keys.cameraRollOnlyGlassesPhotos) as? Bool ?? true
 

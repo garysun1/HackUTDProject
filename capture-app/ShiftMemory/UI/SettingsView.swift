@@ -89,6 +89,8 @@ struct SettingsView: View {
         Toggle("Shutter sound", isOn: $config.shutterSound)
       }
 
+      LocationSection()
+
       Section {
         Toggle("Listen after each photo", isOn: $config.voiceContext)
         Toggle("Use the glasses' microphone", isOn: $config.useGlassesMic)
@@ -143,5 +145,103 @@ struct SettingsView: View {
     .navigationBarTitleDisplayMode(.inline)
     .onChange(of: config.host) { _, _ in store.backendReachable = nil }
     .onChange(of: config.database) { _, _ in store.backendReachable = nil }
+  }
+}
+
+// MARK: - Location (#19)
+
+/// Location on/off, what the phone currently knows, whether the backend takes the track yet, and the
+/// GeoJSON export of the shift (track + photo pins) for the console or a map tool.
+struct LocationSection: View {
+  @Environment(AppModel.self) private var model
+  @Environment(\.openURL) private var openURL
+  @State private var exportURL: URL?
+  @State private var exporting = false
+  @State private var pendingPoints = 0
+  @State private var recordedPoints = 0
+
+  var body: some View {
+    let loc = model.location
+    let up = model.trackUploader
+    Section {
+      Toggle("Share location", isOn: Binding(get: { model.config.locationEnabled }, set: { model.setLocationEnabled($0) }))
+      if model.config.locationEnabled {
+        LabeledContent("Permission", value: permissionText(loc.authorization, precise: loc.isPrecise))
+        if loc.authorization == .notDetermined {
+          Button("Allow location") { loc.requestAuthorization() }
+        } else if loc.authorization == .denied || loc.authorization == .restricted || !loc.isPrecise {
+          Button("Open iOS Settings") {
+            if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) }
+          }
+        }
+        if let fix = loc.latest {
+          LabeledContent("Last fix") {
+            Text("±\(Int(fix.accuracyM.rounded())) m · \(fix.t.formatted(date: .omitted, time: .standard))")
+              .font(Theme.mono(12)).foregroundStyle(fix.accuracyM <= 50 ? Theme.ink2 : Theme.warningInk)
+          }
+        } else {
+          LabeledContent("Last fix", value: "none yet")
+        }
+        LabeledContent("Mode", value: modeText(loc.mode))
+        LabeledContent("Track this shift", value: "\(recordedPoints) points · \(pendingPoints) waiting")
+        LabeledContent("Backend", value: supportText(up.support))
+        if let error = loc.lastError ?? up.lastError {
+          Text(error).font(.footnote).foregroundStyle(Theme.criticalInk)
+        }
+        if let exportURL {
+          ShareLink(item: exportURL) { Label("Share shift track (GeoJSON)", systemImage: "square.and.arrow.up") }
+          Button("Refresh export") { self.exportURL = nil }
+            .font(.footnote)
+        } else {
+          Button(exporting ? "Preparing…" : "Export shift track (GeoJSON)") {
+            exporting = true
+            Task {
+              exportURL = await model.exportTrackGeoJSON()
+              exporting = false
+            }
+          }
+          .disabled(exporting)
+        }
+      }
+    } header: {
+      Text("Location")
+    } footer: {
+      Text("Each photo carries where it was taken. While a shift is running the phone also records the path you walk, including in your pocket, so the console can show the shift on a map. Nothing is recorded between shifts.")
+    }
+    .task(id: model.config.activeShiftId) {
+      exportURL = nil   // a different shift: export again
+      while !Task.isCancelled {
+        pendingPoints = await model.trackStore.pendingCount()
+        if let id = model.config.activeShiftId { recordedPoints = await model.trackStore.recordedCount(shiftId: id) } else { recordedPoints = 0 }
+        try? await Task.sleep(for: .seconds(3))
+      }
+    }
+  }
+
+  private func permissionText(_ a: LocationTracker.Authorization, precise: Bool) -> String {
+    switch a {
+    case .notDetermined: "not asked yet"
+    case .restricted: "restricted"
+    case .denied: "denied"
+    case .whenInUse: precise ? "while using (precise)" : "while using (approximate)"
+    case .always: precise ? "always (precise)" : "always (approximate)"
+    }
+  }
+
+  private func modeText(_ m: LocationTracker.Mode) -> String {
+    switch m {
+    case .off: "off"
+    case .foreground: "photos only (no shift)"
+    case .shift: "tracking the shift"
+    }
+  }
+
+  private func supportText(_ s: TrackUploader.Support) -> String {
+    switch s {
+    case .unknown: "checking…"
+    case .supported: "receiving the track"
+    case .unsupported: "track not stored yet (#20); buffering"
+    case .unreachable(let why): "unreachable: \(why)"
+    }
   }
 }

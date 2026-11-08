@@ -5,6 +5,7 @@
 // Builds the exact `event_json` string that `ingest_photo(event_json, photo_b64)` expects.
 // Keys and shapes are docs/CONTRACT.md v3; the module ignores unknown keys and reads
 // `label.name`, `photo.mime/width/height`, `clock_offset_ms`, `note`, `wearer`.
+// v3.1 (issues #19/#20, additive): optional `shift_id` and `location`, written only when known.
 //
 
 import Foundation
@@ -36,6 +37,15 @@ enum EventEnvelope {
     o.append(("label", event.label.flatMap { $0.isEmpty ? nil : ["name": $0] } ?? NSNull()))
     o.append(("clock_offset_ms", event.clockOffsetMs ?? 0))
     if let wearer = event.wearer, !wearer.isEmpty { o.append(("wearer", wearer)) }
+    if let shiftId = event.shiftId, !shiftId.isEmpty { o.append(("shift_id", shiftId)) }
+    if let fix = event.location {
+      // Measured when the fix was chosen, against the phone-side capture instant; for imports (the
+      // photo's own location) it is the distance from client_t.
+      let ageMs = event.locationAgeMs ?? Int((event.clientT.timeIntervalSince(fix.t) * 1000).rounded())
+      // Written by TrackJSONText (plain decimals, never `1e-05`), in the contract's key order.
+      o.append(("location", RawJSON(TrackJSONText.object(
+        fix.contractObject(offsetSeconds: event.clientTZOffsetSeconds, ageMs: ageMs), order: LocationFix.contractKeyOrder))))
+    }
     o.append(("ingest_token", ingestToken))
     o.append(("app_version", appVersion))
     return serialize(o)
@@ -49,8 +59,12 @@ enum EventEnvelope {
     return "{" + parts.joined(separator: ",") + "}"
   }
 
+  /// A value that is already JSON text.
+  private struct RawJSON { let text: String; init(_ text: String) { self.text = text } }
+
   private static func fragment(_ value: Any) -> String {
     switch value {
+    case let raw as RawJSON: return raw.text
     case is NSNull: return "null"
     case let s as String:
       let data = try! JSONSerialization.data(withJSONObject: [s], options: [.withoutEscapingSlashes])

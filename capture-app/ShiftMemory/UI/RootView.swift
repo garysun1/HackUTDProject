@@ -129,7 +129,10 @@ struct HomeView: View {
       .interactiveDismissDisabled(model.briefingMode == .shiftStart)
     }
     .confirmationDialog("End the shift", isPresented: Binding(get: { model.endShiftPresented }, set: { model.endShiftPresented = $0 }), titleVisibility: .visible) {
-      Button("Record a handoff, then end") { model.recordHandoff() }
+      // A handoff is a closing photo, so it needs a live glasses session.
+      if model.glasses.isSessionLive {
+        Button("Record a handoff, then end") { model.recordHandoff() }
+      }
       Button("End without a handoff", role: .destructive) { model.endShiftWithoutHandoff() }
       Button("Keep working", role: .cancel) {}
     } message: {
@@ -182,6 +185,9 @@ struct ShiftCard: View {
             }
           }
           Spacer(minLength: 0)
+        }
+        if model.config.locationEnabled {
+          LocationLine()
         }
         HStack(spacing: 8) {
           Button { model.presentBriefing(.review) } label: {
@@ -267,8 +273,19 @@ struct GlassesCard: View {
     case .noDevice:
       Button("Looking for glasses…") { Task { await g.refreshPermission() } }
         .buttonStyle(InkButtonStyle(prominent: false))
+      if model.isShiftOpen {
+        Button("End shift") { model.requestEndShift() }.buttonStyle(InkButtonStyle(prominent: false))
+      }
     case .deviceAvailable, .stopped:
-      Button("Start shift") { model.beginShift() }.buttonStyle(InkButtonStyle())
+      if model.isShiftOpen {
+        // The glasses session dropped but the shift (and its track) is still open.
+        HStack(spacing: 8) {
+          Button("Resume shift") { model.beginShift() }.buttonStyle(InkButtonStyle())
+          Button("End shift") { model.requestEndShift() }.buttonStyle(InkButtonStyle(prominent: false))
+        }
+      } else {
+        Button("Start shift") { model.beginShift() }.buttonStyle(InkButtonStyle())
+      }
     case .starting:
       Button("Starting camera…") {}.buttonStyle(InkButtonStyle()).disabled(true)
     case .ready, .capturing, .paused:
@@ -492,6 +509,35 @@ struct StagePill: View {
     case .inGraph: StatusPill(text: stage.label, tone: .good)
     case .duplicate: StatusPill(text: stage.label, tone: .neutral)
     case .failed: StatusPill(text: stage.label, tone: .critical)
+    }
+  }
+}
+
+/// One quiet line under the shift: is the phone placing photos and tracking the walk?
+struct LocationLine: View {
+  @Environment(AppModel.self) private var model
+  var body: some View {
+    let loc = model.location
+    HStack(spacing: 6) {
+      Image(systemName: loc.mode == .shift ? "location.fill" : "location")
+        .foregroundStyle(loc.latest == nil ? Theme.ink4 : Theme.accent)
+        .accessibilityHidden(true)
+      Text(text(loc)).font(Theme.mono(11)).foregroundStyle(Theme.ink3).lineLimit(1)
+    }
+    .accessibilityElement(children: .combine)
+  }
+
+  private func text(_ loc: LocationTracker) -> String {
+    switch loc.authorization {
+    case .denied, .restricted: return "Location off in iOS Settings; photos are not placed"
+    case .notDetermined: return "Location not allowed yet (Settings › Location)"
+    default: break
+    }
+    let fix = loc.latest.map { "±\(Int($0.accuracyM.rounded())) m" } ?? "waiting for a fix"
+    switch loc.mode {
+    case .shift: return "Tracking this shift · \(fix) · \(loc.keptPoints) points"
+    case .foreground: return "Placing photos · \(fix)"
+    case .off: return "Location off"
     }
   }
 }

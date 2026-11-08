@@ -89,6 +89,8 @@ struct BackendEndpoint: Sendable, Equatable {
     URL(string: "\(host.trimmingTrailingSlash)/v1/database/\(database)/call/\(name)")
   }
   var sqlURL: URL? { URL(string: "\(host.trimmingTrailingSlash)/v1/database/\(database)/sql") }
+  /// Module schema (procedures appear under `misc_exports`, reducers under `reducers`).
+  var schemaURL: URL? { URL(string: "\(host.trimmingTrailingSlash)/v1/database/\(database)/schema?version=9") }
 }
 
 extension String {

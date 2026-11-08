@@ -14,6 +14,8 @@ CONTRACTS=(
   "$HERE/ShiftMemory/Upload/CaptureEvent.swift"
   "$HERE/ShiftMemory/Upload/EventEnvelope.swift"
   "$HERE/ShiftMemory/Upload/IngestContracts.swift"
+  "$HERE/ShiftMemory/Upload/LocationFix.swift"
+  "$HERE/ShiftMemory/Upload/TrackJSONText.swift"
   "$HERE/ShiftMemory/Pipeline/PipelineContracts.swift"
   "$HERE/ShiftMemory/Diagnostics/DiagnosticsModels.swift"
   "$HERE/ShiftMemory/Import/ImportContracts.swift"

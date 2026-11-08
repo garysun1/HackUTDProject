@@ -59,6 +59,10 @@ struct EventDetailView: View {
               if let o = event.clockOffsetMs { row("clock_offset_ms", "\(o)") }
               if let w = event.wearer { row("wearer", w) }
               row("photo", "\(event.width)×\(event.height) · \(event.jpegBytes / 1024) KB · \(event.facesBlurred) face\(event.facesBlurred == 1 ? "" : "s") blurred")
+              if let fix = event.location {
+                row("location", String(format: "%.6f, %.6f ±%.0f m", fix.lat, fix.lon, fix.accuracyM) + (fix.floor.map { " · floor \($0)" } ?? ""))
+              }
+              if let shiftId = event.shiftId { row("shift_id", shiftId) }
               row("attempts", "\(event.attempts)")
               if let e = event.lastError { row("error", e) }
             }

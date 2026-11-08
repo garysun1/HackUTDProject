@@ -124,6 +124,42 @@ final class IngestClient: IngestClientProtocol, Sendable {
     _ = try await send(request)
   }
 
+  // MARK: - Track (contract v3.1, issue #20)
+
+  /// Names of the procedures and reducers the live module exports, from its schema. Used to
+  /// feature-detect `ingest_track` before sending anything to it.
+  func exportedCallables() async throws(IngestError) -> Set<String> {
+    let current = endpoint()
+    guard current.isConfigured, let url = current.schemaURL else { throw .notConfigured("Backend") }
+    var request = URLRequest(url: url, timeoutInterval: Self.callTimeout)
+    request.httpMethod = "GET"
+    let reply = try await send(request)
+    guard let schema = (try? JSONSerialization.jsonObject(with: reply.body)) as? [String: Any] else {
+      throw .decoding("schema reply: \(Self.excerpt(reply.body))")
+    }
+    var names = Set<String>()
+    for export in schema["misc_exports"] as? [[String: Any]] ?? [] {
+      // `{"Procedure": {"name": …}}` today; accept a bare `{"name": …}` too.
+      let body = (export["Procedure"] as? [String: Any]) ?? export
+      if let name = body["name"] as? String { names.insert(name) }
+    }
+    for reducer in schema["reducers"] as? [[String: Any]] ?? [] {
+      if let name = reducer["name"] as? String { names.insert(name) }
+    }
+    return names
+  }
+
+  /// `ingest_track(track_json)` → `(accepted, duplicates)`. Positional or object reply accepted.
+  func ingestTrack(trackJSON: String) async throws(IngestError) -> (accepted: Int, duplicates: Int) {
+    let request = try procedureRequest("ingest_track", arguments: [trackJSON], timeout: Self.ingestTimeout)
+    let reply = try await send(request)
+    guard let object = Self.jsonObject(reply.body, positional: ["accepted", "duplicates"]) else {
+      throw .decoding("ingest_track reply: \(Self.excerpt(reply.body))")
+    }
+    func int(_ key: String) -> Int { (object[key] as? NSNumber)?.intValue ?? Int(object[key] as? String ?? "") ?? 0 }
+    return (int("accepted"), int("duplicates"))
+  }
+
   // MARK: - Requests
 
   /// `POST {host}/v1/database/{db}/call/{name}` with the arguments as a JSON array of strings.

@@ -26,6 +26,12 @@ final class CaptureCoordinator {
   var takeSpokenNote: (() async -> String?)?
   /// Called after a glasses photo has been handed to the upload queue (end-of-shift handoff uses it).
   var onGlassesPhotoQueued: ((CaptureEvent) -> Void)?
+  /// The phone's best fix for the moment a photo was taken (contract v3.1), or nil.
+  var locationAt: ((Date) -> LocationFix?)?
+  /// The shift that was open at a given instant (attached to glasses photos), or nil.
+  var shiftIdAt: ((Date) -> String?)?
+  /// Whether the wearer allows location on photos (Settings › Location).
+  var locationAllowed: (() -> Bool)?
 
   init(config: AppConfig, pipeline: any ImagePipelineProtocol, store: EventStore, queue: UploadQueue, diagnostics: DiagnosticsStore) {
     self.config = config
@@ -70,6 +76,13 @@ final class CaptureCoordinator {
 
     // The wearer talks while the photo crosses from the glasses; hold the upload until they finish
     // so perception (which reads the note) gets the context. The narrator caps the wait.
+    // Position at the moment of the press / request, read now (before the narration wait) so a
+    // wearer who walks on while talking is placed where the photo was taken.
+    let capturedAt = photo.requestedAt ?? photo.receivedAt
+    let location = locationAt?(capturedAt)
+    let locationAgeMs = location.map { Int((capturedAt.timeIntervalSince($0.t) * 1000).rounded()) }
+    let shiftId = shiftIdAt?(capturedAt)
+
     let spoken = await takeSpokenNote?()
     let note = Self.composeNote(prefix: prefix, typed: typed, spoken: spoken)
 
@@ -78,7 +91,7 @@ final class CaptureCoordinator {
     if let event = await ingest(
       data: photo.data, source: source, metricsId: metricsId,
       fallbackDate: photo.deliveredAt, fallbackOffset: TimeZone.current.secondsFromGMT(),
-      label: label, note: note
+      label: label, note: note, location: location, locationAgeMs: locationAgeMs, shiftId: shiftId
     ) {
       onGlassesPhotoQueued?(event)
     }
@@ -106,7 +119,10 @@ final class CaptureCoordinator {
     await ingest(
       data: photo.data, source: .cameraRoll, metricsId: metricsId,
       fallbackDate: photo.creationDate, fallbackOffset: TimeZone.current.secondsFromGMT(),
-      label: nil, note: nil
+      label: nil, note: nil,
+      // The photo's own position, under the same switch and accuracy rule as phone fixes.
+      location: (locationAllowed?() ?? false) ? photo.location.flatMap { $0.accuracyM <= LocationFix.maxEventAccuracyM ? $0 : nil } : nil,
+      locationAgeMs: nil, shiftId: nil
     )
   }
 
@@ -123,7 +139,8 @@ final class CaptureCoordinator {
       data: data, source: .manualUpload, metricsId: metricsId,
       fallbackDate: creationDate ?? Date(), fallbackOffset: TimeZone.current.secondsFromGMT(),
       label: config.pendingLabel,
-      note: Self.composeNote(prefix: config.pendingNotePrefix, typed: config.pendingNote, spoken: nil)
+      note: Self.composeNote(prefix: config.pendingNotePrefix, typed: config.pendingNote, spoken: nil),
+      location: nil, locationAgeMs: nil, shiftId: nil
     )
     config.pendingLabel = ""
     config.pendingNote = ""
@@ -134,7 +151,8 @@ final class CaptureCoordinator {
 
   @discardableResult
   private func ingest(data: Data, source: CaptureSource, metricsId: String,
-                      fallbackDate: Date, fallbackOffset: Int, label: String?, note: String?) async -> CaptureEvent? {
+                      fallbackDate: Date, fallbackOffset: Int, label: String?, note: String?,
+                      location: LocationFix?, locationAgeMs: Int?, shiftId: String?) async -> CaptureEvent? {
     let options = PipelineOptions(blurFaces: config.blurFaces)
     let prepared: PreparedPhoto
     do {
@@ -170,6 +188,9 @@ final class CaptureCoordinator {
       height: prepared.height,
       jpegBytes: prepared.jpeg.count,
       facesBlurred: prepared.facesBlurred,
+      location: location,
+      locationAgeMs: locationAgeMs,
+      shiftId: shiftId,
       stage: .queued
     )
 

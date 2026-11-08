@@ -49,6 +49,7 @@
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>audio</string>
+		<string>location</string>
 		<string>processing</string>
 		<string>bluetooth-central</string>
 		<string>bluetooth-peripheral</string>
@@ -58,6 +59,8 @@
 	<array>
 		<string>com.meta.ar.wearable</string>
 	</array>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Shift Memory records where each photo was taken and, while a shift is running, the path you walk, so the team's console can show the work on a map. Nothing is recorded between shifts.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>After you take a photo, Shift Memory listens for a few seconds so you can say what is going on. Only the text is attached to the photo; no audio is stored or uploaded.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>

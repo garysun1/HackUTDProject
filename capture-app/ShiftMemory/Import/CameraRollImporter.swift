@@ -293,7 +293,8 @@ final class CameraRollImporter: NSObject, PHPhotoLibraryChangeObserver {
         make: camera.make,
         model: camera.model,
         pixelWidth: candidate.asset.pixelWidth,
-        pixelHeight: candidate.asset.pixelHeight))
+        pixelHeight: candidate.asset.pixelHeight,
+        location: candidate.asset.location.flatMap(LocationFix.init)))
     }
   }
 

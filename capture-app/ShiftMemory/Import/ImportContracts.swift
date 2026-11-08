@@ -20,6 +20,8 @@ struct ImportedPhoto: Sendable {
   let model: String?
   let pixelWidth: Int
   let pixelHeight: Int
+  /// `PHAsset.location` when the library has one (where the photo was taken), else nil.
+  var location: LocationFix? = nil
 
   /// True when the metadata names the glasses. Used by the "only glasses photos" filter.
   var looksLikeGlassesPhoto: Bool {
