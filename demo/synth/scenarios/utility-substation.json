@@ -107,18 +107,8 @@
       "note": "On site for the monthly inspection."
     },
     {
-      "id": "05-station-battery",
-      "t": 10,
-      "wearer": "sam",
-      "room": "Control house",
-      "prompt": "Inside a substation control house: a rack of large station batteries with a wall-mounted battery charger above them; a big engraved plate reads \"BAT-1\"; the charger display shows \"129.8 V FLOAT\" in green and a single green \"NORMAL\" indicator light is lit; no red lights.",
-      "read": [
-        "BAT-1"
-      ]
-    },
-    {
       "id": "02-transformer",
-      "t": 21,
+      "t": 10,
       "wearer": "sam",
       "prompt": "Side of a large green oil-filled power transformer with cooling fins and an analog oil temperature gauge; a big white stenciled marking on the tank reads \"T2\".",
       "read": [
@@ -127,18 +117,8 @@
       "room": "Transformer T2"
     },
     {
-      "id": "06-transformer-t1",
-      "t": 33,
-      "wearer": "sam",
-      "room": "Transformer T1",
-      "prompt": "Side of a large gray oil-filled power transformer with cooling radiators and a round oil level gauge with its needle in the middle of the band; a big white stenciled marking on the tank reads \"T1\".",
-      "read": [
-        "T1"
-      ]
-    },
-    {
       "id": "03-breaker-closed",
-      "t": 46,
+      "t": 21,
       "wearer": "sam",
       "pair": "cb12",
       "prompt": "Open door of an outdoor gray circuit breaker control cabinet; a white printed sticker label on the door reads \"CB-12\" in large bold black letters; a mechanical position indicator flag shows \"CLOSED\" in red and a counter.",
@@ -147,6 +127,26 @@
         "CLOSED"
       ],
       "room": "Bay 3"
+    },
+    {
+      "id": "05-station-battery",
+      "t": 33,
+      "wearer": "sam",
+      "room": "Control house",
+      "prompt": "Inside a substation control house: a rack of large station batteries with a wall-mounted battery charger above them; a big engraved plate reads \"BAT-1\"; the charger display shows \"129.8 V FLOAT\" in green and a single green \"NORMAL\" indicator light is lit; no red lights.",
+      "read": [
+        "BAT-1"
+      ]
+    },
+    {
+      "id": "06-transformer-t1",
+      "t": 46,
+      "wearer": "sam",
+      "room": "Transformer T1",
+      "prompt": "Side of a large gray oil-filled power transformer with cooling radiators and a round oil level gauge with its needle in the middle of the band; a big white stenciled marking on the tank reads \"T1\".",
+      "read": [
+        "T1"
+      ]
     },
     {
       "id": "07-breaker-cb11",
@@ -187,8 +187,31 @@
       "note": "Relay 12 shows a phase B to ground trip. Reported to dispatch, waiting on Lena."
     },
     {
+      "id": "13-t2-oil-low",
+      "t": 150,
+      "wearer": "sam",
+      "room": "Transformer T2",
+      "prompt": "Close-up of a round oil level gauge on the side of a green power transformer tank with its needle down in the red band marked \"LOW\"; a big white stenciled \"T2\" on the tank beside it; a dark oil stain on the gravel below the cooling radiator.",
+      "read": [
+        "T2",
+        "LOW"
+      ],
+      "note": "T2 oil level is low and there's an oil stain under the radiator. Looks like a slow leak."
+    },
+    {
+      "id": "15-gate-locked",
+      "t": 260,
+      "wearer": "sam",
+      "room": "Entrance gate",
+      "prompt": "A chain-link substation gate closed with a heavy chain and a brass padlock, and a white sign on the gate reading \"NORTHLAKE SUBSTATION\" in large red letters; afternoon light.",
+      "read": [
+        "NORTHLAKE"
+      ],
+      "note": "Gate locked, leaving site. T2 oil needs a crew tomorrow."
+    },
+    {
       "id": "09-scorched-insulator",
-      "t": 148,
+      "t": 280,
       "wearer": "lena",
       "room": "Bay 3",
       "prompt": "Looking up at a gray porcelain bushing insulator on top of an outdoor circuit breaker, with black scorch and flash marks on its sheds and a melted remnant of a plastic wildlife guard; a white sign on the steel structure below reads \"CB-12 LINE SIDE\".",
@@ -199,7 +222,7 @@
     },
     {
       "id": "10-wildlife-guards",
-      "t": 166,
+      "t": 300,
       "wearer": "lena",
       "room": "Bay 3",
       "prompt": "A gloved hand holding a new bright orange plastic wildlife guard for a bushing, with a second one still in its packaging on the gravel, next to the gray circuit breaker cabinet whose white sticker label reads \"CB-12\".",
@@ -210,8 +233,8 @@
     },
     {
       "id": "11-breaker-closed-again",
-      "t": 190,
-      "wearer": "sam",
+      "t": 330,
+      "wearer": "lena",
       "room": "Bay 3",
       "pair": "cb12",
       "prompt": "The CB-12 breaker cabinet, closed again.",
@@ -224,7 +247,7 @@
     },
     {
       "id": "12-relay-normal",
-      "t": 214,
+      "t": 345,
       "wearer": "lena",
       "room": "Control house",
       "pair": "relay",
@@ -237,20 +260,8 @@
       "note": "Relay 12 targets reset, event record saved for engineering."
     },
     {
-      "id": "13-t2-oil-low",
-      "t": 261,
-      "wearer": "sam",
-      "room": "Transformer T2",
-      "prompt": "Close-up of a round oil level gauge on the side of a green power transformer tank with its needle down in the red band marked \"LOW\"; a big white stenciled \"T2\" on the tank beside it; a dark oil stain on the gravel below the cooling radiator.",
-      "read": [
-        "T2",
-        "LOW"
-      ],
-      "note": "T2 oil level is low and there's an oil stain under the radiator. Looks like a slow leak."
-    },
-    {
       "id": "14-switching-log",
-      "t": 300,
+      "t": 380,
       "wearer": "lena",
       "room": "Control house",
       "prompt": "A clipboard on a control house desk holding a single printed sheet with only two lines of large bold typed text and nothing else on the page: \"NORTHLAKE SWITCHING LOG\" and below it \"FEEDER 12 RESTORED 11:10\"; a pen lies beside the clipboard.",
@@ -259,17 +270,6 @@
         "FEEDER 12"
       ],
       "note": "Switching log signed off with dispatch."
-    },
-    {
-      "id": "15-gate-locked",
-      "t": 328,
-      "wearer": "sam",
-      "room": "Entrance gate",
-      "prompt": "A chain-link substation gate closed with a heavy chain and a brass padlock, and a white sign on the gate reading \"NORTHLAKE SUBSTATION\" in large red letters; afternoon light.",
-      "read": [
-        "NORTHLAKE"
-      ],
-      "note": "Gate locked, leaving site. T2 oil needs a crew tomorrow."
     }
   ],
   "site": {

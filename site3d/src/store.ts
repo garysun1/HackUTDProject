@@ -64,9 +64,17 @@ async function pull(db: string) {
   if (db !== state.db) return; // dataset switched while in flight
   state.wearers = new Map(wearers.map(r => [r.device_id, { deviceId: r.device_id, name: r.name, role: r.role, shift: r.shift }]));
   state.assets = new Map(assets.map(r => [r.asset_id, { assetId: r.asset_id, name: r.name, assetType: r.asset_type, location: r.location }]));
-  state.alerts = alerts.map(r => ({ alertId: Number(r.alert_id), eventId: r.event_id, tMs: us(r.t_micros), kind: r.kind, text: r.text, entityId: r.entity_id, entityName: r.entity_name, deviceId: r.device_id, wearerName: r.wearer_name, acked: !!r.acked, ackedMs: opt(r.acked_micros) !== undefined ? us(opt(r.acked_micros)) : undefined })).sort((a, b) => a.tMs - b.tMs);
-  state.events = new Map(events.map(r => [r.event_id, { eventId: r.event_id, deviceId: r.device_id, clientT: r.client_t, tMs: us(r.t_micros), source: r.source, status: r.status, note: opt(r.note), label: opt(r.label), scene: r.scene, locationGuess: r.location_guess, activity: r.activity, summary: r.summary, peopleCount: Number(r.people_count) }]));
-  state.locations = new Map(locs.map(r => [r.event_id, { eventId: r.event_id, deviceId: r.device_id, shiftId: r.shift_id, tMs: us(r.t_micros), lat: r.lat, lon: r.lon, accuracyM: r.accuracy_m, altM: opt(r.alt_m), floor: opt(r.floor) }]));
+  // story time: the phone's client_t (capture) rather than t_micros (receipt), so a replayed shift
+  // plays at the hour it happened and photos land on the track at the same clock as their fixes
+  const capMs = (r: any) => { const c = Date.parse(r.client_t); return Number.isFinite(c) ? c : us(r.t_micros); };
+  const evCap = new Map<string, number>(events.map(r => [r.event_id, capMs(r)]));
+  const shift = (serverMs: number) => { // the capture time of the photo received nearest to a server stamp
+    let best: any = null; for (const r of events) { const d = Math.abs(us(r.t_micros) - serverMs); if (!best || d < best.d) best = { d, r }; }
+    return best && best.d < 120_000 ? serverMs - us(best.r.t_micros) + capMs(best.r) : serverMs;
+  };
+  state.alerts = alerts.map(r => ({ alertId: Number(r.alert_id), eventId: r.event_id, tMs: evCap.get(r.event_id) ?? us(r.t_micros), kind: r.kind, text: r.text, entityId: r.entity_id, entityName: r.entity_name, deviceId: r.device_id, wearerName: r.wearer_name, acked: !!r.acked, ackedMs: opt(r.acked_micros) !== undefined ? shift(us(opt(r.acked_micros))) : undefined })).sort((a, b) => a.tMs - b.tMs);
+  state.events = new Map(events.map(r => [r.event_id, { eventId: r.event_id, deviceId: r.device_id, clientT: r.client_t, tMs: capMs(r), source: r.source, status: r.status, note: opt(r.note), label: opt(r.label), scene: r.scene, locationGuess: r.location_guess, activity: r.activity, summary: r.summary, peopleCount: Number(r.people_count) }]));
+  state.locations = new Map(locs.map(r => [r.event_id, { eventId: r.event_id, deviceId: r.device_id, shiftId: r.shift_id, tMs: evCap.get(r.event_id) ?? us(r.t_micros), lat: r.lat, lon: r.lon, accuracyM: r.accuracy_m, altM: opt(r.alt_m), floor: opt(r.floor) }]));
   state.track = track.map(r => ({ pointId: Number(r.point_id), deviceId: r.device_id, shiftId: r.shift_id, tMs: us(r.t_micros), kind: r.kind, lat: r.lat, lon: r.lon, accuracyM: r.accuracy_m, altM: opt(r.alt_m), floor: opt(r.floor) })).sort((a, b) => a.tMs - b.tMs);
   state.handoffs = handoffs.map(r => ({ handoffId: Number(r.handoff_id), sinceMs: us(r.since_micros), generatedMs: us(r.generated_micros), text: r.text, eventIds: r.event_ids ?? [] })).sort((a, b) => a.generatedMs - b.generatedMs);
   state.edges = edges.map(r => { let p: any = {}; try { p = JSON.parse(r.props || '{}'); } catch { } return { edgeId: Number(r.edge_id), fromId: r.from_id, toId: r.to_id, kind: r.kind, props: p }; });
