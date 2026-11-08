@@ -70,7 +70,12 @@ export function sessionShifts(): Shift[] {
   const real = all.filter(s => s.lastMs - s.startMs >= 120_000 && s.smooth.length >= 5);
   const withFloor = real.filter(s => s.pts.some(p => p.floor !== undefined));
   const pool = withFloor.length ? withFloor : real.length ? real : all;
-  return pool.length ? [pool[pool.length - 1]] : [];
+  // the shift being viewed plus the ones it chains from: shifts that overlap it or ended within
+  // two hours before it (a handoff), so worker 1's photos and the issues they raised stay in view
+  if (!pool.length) return [];
+  const chain = [pool[pool.length - 1]];
+  for (let i = pool.length - 2; i >= 0; i--) if (shiftEnd(pool[i]) >= chain[0].startMs - 2 * 3600_000) chain.unshift(pool[i]);
+  return chain;
 }
 export function shiftLive(s: Shift, clock: number) { return clock >= s.startMs && (s.endMs !== null ? clock <= s.endMs + 60_000 : clock <= s.lastMs + TEN_MIN); }
 export function shiftEnd(s: Shift) { return s.endMs ?? s.lastMs; }
