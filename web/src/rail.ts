@@ -27,6 +27,7 @@ async function renderDrawer() {
     ['People', String(e.peopleCount)],
     ['Confidence', e.confidence ? e.confidence.toFixed(2) : '—'],
   ];
+  if (state.badges.has(id)) rows.unshift(['Noted', `<span class="badge"><span class="crown" aria-hidden="true">★</span>${esc(state.badges.get(id)!)}</span>`]);
   if (e.label) rows.push(['Label', `<b>${esc(e.label)}</b>`]);
   if (e.note) rows.push(['Note', `“${esc(e.note)}”`]);
   if (p?.text_in_scene?.length) rows.push(['Text read', `<ul>${p.text_in_scene.map((t: string) => `<li class="mono">${esc(String(t))}</li>`).join('')}</ul>`]);
