@@ -1,9 +1,8 @@
 // The signature move: the entity graph drawn as a floor schematic.
-// Zones come from the asset registry (the first segment of each asset's location) plus any
-// place the model named that no registry asset explains. Assets are tiles inside their zone,
-// carrying their latest state. Events are photo chips (or dots where crowded) on a vertical
-// time axis beneath the asset they touched; NEXT edges trace the operator's walk. New photos
-// slide in from the "now" edge and the path draws itself to them.
+// One open canvas: registry assets are a row of tiles across the top carrying their latest
+// state; events are photo chips (or dots where crowded) on a vertical time axis beneath the
+// asset they touched, or along the walk between neighbours when they touched none; NEXT edges
+// trace the operator's walk. New photos slide in from the "now" edge and the path draws itself.
 import { state, visibleEvents, placeOf, assetsOf, displayName, edgesFrom, props, alertsFor, wearerColor, wearerName, fmtTime, nowMicros, notify, loadPhoto, type Ev, type Ent } from './store';
 import { select, esc } from './timeline';
 
@@ -15,7 +14,7 @@ const ctx = canvas.getContext('2d')!;
 type Mark = { x: number; y: number; w: number; h: number; id: string };
 type TileHit = { x0: number; y0: number; w: number; h: number; id: string };
 let marks: Mark[] = []; let tiles: TileHit[] = [];
-let hover: string | null = null;
+let hover: string | null = null; let hoverTileId: string | null = null;
 
 // ---------- view state: zoom/pan on the time axis, animated positions, photo cache ----------
 let zoom = 1, panY = 0;
@@ -49,7 +48,7 @@ canvas.addEventListener('mousemove', e => {
   const r = canvas.getBoundingClientRect(); const x = e.clientX - r.left, y = e.clientY - r.top;
   const m = marks.find(m => Math.abs(m.x - x) <= m.w / 2 + 6 && Math.abs(m.y - y) <= m.h / 2 + 6);
   const t = !m && tiles.find(t => x >= t.x0 && x <= t.x0 + t.w && y >= t.y0 && y <= t.y0 + t.h);
-  const prev = hover; hover = m?.id ?? null; canvas.style.cursor = m || t ? 'pointer' : 'default';
+  const prev = hover, prevTile = hoverTileId; hover = m?.id ?? null; hoverTileId = t ? t.id : null; canvas.style.cursor = m || t ? 'pointer' : 'default';
   if (m) {
     if (!state.photos.get(m.id)) loadPhoto(m.id).then(() => { if (hover === m.id) renderTip(m.id); });
     if (prev !== m.id) renderTip(m.id);
@@ -61,9 +60,9 @@ canvas.addEventListener('mousemove', e => {
     tip.innerHTML = `<div class="tb"><div class="tt"><b>${esc(name)}</b>${full && full !== name ? ` <span>${esc(full)}</span>` : ''}${asset?.location ? ` · ${esc(asset.location)}` : ''}</div><div class="ts">${last ? `Last seen ${fmtTime(last.tMicros)} by ${esc(wearerName(last.deviceId))}. Click to trace.` : 'Not photographed in this window.'}</div></div>`;
     tip.style.display = 'block'; placeTip(e);
   } else tip.style.display = 'none';
-  if (prev !== hover) renderFloor();
+  if (prev !== hover || prevTile !== hoverTileId) renderFloor();
 });
-canvas.addEventListener('mouseleave', () => { hover = null; tip.style.display = 'none'; renderFloor(); });
+canvas.addEventListener('mouseleave', () => { hover = null; hoverTileId = null; tip.style.display = 'none'; renderFloor(); });
 canvas.addEventListener('click', e => {
   if (hover) { select(hover); return; }
   const r = canvas.getBoundingClientRect(); const x = e.clientX - r.left, y = e.clientY - r.top;
@@ -110,7 +109,6 @@ const CHIP_W = 44, CHIP_H = 33, DOT_R = 6;
 let axisOrigin = 0; // y of the first event at zoom 1, pan 0 (needed by the wheel handler)
 
 const entityIdOf = (assetId: string) => assetId.toLowerCase().replace(/-/g, '_');
-const zoneKey = (loc: string) => (loc || '').split('/')[0].trim() || 'Unassigned';
 function allEvents(): Ev[] { const saved = state.assetFilter; state.assetFilter = null; try { return visibleEvents(); } finally { state.assetFilter = saved; } }
 function slug(name: string): string { return name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '_').replace(/^_|$/g, ''); }
 function roundRect(x: number, y: number, w: number, h: number, r: number) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
@@ -132,41 +130,14 @@ export function renderFloor() {
   empty.hidden = evs.length > 0 || state.assets.size > 0;
   if (!evs.length && !state.assets.size) { setTools(''); return; }
 
-  // ---- zones: registry first, then places the model named that no asset explains ----
-  type Zone = { key: string; name: string; registry: boolean; tileIds: string[]; x0: number; w: number; rows: number };
-  const zones: Zone[] = []; const zoneByKey = new Map<string, Zone>();
-  const addZone = (key: string, name: string, registry: boolean) => { let z = zoneByKey.get(key); if (!z) { z = { key, name, registry, tileIds: [], x0: 0, w: 0, rows: 1 }; zoneByKey.set(key, z); zones.push(z); } return z; };
-  const assetZone = new Map<string, string>(); // entityId -> zone key
-  for (const a of state.assets.values()) { const k = zoneKey(a.location); addZone(k, k, true); assetZone.set(entityIdOf(a.assetId), k); }
+  // ---- tiles: one flat row (two when dense) of registry assets in registry order, plus labeled entities ----
   const chrono = [...evs].reverse();
-  const placeZone = new Map<string, string>(); // place entityId -> zone key, learned from events that touched a registry asset there
-  for (const e of chrono) { const p = placeOf(e.eventId); if (!p || placeZone.has(p.entityId)) continue; const a = assetsOf(e.eventId).find(x => assetZone.has(x.entityId)); if (a) placeZone.set(p.entityId, assetZone.get(a.entityId)!); }
-  const zoneOf = new Map<string, string>();
-  for (const e of chrono) {
-    const p = placeOf(e.eventId); const a = assetsOf(e.eventId).find(x => assetZone.has(x.entityId));
-    let k: string;
-    if (a) k = assetZone.get(a.entityId)!;
-    else if (p && placeZone.has(p.entityId)) k = placeZone.get(p.entityId)!;
-    else if (p) { k = `place:${p.entityId}`; addZone(k, p.canonicalName, false); }
-    else { k = '_none'; addZone(k, 'No place identified', false); }
-    zoneOf.set(e.eventId, k);
-    // labeled, non-registry entities earn a tile in the event's zone
-    const labelId = e.label ? slug(e.label) : null;
-    for (const x of assetsOf(e.eventId)) if (x.entityId === labelId && !assetZone.has(x.entityId)) { assetZone.set(x.entityId, k); }
-  }
-  for (const [id, k] of assetZone) { const z = zoneByKey.get(k); if (z && !z.tileIds.includes(id)) z.tileIds.push(id); }
-  // drop registry zones with nothing to show when there are events elsewhere? No: unseen zones are the coverage story. Keep them.
-
-  // ---- zone widths: proportional to tiles, with a floor, wrapping tiles into two rows when dense ----
+  const tileIds: string[] = [];
+  for (const a of state.assets.values()) tileIds.push(entityIdOf(a.assetId));
+  for (const e of chrono) { const labelId = e.label ? slug(e.label) : null; for (const x of assetsOf(e.eventId)) if (x.entityId === labelId && !tileIds.includes(x.entityId)) tileIds.push(x.entityId); }
   const avail = W - PAD * 2;
-  const needFor = () => zones.map(z => Math.max(130, Math.ceil(z.tileIds.length / z.rows) * 82 + 16));
-  for (const z of zones) z.rows = z.tileIds.length > 4 ? 2 : 1;
-  let need = needFor(); let sum = need.reduce((a, b) => a + b, 0);
-  if (sum > avail) { for (const z of zones) if (z.tileIds.length > 2) z.rows = 2; need = needFor(); sum = need.reduce((a, b) => a + b, 0); } // narrow: wrap sooner rather than truncate names
-  let x = PAD;
-  zones.forEach((z, i) => { z.w = sum <= avail ? need[i] + (avail - sum) * (need[i] / sum) : avail * (need[i] / sum); z.x0 = x; x += z.w; });
-  const rowsMax = Math.max(1, ...zones.map(z => z.rows));
-  const axisTop = TOP + TILE_ROW * rowsMax + 34, axisBottom = H - 28;
+  const rows = tileIds.length * 86 > avail ? 2 : 1; const cols = Math.ceil(tileIds.length / rows);
+  const axisTop = TOP + TILE_ROW * rows + 34, axisBottom = H - 28;
 
   // ---- y by event rank: linear time while it fits, compressed gaps (drawn as breaks) once it does not ----
   const usable = axisBottom - axisTop - CHIP_H - 10;
@@ -192,57 +163,37 @@ export function renderFloor() {
   const yOf = (id: string) => axisOrigin + rank.get(id)! * scale * zoom + panY;
   const yBreak = (b: number) => axisOrigin + b * scale * zoom + panY;
 
-  // ---- zones: shading and headers ----
-  ctx.textBaseline = 'middle';
-  zones.forEach((z, i) => {
-    ctx.fillStyle = i % 2 ? C.zoneB : C.zoneA; ctx.fillRect(z.x0, TOP - 30, z.w, H - TOP + 30);
-    ctx.strokeStyle = C.soft; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(z.x0, TOP - 30); ctx.lineTo(z.x0, H); ctx.stroke();
-    const none = z.key === '_none';
-    ctx.fillStyle = none ? C.ink3 : C.place; ctx.textAlign = 'left'; ctx.font = none ? '500 12px Inter, sans-serif' : '600 12px Inter, sans-serif';
-    const label = none ? z.name : z.name.toUpperCase(); const maxW = z.w - 20;
-    ctx.fillText(fit(label, maxW), z.x0 + 10, TOP - 14);
-    if (z.registry && z.tileIds.length) {
-      const seenN = z.tileIds.filter(id => evs.some(e => assetsOf(e.eventId).some(a => a.entityId === id))).length;
-      const t = `${seenN}/${z.tileIds.length} seen`; ctx.font = '11px "JetBrains Mono", monospace'; const tw = ctx.measureText(t).width;
-      if (ctx.measureText(label).width + tw + 30 < z.w) { ctx.fillStyle = seenN === z.tileIds.length ? C.ink4 : C.ink3; ctx.textAlign = 'right'; ctx.fillText(t, z.x0 + z.w - 10, TOP - 14); }
-    }
-  });
-
   // ---- asset tiles with state: last change (amber), else last seen; faded when unseen; red edge on open alert ----
   const assetX = new Map<string, number>();
-  for (const z of zones) {
-    const cols = Math.ceil(z.tileIds.length / z.rows); if (!cols) {
-      const cx = z.x0 + z.w / 2; ctx.strokeStyle = C.soft; ctx.setLineDash([2, 4]); ctx.beginPath(); ctx.moveTo(cx, axisTop); ctx.lineTo(cx, axisBottom); ctx.stroke(); ctx.setLineDash([]); continue;
-    }
-    const slotW = z.w / (cols + 1); const twMax = Math.min(96, slotW - 8);
-    z.tileIds.forEach((id, j) => {
-      const row = z.rows === 2 ? j % 2 : 0; const col = z.rows === 2 ? Math.floor(j / 2) : j;
-      const cx = z.x0 + slotW * (col + 1); assetX.set(id, cx);
-      const ent = state.entities.get(id); const asset = state.assets.get(id.toUpperCase().replace(/_/g, '-'));
-      const name = ent ? displayName(ent) : asset?.assetId ?? id;
-      ctx.font = '500 12px "JetBrains Mono", monospace';
-      const label = fit(name, twMax - 16); const tw = Math.max(56, Math.min(twMax, ctx.measureText(label).width + 18));
-      const lastEv = evs.find(e => assetsOf(e.eventId).some(a => a.entityId === id));
-      const hasAlert = evs.some(e => alertsFor(e).some(al => al.assetId === id && !al.acked));
-      const active = state.assetFilter === id; const faded = !lastEv;
-      const ty = TOP + 2 + row * TILE_ROW;
-      ctx.globalAlpha = faded ? 0.45 : 1;
-      ctx.fillStyle = active ? C.ink : C.panel; ctx.strokeStyle = hasAlert ? C.crit : active ? C.ink : C.line; ctx.lineWidth = hasAlert || active ? 1.5 : 1;
-      if (faded) ctx.setLineDash([3, 3]);
-      roundRect(cx - tw / 2, ty, tw, TILE_H, 5); ctx.fill(); ctx.stroke(); ctx.setLineDash([]);
-      ctx.fillStyle = active ? C.ground : hasAlert ? C.crit : C.entity; ctx.textAlign = 'center'; ctx.fillText(label, cx, ty + TILE_H / 2 + 1);
-      ctx.globalAlpha = 1;
-      tiles.push({ x0: cx - tw / 2, y0: ty, w: tw, h: TILE_H, id });
-      // state line under the tile row block
-      let reading = '', tone = C.ink3;
-      for (const e of evs) { const ch = edgesFrom(e.eventId, 'CHANGES').find(ed => ed.toId === id); if (ch) { const p = props(ch); reading = `${p.attr ? p.attr + ' ' : ''}${p.from} → ${p.to}`; tone = C.warn; break; } }
-      if (!reading && lastEv) reading = `${fmtTime(lastEv.tMicros)} · ${wearerName(lastEv.deviceId)}`;
-      if (!reading) { reading = 'not seen'; tone = C.ink4; }
-      if (z.rows === 1 || row === 1) { ctx.font = '11px "JetBrains Mono", monospace'; ctx.fillStyle = tone; ctx.fillText(fit(reading, slotW - 6), cx, TOP + TILE_ROW * z.rows + 8); }
-      // time axis under the tile
-      ctx.strokeStyle = C.soft; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(cx, axisTop); ctx.lineTo(cx, axisBottom); ctx.stroke();
-    });
-  }
+  const slotW = cols ? avail / cols : avail; const twMax = Math.min(104, slotW - 10);
+  const hoverTile = hoverTileId;
+  tileIds.forEach((id, j) => {
+    const row = rows === 2 ? j % 2 : 0; const col = rows === 2 ? Math.floor(j / 2) : j;
+    const cx = PAD + slotW * (col + 0.5); assetX.set(id, cx);
+    const ent = state.entities.get(id); const asset = state.assets.get(id.toUpperCase().replace(/_/g, '-'));
+    const name = ent ? displayName(ent) : asset?.assetId ?? id;
+    ctx.font = '500 12px "JetBrains Mono", monospace';
+    const label = fit(name, twMax - 16); const tw = Math.max(56, Math.min(twMax, ctx.measureText(label).width + 18));
+    const lastEv = evs.find(e => assetsOf(e.eventId).some(a => a.entityId === id));
+    const hasAlert = evs.some(e => alertsFor(e).some(al => al.assetId === id && !al.acked));
+    const active = state.assetFilter === id; const faded = !lastEv;
+    const ty = TOP + 2 + row * TILE_ROW;
+    ctx.globalAlpha = faded ? 0.45 : 1;
+    ctx.fillStyle = active ? C.ink : C.panel; ctx.strokeStyle = hasAlert ? C.crit : active ? C.ink : C.line; ctx.lineWidth = hasAlert || active ? 1.5 : 1;
+    if (faded) ctx.setLineDash([3, 3]);
+    roundRect(cx - tw / 2, ty, tw, TILE_H, 5); ctx.fill(); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle = active ? C.ground : hasAlert ? C.crit : C.entity; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(label, cx, ty + TILE_H / 2 + 1);
+    ctx.globalAlpha = 1;
+    tiles.push({ x0: cx - tw / 2, y0: ty, w: tw, h: TILE_H, id });
+    // state line under the tile block
+    let reading = '', tone = C.ink3;
+    for (const e of evs) { const ch = edgesFrom(e.eventId, 'CHANGES').find(ed => ed.toId === id); if (ch) { const p = props(ch); reading = `${p.attr ? p.attr + ' ' : ''}${p.from} → ${p.to}`; tone = C.warn; break; } }
+    if (!reading && lastEv) reading = `${fmtTime(lastEv.tMicros)} · ${wearerName(lastEv.deviceId)}`;
+    if (!reading) { reading = 'not seen'; tone = C.ink4; }
+    if (rows === 1 || row === 1) { ctx.font = '11px "JetBrains Mono", monospace'; ctx.fillStyle = tone; ctx.fillText(fit(reading, slotW - 6), cx, TOP + TILE_ROW * rows + 8); }
+    // a guide line only for the asset being hovered or traced: the rest of the canvas stays open
+    if (active || hoverTile === id) { ctx.strokeStyle = active ? C.line : C.soft; ctx.lineWidth = 1; ctx.setLineDash([2, 4]); ctx.beginPath(); ctx.moveTo(cx, axisTop); ctx.lineTo(cx, axisBottom); ctx.stroke(); ctx.setLineDash([]); }
+  });
 
   // ---- time ticks, gap breaks, now edge ----
   ctx.save(); ctx.beginPath(); ctx.rect(0, axisTop - 2, W, axisBottom - axisTop + 2); ctx.clip();
@@ -262,14 +213,31 @@ export function renderFloor() {
   ctx.strokeStyle = C.line; ctx.setLineDash([3, 4]); ctx.beginPath(); ctx.moveTo(PAD, axisBottom); ctx.lineTo(W - PAD, axisBottom); ctx.stroke(); ctx.setLineDash([]);
   ctx.fillStyle = C.ink3; ctx.font = '11px "JetBrains Mono", monospace'; ctx.textAlign = 'left'; ctx.textBaseline = 'bottom'; ctx.fillText(`now ${fmtTime(nowMicros())}`, PAD + 6, axisBottom - 4); ctx.textBaseline = 'middle';
 
-  // ---- target positions, then animated positions ----
+  // ---- target positions: under the asset touched; otherwise along the walk, between the anchored neighbours ----
   const target = new Map<string, { x: number; y: number }>(); const lane = new Map<string, number>();
-  for (const e of chrono) {
-    const z = zoneByKey.get(zoneOf.get(e.eventId)!)!;
-    const a = assetsOf(e.eventId).find(a => assetX.has(a.entityId)); const tx = a ? assetX.get(a.entityId)! : z.x0 + z.w / 2;
-    const ty = yOf(e.eventId); const key = `${Math.round(tx)}:${Math.round(ty)}`; const n = lane.get(key) ?? 0; lane.set(key, n + 1);
+  // anchor priority: the operator's label, then a registry asset, then any tiled entity
+  const anchorX = chrono.map(e => {
+    const labelId = e.label ? slug(e.label) : null; const as = assetsOf(e.eventId).filter(a => assetX.has(a.entityId));
+    const a = as.find(a => a.entityId === labelId) ?? as.find(a => a.kind === 'asset') ?? as[0];
+    return a ? assetX.get(a.entityId)! : null;
+  });
+  const xs: number[] = anchorX.map((x, i) => {
+    if (x != null) return x;
+    let p = i - 1; while (p >= 0 && anchorX[p] == null) p--;
+    let n = i + 1; while (n < anchorX.length && anchorX[n] == null) n++;
+    const px = p >= 0 ? anchorX[p]! : null, nx = n < anchorX.length ? anchorX[n]! : null;
+    if (px != null && nx != null) return (px + nx) / 2 + (Math.abs(px - nx) < CHIP_W * 2 ? CHIP_W * 1.6 : 0);
+    if (px != null) return Math.min(W - PAD - CHIP_W, px + CHIP_W * 2.2);
+    if (nx != null) return Math.max(PAD + 70, nx - CHIP_W * 2.2);
+    return W / 2;
+  });
+  chrono.forEach((e, i) => {
+    let tx = xs[i]; const ty = yOf(e.eventId);
+    // untethered photos that would stack on the previous one step sideways
+    if (anchorX[i] == null && i > 0 && Math.abs(target.get(chrono[i - 1].eventId)!.y - ty) < CHIP_H + 6 && Math.abs(target.get(chrono[i - 1].eventId)!.x - tx) < CHIP_W + 8) tx = target.get(chrono[i - 1].eventId)!.x + CHIP_W + 10;
+    const key = `${Math.round(tx)}:${Math.round(ty)}`; const n = lane.get(key) ?? 0; lane.set(key, n + 1);
     target.set(e.eventId, { x: tx + (n ? (n % 2 ? 1 : -1) * Math.ceil(n / 2) * 14 : 0), y: ty });
-  }
+  });
   const booted = now - bootT > 2500 && seen.size > 0;
   let moving = false; const k = 1 - Math.exp(-dt / 110);
   const pos = new Map<string, { x: number; y: number; a: number; t0: number }>();

@@ -30,19 +30,20 @@ numerals on. Handoff section heads are 12px uppercase tracked, the one label-sty
 tooltip and drawer. Primary action is the ink-filled button; everything else is outlined.
 
 ## Signature move
-The floor schematic (`src/floor.ts`) is the product; since 2026-11-07 it owns the width and the
-operations rail is gone (history: commit fc75319). Zones come from the asset registry (the first
-segment of each asset's location) so the floor is laid out before the first photo, plus any
-place the model names that no registry asset explains. Assets are monospace tiles that carry
+The floor (`src/floor.ts`) is the product; since 2026-11-07 it owns the width and the operations
+rail is gone (history: commit fc75319). It is one open canvas, no columns: registry assets are a
+row of monospace tiles across the top in registry order (two rows when dense), each carrying
 state: last change in amber, else last seen and by whom, dashed and faded while unseen this
-window, red edge while an alert is open; the zone header counts seen/total. Events are 44×33
-photo chips bordered in the wearer's color (dots where chips would collide) on a vertical time
-axis under the asset they touched. Time is linear while the shift fits; once it does not, gaps
-cap at 56px and idle stretches of 30 min or more become a labeled break. Wheel zooms the axis
-around the cursor, double-click or Fit resets. NEXT is the operator's walk as a bezier, CHANGES
-are amber ticks. Clicking a tile enters trace mode: everything else dims to 22%, the full path
-stays. Hover shows the photo card; click opens the detail panel over the floor's right edge and
-the canvas reflows. Arrow keys step through the shift. Canvas colors are read from the tokens.
+window, red edge while an alert is open. Events are 44×33 photo chips bordered in the wearer's
+color (dots where chips would collide) on a vertical time axis, placed under the asset they
+touched (the operator's label wins, then a registry asset) or, when they touched none, along the
+walk between their anchored neighbours. Time is linear while the shift fits; once it does not,
+gaps cap at 56px and idle stretches of 30 min or more become a labeled break. Wheel zooms the
+axis around the cursor, double-click or Fit resets. NEXT is the walk as a bezier, CHANGES are
+amber ticks. A dashed guide drops from a tile only while it is hovered or traced. Clicking a tile
+enters trace mode: everything else dims to 22%, the full path stays. Hover shows the photo card;
+click opens the detail panel over the floor's right edge and the canvas reflows. Arrow keys step
+through the shift. Canvas colors are read from the tokens.
 
 ## Motion
 Positions ease (110 ms exponential), so zoom, reflow and new arrivals move instead of snapping.
