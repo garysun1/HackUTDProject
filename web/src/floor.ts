@@ -11,6 +11,8 @@ import { view as vs, shownEvents, setScope, onView } from './view';
 import { photoCard, showTip, hideTip } from './card';
 import { fitRequested } from './tools';
 import { vocab, typeWords } from './workspaces';
+import { sessionShifts, inSession } from './brain';
+import { overlayActive } from './overlay';
 
 const canvas = document.getElementById('floor') as HTMLCanvasElement;
 const empty = document.getElementById('floor-empty') as HTMLElement;
@@ -47,7 +49,12 @@ function photo(id: string): HTMLImageElement | null {
 }
 function frame() { if (!raf) raf = requestAnimationFrame(() => { raf = 0; renderFloor(); }); }
 function toWorld(px: number, py: number) { return { x: (px - view.tx) / view.k, y: (py - view.ty) / view.k }; }
-function shown(): Ev[] { return shownEvents(true); }
+// The graph draws exactly the photos the map and its panel are about: the session's shifts (brain.sessionShifts).
+// A database with no tracked walk, or a workspace with an overlay, is about the whole record, as in the panel.
+function shown(): Ev[] {
+  const evs = shownEvents(true); const all = sessionShifts();
+  return all.length && !overlayActive() ? evs.filter(e => inSession(e, all)) : evs;
+}
 
 // ---------- theme ----------
 function cssVar(name: string): string { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
@@ -222,7 +229,7 @@ export function renderFloor() {
   if (canvas.width !== W * dpr || canvas.height !== H * dpr) { canvas.width = W * dpr; canvas.height = H * dpr; }
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, H);
   hits = []; nodeById.clear();
-  const evs = shown(); empty.hidden = evs.length > 0 || vs.replay.on || !!vs.scope;
+  const evs = shown(); canvas.dataset.photos = String(evs.length); empty.hidden = evs.length > 0 || vs.replay.on || !!vs.scope;
   if (!evs.length) return;
   const L = layout(evs); for (const n of L.nodes) nodeById.set(n.id, n);
   let moving = vs.replay.playing;
