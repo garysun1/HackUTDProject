@@ -86,6 +86,7 @@ struct SettingsView: View {
         }
         Toggle("Blur faces before upload", isOn: $config.blurFaces)
         Toggle("Keep session alive in background", isOn: $config.keepSessionInBackground)
+        Toggle("Shutter sound", isOn: $config.shutterSound)
       }
 
       Section {

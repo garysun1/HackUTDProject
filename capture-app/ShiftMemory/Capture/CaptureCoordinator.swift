@@ -38,7 +38,9 @@ final class CaptureCoordinator {
     let metricsId = photo.captureId ?? UUID().uuidString.lowercased()
     _ = diagnostics.begin(id: metricsId, source: source)
     diagnostics.update(id: metricsId) { m in
-      m.requestedAt = photo.isAppRequested ? (m.requestedAt ?? photo.receivedAt) : nil
+      // App captures already have a row from AppModel.capture(); shutter-initiated captures (Inputs
+      // path) get their request time here so captureToBytesMs covers both.
+      m.requestedAt = m.requestedAt ?? photo.requestedAt
       m.firstProgressAt = photo.firstProgressAt
       m.bytesAt = photo.receivedAt
       m.bytes = photo.data.count

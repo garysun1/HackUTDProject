@@ -48,6 +48,7 @@
 	<!-- Every transport the toolkit may use must be declared or it silently cannot use it. -->
 	<key>UIBackgroundModes</key>
 	<array>
+		<string>audio</string>
 		<string>processing</string>
 		<string>bluetooth-central</string>
 		<string>bluetooth-peripheral</string>

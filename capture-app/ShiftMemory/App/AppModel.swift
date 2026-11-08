@@ -25,6 +25,7 @@ final class AppModel {
   let queue: UploadQueue
   let pipeline: ImagePipeline
   let coordinator: CaptureCoordinator
+  let shutterSound = ShutterSound()
 
   private(set) var isOnline = true
   private(set) var isStarted = false
@@ -65,6 +66,10 @@ final class AppModel {
 
     glasses.onPhoto = { [weak self] photo in await self?.coordinator.handle(photo) }
     glasses.onEvent = { [weak self] event in self?.record(event) }
+    glasses.onShutterPress = { [weak self] in
+      guard let self, self.config.shutterSound else { return }
+      self.shutterSound.play()
+    }
     glasses.startObserving()
 
     config.onIngestTokenChanged = { [weak self] in
@@ -139,6 +144,7 @@ final class AppModel {
     let quality = PhotoQuality(rawValue: config.captureQuality) ?? .high
     syncShutterSettings()
     if let id = glasses.capture(resolution: resolution, quality: quality) {
+      if config.shutterSound { shutterSound.play() }
       _ = diagnostics.begin(id: id, source: .sdkCapture)
       diagnostics.update(id: id) { m in
         m.requestedAt = Date()

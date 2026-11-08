@@ -50,8 +50,10 @@ struct GlassesPhoto: Sendable {
   let appState: String
   /// True when this app had a `capturePhoto` in flight; otherwise the wearer pressed the shutter.
   let isAppRequested: Bool
-  /// The capture attempt id (`appRequested` only), so diagnostics can join request and delivery.
+  /// The capture attempt id (app or shutter-initiated), so diagnostics can join request and delivery.
   let captureId: String?
+  /// When this controller asked the glasses for the photo (app button or shutter press); nil when unsolicited.
+  let requestedAt: Date?
   let requestedResolution: String?
   let requestedQuality: String?
   let firstProgressAt: Date?
@@ -113,6 +115,8 @@ final class GlassesController {
   // MARK: Hooks (set by the composition root)
   var onPhoto: ((GlassesPhoto) async -> Void)?
   var onEvent: ((GlassesEvent) -> Void)?
+  /// Fired the instant the glasses report a capture-button press (before any debounce), for feedback.
+  var onShutterPress: (() -> Void)?
 
   // MARK: Private
   private let wearables: (any WearablesInterface)?
@@ -141,6 +145,8 @@ final class GlassesController {
   private var inputsRevival: Task<Void, Never>?
   /// A short press waits a beat for the double-press the SDK sends after it (known issue), then fires.
   private var shutterDebounce: Task<Void, Never>?
+  /// A press that landed while a capture was in flight (one at a time); fired when the photo arrives.
+  private var shutterPressQueued = false
   /// Resolution/quality for shutter-initiated captures; the composition root mirrors Settings here.
   var shutterResolution: PhotoResolution = .medium
   var shutterQuality: PhotoQuality = .medium
@@ -524,6 +530,7 @@ final class GlassesController {
       guard source == .captureButton else { return }
       switch press {
       case .shortPress:
+        if phase.isLive { onShutterPress?() }
         // Known issue: a double press arrives as shortPress then doublePress. Wait a beat.
         shutterDebounce?.cancel()
         shutterDebounce = Task { [weak self] in
@@ -549,9 +556,17 @@ final class GlassesController {
   /// The wearer pressed the shutter: take the photo through our Photo child, tagged as theirs.
   func shutterPressed() {
     guard phase == .ready, pending == nil, let photo, photoState == .started else {
-      glassesLog("shutter press ignored: phase=\(phase) pending=\(pending != nil) photoState=\(photoState.map { "\($0)" } ?? "nil")")
+      if phase == .capturing, pending != nil {
+        // Full/high transfers take ~40 s over Bluetooth; a wearer pressing again meanwhile wants a
+        // second photo, not a dropped one. Fire it when the current photo lands.
+        shutterPressQueued = true
+        glassesLog("shutter press queued: a capture is in flight")
+      } else {
+        glassesLog("shutter press ignored: phase=\(phase) pending=\(pending != nil) photoState=\(photoState.map { "\($0)" } ?? "nil")")
+      }
       return
     }
+    shutterPressQueued = false
     _ = startCapture(resolution: shutterResolution, quality: shutterQuality, appRequested: false, photo: photo)
   }
 
@@ -565,6 +580,7 @@ final class GlassesController {
     inputsRevival = nil
     shutterDebounce?.cancel()
     shutterDebounce = nil
+    shutterPressQueued = false
     if let session { detachInputs(from: session) }
     camera?.stop()
     session?.stop()
@@ -741,6 +757,7 @@ final class GlassesController {
 
   /// Fail the in-flight app capture (if any) with `message`; the wearer sees it as `lastError`.
   private func failPendingCapture(_ message: String) {
+    shutterPressQueued = false
     guard pending != nil else { return }
     pending?.timeout?.cancel()
     pending = nil
@@ -828,12 +845,17 @@ final class GlassesController {
       appState: appState,
       isAppRequested: p?.isAppRequested ?? false,
       captureId: p?.id,
+      requestedAt: p?.requestedAt,
       requestedResolution: p?.resolution.rawValue,
       requestedQuality: p?.quality.rawValue,
       firstProgressAt: p?.firstProgressAt,
       glassesBattery: session?.device?.batteryLevel ?? deviceBattery
     )
     await onPhoto?(photo)
+    if shutterPressQueued {
+      shutterPressQueued = false
+      shutterPressed()
+    }
   }
 
   private func photoError(_ error: PhotoError) async {

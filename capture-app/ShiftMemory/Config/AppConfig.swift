@@ -54,6 +54,8 @@ final class AppConfig {
   /// Keep the glasses session alive when the app goes to the background (needed to test
   /// shutter-button delivery while backgrounded, issue #10). Off ends the session on background.
   var keepSessionInBackground: Bool { didSet { defaults.set(keepSessionInBackground, forKey: Keys.keepSessionInBackground) } }
+  /// Chime on the phone the instant a capture is requested (shutter press or Capture button).
+  var shutterSound: Bool { didSet { defaults.set(shutterSound, forKey: Keys.shutterSound) } }
 
   // MARK: Camera-roll import (issue #2)
   var cameraRollImportEnabled: Bool { didSet { defaults.set(cameraRollImportEnabled, forKey: Keys.cameraRollImportEnabled) } }
@@ -78,6 +80,7 @@ final class AppConfig {
     static let captureQuality = "capture.quality"
     static let blurFaces = "capture.blurFaces"
     static let keepSessionInBackground = "capture.keepSessionInBackground"
+    static let shutterSound = "capture.shutterSound"
     static let cameraRollImportEnabled = "import.enabled"
     static let cameraRollOnlyGlassesPhotos = "import.onlyGlassesPhotos"
     static let seeded = "config.seededFromPlist"
@@ -109,6 +112,7 @@ final class AppConfig {
     captureQuality = defaults.string(forKey: Keys.captureQuality) ?? "high"
     blurFaces = defaults.object(forKey: Keys.blurFaces) as? Bool ?? true
     keepSessionInBackground = defaults.object(forKey: Keys.keepSessionInBackground) as? Bool ?? true
+    shutterSound = defaults.object(forKey: Keys.shutterSound) as? Bool ?? true
     cameraRollImportEnabled = defaults.bool(forKey: Keys.cameraRollImportEnabled)
     cameraRollOnlyGlassesPhotos = defaults.object(forKey: Keys.cameraRollOnlyGlassesPhotos) as? Bool ?? true
 
