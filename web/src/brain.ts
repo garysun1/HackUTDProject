@@ -171,6 +171,8 @@ export function snapshot(clock: number): Snapshot {
 /** The module's entity id for a registry asset (module/spacetimedb/src/rules.ts slug). */
 const slug = (name: string) => name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
 const seen = new Set<string>(); let lastSig = ''; let lastCur = ''; let userScrollAt = 0;
+/** Empty the panel and force the next renderBrain to redraw (its change check would otherwise skip). */
+export function resetBrain(el: HTMLElement, stats?: HTMLElement) { el.innerHTML = ''; if (stats) stats.innerHTML = ''; lastSig = ''; lastCur = ''; }
 function watchScroll(el: HTMLElement) { if ((el as any).__watched) return; (el as any).__watched = true; for (const ev of ['wheel', 'touchmove', 'pointerdown']) el.addEventListener(ev, () => { userScrollAt = performance.now(); }, { passive: true }); }
 export type BrainCtx = { clock: number; stats: HTMLElement | null; locate: (lat: number, lon: number) => string | undefined; onSelect: (id: string) => void; onJump: (ms: number) => void };
 const fmt = (t: number) => fmtTime(BigInt(Math.round(t)) * 1000n);

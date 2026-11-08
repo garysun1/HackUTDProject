@@ -14,7 +14,7 @@ import { SiteScene, type PinSpec, type IssueSpec, type SiteData } from './site3d
 import { centroid } from './site3d/geo';
 import { siteFor, ecswSite, locateIn, type KnownSite } from './site3d/sites';
 import { badgeOf } from './overlay';
-import { sessionShifts, shifts, positionAt, renderBrain, openAt, shiftEnd, inSession, sessionRange, raisedAt, resolvedAt, type Shift } from './brain';
+import { sessionShifts, shifts, positionAt, renderBrain, resetBrain, openAt, shiftEnd, inSession, sessionRange, raisedAt, resolvedAt, type Shift } from './brain';
 
 const host = document.getElementById('map') as HTMLElement;
 // Replay speeds: a shift plays at up to 300×; a record that spans a day or more gets two faster steps.
@@ -25,20 +25,21 @@ function speedList(): number[] { const [t0, t1] = replayRange(); const h = (t1 -
 let toastTimer = 0;
 function toast(html: string) { const el = host.querySelector('.s3-toast') as HTMLElement | null; if (!el) return; el.innerHTML = html; el.hidden = false; el.classList.remove('show'); void el.offsetWidth; el.classList.add('show'); clearTimeout(toastTimer); toastTimer = window.setTimeout(() => { el.hidden = true; }, 9000); }
 const toasted = new Set<string>();
-let scene: SiteScene | null = null; let brainEl: HTMLElement; let statsEl: HTMLElement; let followBtn: HTMLButtonElement; let seenFit = fitRequested;
+// The Reflection panel belongs to the floor, not the map: it stays beside the map and the graph alike.
+const brainEl = document.querySelector('#brain .s3-brain-body') as HTMLElement; const statsEl = document.querySelector('#brain .s3-brain-stats') as HTMLElement;
+let scene: SiteScene | null = null; let followBtn: HTMLButtonElement; let seenFit = fitRequested;
 let raf = 0; let brainAt = 0; let scrubEl: HTMLInputElement; let marksEl: HTMLElement; let scrubbing = false; let marksSig = '';
 
 function ensureScene(): SiteScene {
   if (scene) return scene;
   host.innerHTML = `<canvas class="s3-gl" aria-label="3D view of the site"></canvas><div class="s3-labels" aria-hidden="true"></div>
     <div class="s3-ctl"><span class="seg" role="group" aria-label="Camera"><button type="button" data-cam="3d" aria-pressed="true">3D</button><button type="button" data-cam="2d" aria-pressed="false">Top-down</button></span><button type="button" class="btn ghost" data-follow aria-pressed="false" hidden title="Keep the camera on the wearer (F)">Follow</button></div>
-    <aside class="s3-brain" aria-label="Reflection"><div class="bh"><h2>Reflection</h2></div><div class="s3-brain-stats"></div><div class="s3-brain-body"></div><div class="s3-credit">Imagery © Esri · Building © OpenStreetMap contributors</div></aside>
     <div class="s3-replay" role="group" aria-label="Replay"><button type="button" data-play aria-label="Play">▶</button><select class="speed" data-speed-sel aria-label="Replay speed">${speedOptions(view.replay.speed)}</select><div class="scrub"><input type="range" min="0" max="1000" value="1000" data-scrub aria-label="Time" /><div class="s3-marks"></div></div><span class="clock mono" data-clock>—</span><button type="button" class="exit" data-exit hidden aria-label="Leave the replay" title="Leave the replay">✕</button></div>
     <div class="s3-toast" role="status" aria-live="polite" hidden></div>
     <div class="s3-legend"><span><i class="sw trail"></i>walk</span><span><i class="sw heat"></i>time spent</span><span><i class="sw photo"></i>photo</span><span><i class="sw alert"></i>open issue</span><span><i class="sw done"></i>resolved</span></div>`;
   const canvas = host.querySelector('canvas')!; const labels = host.querySelector('.s3-labels') as HTMLElement;
   scene = new SiteScene(canvas, labels, host); (window as any).__scene = scene;
-  brainEl = host.querySelector('.s3-brain-body') as HTMLElement; statsEl = host.querySelector('.s3-brain-stats') as HTMLElement; followBtn = host.querySelector('[data-follow]') as HTMLButtonElement;
+  followBtn = host.querySelector('[data-follow]') as HTMLButtonElement;
   host.querySelectorAll<HTMLButtonElement>('[data-cam]').forEach(b => b.addEventListener('click', () => { scene!.setView(b.dataset.cam as '3d' | '2d'); host.querySelectorAll('[data-cam]').forEach(x => x.setAttribute('aria-pressed', String(x === b))); }));
   followBtn.addEventListener('click', () => scene!.setFollow(!scene!.follow));
   host.addEventListener('site:follow', (e: any) => followBtn.setAttribute('aria-pressed', String(e.detail.on)));
@@ -134,7 +135,7 @@ function frame() {
 function frameBody() {
   if (view.mode !== 'map' || host.hidden) return;
   const sc = ensureScene();
-  if (current().db !== lastDb) { lastDb = current().db; site = null; resetHeat(); for (const dev of [...sc.wearers.keys()]) sc.hideWearer(dev); sc.setPins([]); brainEl.innerHTML = ''; statsEl.innerHTML = ''; }
+  if (current().db !== lastDb) { lastDb = current().db; site = null; resetHeat(); for (const dev of [...sc.wearers.keys()]) sc.hideWearer(dev); sc.setPins([]); resetBrain(brainEl, statsEl); }
   if (state.track.size || state.locations.size) ensureSite(sc);
   const clock = viewClock();
   if (!site) { const t = performance.now(); if (t - brainAt > 250) { brainAt = t; renderBrain(brainEl, { clock, stats: statsEl, locate, onSelect: select, onJump: jumpTo }); } sc.frame(); raf = requestAnimationFrame(frame); return; }
@@ -212,9 +213,18 @@ function renderBar(clock: number) {
 
 export function renderMap() {
   const active = view.mode === 'map';
-  host.hidden = !active; if (!active) { hideTip(); return; }
+  host.hidden = !active; if (!active) { renderPanelOnly(); return; }
   if (!raf) raf = requestAnimationFrame(frame);
 }
+// Outside the map the panel still follows the data and the replay clock (the map's frame loop is
+// what normally refreshes it). Room names need the site, so they appear once the map has been opened.
+let panelDb = '';
+function renderPanelOnly() {
+  if (current().db !== panelDb) { panelDb = current().db; resetBrain(brainEl, statsEl); }
+  const now = performance.now(); if (now - brainAt < 250) return; brainAt = now;
+  renderBrain(brainEl, { clock: viewClock(), stats: statsEl, locate, onSelect: select, onJump: jumpTo });
+}
+setInterval(() => { if (view.mode !== 'map') renderPanelOnly(); }, 1000);
 export function mapUserView() { return !!scene?.userView; }
 setRangeSource(sessionRange);
 onView(() => renderMap());

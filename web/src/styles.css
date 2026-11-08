@@ -119,6 +119,12 @@ body[data-conn="connecting"] .col, body[data-conn="error"] .col { opacity: .7; }
 .floor canvas { flex: 1; width: 100%; height: 100%; display: block; }
 /* in the Shift view the drawer takes the right edge; on the map it takes the memory panel's place instead (below), so the map never resizes */
 .floor:has(#map[hidden]):has(.drawer:not([hidden])) canvas { width: calc(100% - 380px); }
+/* the Reflection panel stays in every view; the graph keeps clear of it (the map runs under it, as it always has) */
+.floor:has(#map[hidden]) canvas { width: calc(100% - 364px); }
+.floor:has(#map[hidden]) .s3-credit { display: none; }
+.g-legend { bottom: 12px; }
+.g-legend[hidden] { display: none; }
+.g-legend .k { margin-right: 0; }
 .floor-tools { display: inline-flex; gap: 8px; align-items: center; margin-left: auto; margin-right: 16px; }
 .floor-tools:empty { display: none; }
 .pill { font: 500 12px var(--font); color: var(--ink); background: var(--panel); border: 1px solid var(--line-strong); border-radius: 999px; padding: 3px 10px; min-height: 26px; cursor: pointer; }
@@ -220,7 +226,7 @@ body[data-conn="connecting"] .col, body[data-conn="error"] .col { opacity: .7; }
 .s3-pin.arrive { animation: s3-drop .5s ease-out; } @keyframes s3-drop { from { transform: translate(0, -60px); opacity: 0; } }
 @keyframes s3-burn { 50% { box-shadow: 0 0 0 5px color-mix(in srgb, var(--critical) 25%, transparent); } }
 /* Reflection panel beside the map */
-.s3-brain { position: absolute; top: 10px; right: 12px; bottom: 10px; width: 340px; z-index: 950; display: flex; flex-direction: column; background: var(--glass-bg); backdrop-filter: blur(12px); border: 1px solid var(--line); border-radius: 8px; box-shadow: var(--shadow); overflow: hidden; font-size: 13.5px; }
+.s3-brain { position: absolute; top: 50px; right: 12px; bottom: 10px; width: 340px; z-index: 950; display: flex; flex-direction: column; background: var(--glass-bg); backdrop-filter: blur(12px); border: 1px solid var(--line); border-radius: 8px; box-shadow: var(--shadow); overflow: hidden; font-size: 13.5px; }
 .s3-brain .bh { display: flex; align-items: center; justify-content: space-between; padding: 9px 14px; border-bottom: 1px solid var(--line); }
 .s3-brain .bh h2 { font-size: 14px; }
 .s3-brain-stats { padding: 10px 12px 0; display: flex; flex-direction: column; flex: 0 0 auto; }

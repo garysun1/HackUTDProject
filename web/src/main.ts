@@ -55,8 +55,9 @@ function renderMenu() {
 }
 function renderWorkspace() { const w = current(); wsName.textContent = w.name; wsBtn.title = `${w.name} · ${w.subtitle} · ${w.db}`; dbEl.textContent = DB;
   const h2 = document.querySelector('.floor .colhead h2'); if (h2) h2.textContent = vocab().session;
-  const lg = document.querySelector('.floor .legend'); if (lg && view.mode === 'map') { lg.innerHTML = ''; }
-  else if (lg) { const v = vocab(); lg.innerHTML = `<i class="k k-ph"></i>photo <i class="k k-as"></i>${v.tracked.toLowerCase()} <i class="k k-al"></i>${v.flag.toLowerCase()} <i class="k k-chg"></i>change <i class="k k-nt"></i>${v.note.toLowerCase()}${state.questions.size ? ' <i class="k k-q"></i>question' : ''}`; }
+  const lg = document.getElementById('g-legend') as HTMLElement | null;
+  if (lg) { lg.hidden = view.mode !== 'graph'; const v = vocab(); const item = (k: string, t: string) => `<span><i class="k ${k}"></i>${t}</span>`;
+    lg.innerHTML = item('k-ph', 'photo') + item('k-as', v.tracked.toLowerCase()) + item('k-al', v.flag.toLowerCase()) + item('k-chg', 'change') + item('k-nt', v.note.toLowerCase()) + (state.questions.size ? item('k-q', 'question') : ''); }
 }
 function openMenu(open: boolean) { wsMenu.hidden = !open; wsBtn.setAttribute('aria-expanded', String(open)); if (open) { renderMenu(); refreshCounts(); (wsMenu.querySelector('[aria-checked="true"]') as HTMLElement | null)?.focus(); } }
 wsBtn.addEventListener('click', () => openMenu(wsMenu.hidden));
