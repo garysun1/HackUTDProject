@@ -4,7 +4,7 @@
 // While it is active, live rows older than its end are replaced by its curated copies; live
 // photos taken after it (the judging table) land on top and carry the workspace's badge.
 import { state, notify, setOverlayLoader, liveRowOk, badgeLive, type Ev, type Loc, type TrackPoint, type Alert, type Ent, type Edge } from './store';
-import { WORKSPACES } from './workspaces';
+import { WORKSPACES, reachable } from './workspaces';
 
 export type OverlayJson = {
   generatedAt: string; staticEnd: string; badgeAfter?: string; hideLive?: string[];
@@ -22,7 +22,7 @@ let applied = 0; // generation: a workspace switch while the fetch is in flight 
 
 /** Called by the store whenever it (re)connects: apply the current workspace's overlay, if any. */
 setOverlayLoader((db, wsId) => {
-  const ws = WORKSPACES.find(w => w.id === wsId && w.db === db && w.overlay);
+  const ws = WORKSPACES.find(w => w.id === wsId && w.db === db && w.overlay && reachable(w));
   const gen = ++applied;
   if (!ws) return;
   const base = ws.overlay!.replace(/[^/]*$/, '');

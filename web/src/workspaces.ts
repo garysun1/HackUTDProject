@@ -16,6 +16,7 @@ export type Workspace = {
   tileRadius?: number;     // imagery tiles each way from the site centre (default 4)
   badge?: string;          // text pinned on live photos that arrive after the overlay ends (the judging beat)
   shift?: string;          // the shift (id prefix) this workspace is about when the URL names none; else the latest real shift
+  hidden?: boolean;        // left out of the switcher; still opens with ?ws=<id> in the URL
 };
 
 const DC_TYPES = { pdu: 'power distribution unit', rack: 'server rack', crac: 'cooling unit', switch: 'network switch', ups: 'battery backup', panel: 'electrical panel', generator: 'generator', chiller: 'chiller' };
@@ -23,11 +24,11 @@ const V = (session: string, sessions: string, tracked: string, trackeds: string,
 
 export const WORKSPACES: Workspace[] = [
   // The field test is the calibrated 12-minute walk through ECSW (shift fe22…: stairs and the elevator, floors 0 → 4); later test shifts stay in the database and out of this view.
-  { id: 'live', db: DIRECTORY_DB, name: 'UTD field test', subtitle: 'Live capture · Ray-Ban Meta glasses · Richardson, TX', sample: false, shift: 'fe2282d3', vocab: V('Shift', 'Shifts', 'Equipment', 'Equipment', 'Issue', 'Issues'), types: DC_TYPES },
+  { id: 'live', db: DIRECTORY_DB, name: 'HackUTD 2026', subtitle: 'Live capture · Ray-Ban Meta glasses · Richardson, TX', sample: false, shift: 'fe2282d3', vocab: V('Shift', 'Shifts', 'Equipment', 'Equipment', 'Issue', 'Issues'), types: DC_TYPES },
   // The team's own weekend, through the same memory: the live database plus a curated overlay of
   // the photos Edward took on the glasses from Saturday morning on. Replay covers all of it; a
   // photo taken during judging lands at the end of the record with its badge (decision 0033).
-  { id: 'weekend', db: DIRECTORY_DB, name: 'HackUTD 2026', subtitle: 'Our weekend · ECSW and campus · Nov 7–8', sample: false, tag: 'this weekend', overlay: '/weekend/weekend.json', allShifts: true, campus: true, tileRadius: 7, badge: 'Judged by another amazing judge',
+  { id: 'weekend', hidden: true, db: DIRECTORY_DB, name: 'Our weekend', subtitle: 'Our weekend · ECSW and campus · Nov 7–8', sample: false, tag: 'this weekend', overlay: '/weekend/weekend.json', allShifts: true, campus: true, tileRadius: 7, badge: 'Judged by another amazing judge',
     vocab: V('Shift', 'Shifts', 'Gear', 'Gear', 'Problem', 'Problems'), types: { laptop: 'laptop', glasses: 'smart glasses', phone: 'phone', table: 'team table', projector: 'projector', badge: 'badge', snack: 'snack' } },
   { id: 'nmc2', db: 'wm-nmc2', name: 'Northstar Data Center', subtitle: 'Night shift · Hall A', sample: true, vocab: V('Shift', 'Shifts', 'Equipment', 'Equipment', 'Issue', 'Issues'), types: DC_TYPES },
   { id: 'plant', db: 'wm-plant', name: 'Arlington Assembly Plant', subtitle: 'Maintenance shift · Cell 3', sample: true, vocab: V('Shift', 'Shifts', 'Machine', 'Machines', 'Alarm', 'Alarms'), types: { cnc: 'machining center', press: 'hydraulic press', conveyor: 'conveyor', robot: 'robot cell', compressor: 'air compressor' } },
@@ -37,9 +38,14 @@ export const WORKSPACES: Workspace[] = [
 ];
 const GENERIC: Workspace = { id: 'other', db: '', name: 'Workspace', subtitle: '', sample: false, vocab: V('Session', 'Sessions', 'Tracked item', 'Tracked items', 'Needs attention', 'Needs attention'), types: {} };
 
+/** A hidden workspace is reachable only when the URL names it, not from a choice this browser remembered. */
+export function reachable(w: Workspace): boolean {
+  if (!w.hidden) return true;
+  try { return new URLSearchParams(location.search).get('ws') === w.id; } catch { return false; }
+}
 export function current(): Workspace {
   // several workspaces can share a database (the weekend overlays the live one): the chosen id wins, then the first match on the database
-  return (WS_ID && WORKSPACES.find(w => w.id === WS_ID && w.db === DB)) || WORKSPACES.find(w => w.db === DB) || { ...GENERIC, db: DB, name: DB };
+  return (WS_ID && WORKSPACES.find(w => w.id === WS_ID && w.db === DB && reachable(w))) || WORKSPACES.find(w => w.db === DB) || { ...GENERIC, db: DB, name: DB };
 }
 export function vocab(): Vocab { return current().vocab; }
 /** Plain words for a registry type: the workspace's own word, else the type humanized. */

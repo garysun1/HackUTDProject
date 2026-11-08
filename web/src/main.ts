@@ -40,7 +40,7 @@ const wsName = document.getElementById('ws-name')!;
 const counts = new Map<string, number>(); const overlayCounts = new Map<string, number>(); let countsAt = 0;
 async function refreshCounts() {
   if (Date.now() - countsAt < 30_000) return; countsAt = Date.now();
-  await Promise.all(WORKSPACES.map(async w => { try {
+  await Promise.all(WORKSPACES.filter(w => !w.hidden).map(async w => { try {
     if (w.overlay) { const r = await fetch(w.overlay); const o = await r.json(); overlayCounts.set(w.id, (o.events ?? []).length); return; }
     const r = await fetch(`${HOST}/v1/database/${w.db}/sql`, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: 'SELECT event_id FROM event' }); const [res] = await r.json(); counts.set(w.db, res?.rows?.length ?? 0);
   } catch { /* offline */ } }));
@@ -48,7 +48,7 @@ async function refreshCounts() {
 }
 function renderMenu() {
   const cur = current();
-  wsMenu.innerHTML = `<div class="ws-head">Workspaces</div>` + WORKSPACES.map(w => `<button type="button" class="ws-item" role="menuitemradio" aria-checked="${w.id === cur.id}" data-ws="${w.id}" data-db="${w.db}"><span class="n">${w.id === cur.id ? '<i class="dot"></i>' : ''}${w.name}${w.sample ? '<span class="tag">sample</span>' : w.tag ? `<span class="tag us">${w.tag}</span>` : ''}</span><span class="s">${w.subtitle}</span><span class="c">${w.overlay ? (overlayCounts.has(w.id) ? `${overlayCounts.get(w.id)} photos` : '') : counts.has(w.db) ? `${counts.get(w.db)} photo${counts.get(w.db) === 1 ? '' : 's'}` : ''}</span></button>`).join('') +
+  wsMenu.innerHTML = `<div class="ws-head">Workspaces</div>` + WORKSPACES.filter(w => !w.hidden || w.id === cur.id).map(w => `<button type="button" class="ws-item" role="menuitemradio" aria-checked="${w.id === cur.id}" data-ws="${w.id}" data-db="${w.db}"><span class="n">${w.id === cur.id ? '<i class="dot"></i>' : ''}${w.name}${w.sample ? '<span class="tag">sample</span>' : w.tag ? `<span class="tag us">${w.tag}</span>` : ''}</span><span class="s">${w.subtitle}</span><span class="c">${w.overlay ? (overlayCounts.has(w.id) ? `${overlayCounts.get(w.id)} photos` : '') : counts.has(w.db) ? `${counts.get(w.db)} photo${counts.get(w.db) === 1 ? '' : 's'}` : ''}</span></button>`).join('') +
     `<div class="ws-foot"><span>${dbChosen() ? 'Chosen here' : 'Following the server default'}</span>${dbChosen() ? '<button type="button" data-follow>Follow server default</button>' : ''}</div>`;
 }
 function renderWorkspace() { const w = current(); wsName.textContent = w.name; wsBtn.title = `${w.name} · ${w.subtitle} · ${w.db}`; dbEl.textContent = DB;
