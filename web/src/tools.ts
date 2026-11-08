@@ -49,7 +49,7 @@ export function renderTools(userView: boolean = userViewFn()) {
           `<span class="clock mono" data-clock></span><button type="button" class="btn ghost exit" data-exit aria-label="Leave the replay" title="Leave the replay (L)">✕</button></span>`
         : `<button type="button" class="btn ghost" data-play title="Replay the ${esc(vocab().session.toLowerCase())} from its first moment (space)">▶ Replay</button>`) +
       (userView ? `<button type="button" class="btn ghost" data-fit title="Fit everything in view">Fit</button>` : '') +
-      `<span class="seg" role="group" aria-label="View"><button type="button" data-mode="map" aria-pressed="${view.mode === 'map'}" ${hasMap ? '' : 'title="No position yet; the site shows once a photo or track arrives"'}>Map</button><button type="button" data-mode="graph" aria-pressed="${view.mode === 'graph'}">${esc(vocab().session)}</button></span>`;
+      `<span class="seg" role="group" aria-label="View"><button type="button" data-mode="map" aria-pressed="${view.mode === 'map'}" ${hasMap ? '' : 'title="No position yet; the site shows once a photo or track arrives"'}>Map</button><button type="button" data-mode="graph" aria-pressed="${view.mode === 'graph'}">Graph</button></span>`;
   }
   if (r.on) {
     const s = tools.querySelector('[data-scrub]') as HTMLInputElement | null; if (s && !scrubbing) { const [t0, t1] = replayRange(); s.value = String(Math.round(((r.clockMs - t0) / Math.max(1, t1 - t0)) * 1000)); }
