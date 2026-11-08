@@ -47,6 +47,7 @@ let schemaCache = { t: 0, names: new Set() };
 export async function hasProcedure(name) {
   if (Date.now() - schemaCache.t > 30_000) {
     try {
+      const DB = await activeDb();
       const r = await fetch(`${HOST}/v1/database/${DB}/schema?version=9`);
       // Procedures live under misc_exports; a table of the same name (handoff) must not count.
       const s = r.ok ? await r.json() : {};

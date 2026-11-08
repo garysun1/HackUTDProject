@@ -185,7 +185,7 @@ export function register(server) {
     inputSchema: { question: z.string() },
   }, async ({ question }) => {
     if (await hasProcedure('ask')) {
-      try { const r = await call('ask', [question]); const answer = typeof r === 'string' ? r : r?.answer ?? r?.[0] ?? JSON.stringify(r); const cites = Array.isArray(r?.citations) ? r.citations : Array.isArray(r?.[1]) ? r[1] : []; return { content: [text(`${answer}${cites.length ? `\n\nCitations: ${cites.map(c => `[event:${String(c).slice(0, 8)}]`).join(' ')}` : ''}`)] }; }
+      try { const r = await call('ask', [question]); const answer = typeof r === 'string' ? r : r?.answer ?? r?.[0] ?? JSON.stringify(r); const cites = Array.isArray(r?.citations) ? r.citations : Array.isArray(r?.[1]) ? r[1] : []; const already = cites.filter(c => !String(answer).includes(String(c))); return { content: [text(`${answer}${already.length ? `\n\nAlso cited: ${already.map(c => `[event:${String(c)}]`).join(' ')}` : ''}`)] }; }
       catch (err) { return { content: [text(`The floor agent could not answer right now (${String(err.message).slice(0, 120)}). Use search_memory, what_changed, find_object, get_timeline, and summarize_handoff directly.`)] }; }
     }
     return { content: [text('The floor agent (ask procedure) is not deployed yet. Answer from the specific tools: search_memory for anything described in a photo, what_changed / explain_change for an asset\'s state, find_object for where something is, get_timeline for the sequence, summarize_handoff for the shift summary, get_current_context for right now. Every result cites events you can open with get_provenance.')] };
