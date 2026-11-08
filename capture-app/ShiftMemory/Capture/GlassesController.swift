@@ -19,6 +19,18 @@ import MWDATCore
 import Observation
 import UIKit
 
+/// Diagnostic log line; lands in the phone syslog (`idevicesyslog | grep "\[Glasses\]"`) and the Xcode console.
+func glassesLog(_ message: String) {
+  NSLog("[Glasses] %@", message)
+}
+
+/// Everything we can learn about an SDK error's underlying cause, for the syslog.
+func describeUnderlying(_ error: (any Error)?) -> String {
+  guard let error else { return "nil" }
+  let ns = error as NSError
+  return "\(String(reflecting: error)) {domain=\(ns.domain) code=\(ns.code) userInfo=\(ns.userInfo)}"
+}
+
 /// Photo bytes from the glasses, by either path, with everything the pipeline and diagnostics need.
 struct GlassesPhoto: Sendable {
   let data: Data
@@ -106,6 +118,10 @@ final class GlassesController {
   private var observers: [Task<Void, Never>] = []
   private var pending: PendingCapture?
   private var retriedSetupOnce = false
+  /// Set once per camera attempt when `photo.start()` has been asked for (by the ignition stream).
+  private var photoStartRequested = false
+  /// Finishing this ends the current `waitForPhotoStarted` as a failure (a setup error arrived).
+  private var photoStartWaiter: AsyncStream<PhotoState>.Continuation?
 
   private struct PendingCapture {
     let id: String
@@ -294,29 +310,67 @@ final class GlassesController {
   private func startPhotoChild() async {
     guard let session else { return }
     let t0 = Date()
+    glassesLog("startPhotoChild: retriedSetupOnce=\(retriedSetupOnce) session.state=\(session.state) camera(old)=\(camera.map { "\($0.state)" } ?? "nil")")
     camera?.stop()
     camera = nil
     photo = nil
     let camera: Camera
     do {
-      guard let c = try session.addCamera() else {
+      // Smallest stream the SDK offers: its frames only exist to power the sensor (see below).
+      let ignition = StreamConfiguration(videoCodec: .hvc1, resolution: .low, frameRate: 7)
+      guard let c = try session.addCamera(config: ignition) else {
         fail(photoStart: "The session is not started, so the camera cannot be added yet.", at: t0)
         return
       }
       camera = c
+      glassesLog("addCamera ok; camera.state=\(c.state)")
     } catch {
+      glassesLog("addCamera threw: \(String(reflecting: error))")
       fail(photoStart: error.description, at: t0)
       return
     }
     self.camera = camera
     let photo = camera.photo
     self.photo = photo
+    photoStartRequested = false
 
     // Register every listener before start(); the publishers do not replay.
+    camera.statePublisher.listen { state in
+      glassesLog("camera state -> \(state)")
+    }.store(in: sessionTokens)
+    // Ignition. On real glasses `Photo.start()` on a cold camera does not come up (it hangs in
+    // `.starting` or fails with sessionSetupFailed): the Camera parent does not power the sensor,
+    // only a child asking for frames does. Meta's own DAT 1.0.1 sample (BirdSpotter,
+    // DatGlassesSessionRepository.attachCameraIfNeeded) therefore starts a tiny stream, starts Photo
+    // once the stream is `.streaming`, and puts the stream down once Photo is `.started` (the two
+    // children compete for the sensor). Same sequence here.
+    camera.stream.statePublisher.listen { [weak self] state in
+      glassesLog("ignition stream state -> \(state)")
+      if case .streaming = state {
+        Task { @MainActor in
+          guard let self, self.camera === camera else { return }
+          self.requestPhotoStart(reason: "stream is streaming")
+        }
+      }
+    }.store(in: sessionTokens)
+    camera.stream.errorPublisher.listen { [weak self] error in
+      glassesLog("ignition stream error: \(String(reflecting: error)) — \(error.description)")
+      // A stream that cannot come up should not block the photo child: fall back to starting it cold.
+      Task { @MainActor in
+        guard let self, self.camera === camera else { return }
+        self.requestPhotoStart(reason: "stream error \(error.description)")
+      }
+    }.store(in: sessionTokens)
     let (photoStates, continuation) = AsyncStream<PhotoState>.makeStream()
+    photoStartWaiter = continuation
     photo.statePublisher.listen { [weak self] state in
+      glassesLog("photo state -> \(state)")
       continuation.yield(state)
-      Task { @MainActor in self?.photoStateChanged(state) }
+      Task { @MainActor in
+        // A camera from a failed earlier attempt must not overwrite the current one's state.
+        guard let self, self.photo === photo else { return }
+        self.photoStateChanged(state)
+      }
     }.store(in: sessionTokens)
     photo.photoDataPublisher.listen { [weak self] capture in
       let receivedAt = Date()
@@ -326,12 +380,22 @@ final class GlassesController {
       Task { @MainActor in self?.transferProgressed(progress) }
     }.store(in: sessionTokens)
     photo.errorPublisher.listen { [weak self] error in
-      Task { @MainActor in await self?.photoError(error) }
+      Task { @MainActor in
+        guard let self else { return }
+        guard self.photo === photo else {
+          glassesLog("photo error from a superseded camera (ignored): \(String(reflecting: error))")
+          return
+        }
+        await self.photoError(error)
+      }
     }.store(in: sessionTokens)
 
-    photo.start()
-    let started = await waitForPhotoStarted(photoStates, timeout: .seconds(20))
+    glassesLog("camera.stream.start() (ignition)")
+    camera.stream.start()
+    let started = await waitForPhotoStarted(photoStates, timeout: .seconds(30))
     continuation.finish()
+    photoStartWaiter = nil
+    glassesLog("waitForPhotoStarted -> \(started) after \(Int(Date().timeIntervalSince(t0) * 1000)) ms; photoState=\(photoState.map { "\($0)" } ?? "nil") lastError=\(lastError ?? "nil")")
     guard started else {
       if !retriedSetupOnce {
         retriedSetupOnce = true
@@ -411,6 +475,7 @@ final class GlassesController {
   // MARK: - Listener handlers (main actor)
 
   private func sessionStateChanged(_ state: DeviceSessionState) {
+    glassesLog("session state -> \(state) (phase=\(phase))")
     sessionState = state
     switch state {
     case .paused:
@@ -427,6 +492,7 @@ final class GlassesController {
   }
 
   private func sessionError(_ error: DeviceSessionError) {
+    glassesLog("session error: \(String(reflecting: error)) — \(error.description)")
     switch error {
     case .datAppOnTheGlassesUpdateRequired:
       needsGlassesAppUpdate = true
@@ -439,10 +505,30 @@ final class GlassesController {
     }
   }
 
+  /// Starts the Photo child once per camera attempt (normally when the ignition stream streams).
+  private func requestPhotoStart(reason: String) {
+    guard !photoStartRequested, let photo, phase == .starting else { return }
+    photoStartRequested = true
+    glassesLog("photo.start() — \(reason)")
+    photo.start()
+  }
+
+  /// Puts the ignition stream down once Photo holds the sensor, so stills are not blocked by frames.
+  private func releaseIgnitionStream() {
+    guard let stream = camera?.stream else { return }
+    switch stream.state {
+    case .stopped, .stopping: return
+    default:
+      glassesLog("ignition stream stop() — photo has the sensor")
+      stream.stop()
+    }
+  }
+
   private func photoStateChanged(_ state: PhotoState) {
     photoState = state
     switch state {
     case .started:
+      releaseIgnitionStream()
       if phase == .starting || phase == .paused { phase = .ready }
     case .stopped:
       if phase == .capturing || phase == .ready { phase = session?.state == .started ? .starting : .stopped }
@@ -487,6 +573,11 @@ final class GlassesController {
   }
 
   private func photoError(_ error: PhotoError) async {
+    let underlying: (any Error)? = switch error {
+    case .sessionSetupFailed(let u), .captureFailure(let u): u
+    default: nil
+    }
+    glassesLog("photo error: \(String(reflecting: error)) — \(error.description); underlying: \(describeUnderlying(underlying)); phase=\(phase) retriedSetupOnce=\(retriedSetupOnce) session.state=\(session.map { "\($0.state)" } ?? "nil")")
     lastError = error.description
     pending?.timeout?.cancel()
     pending = nil
@@ -494,9 +585,14 @@ final class GlassesController {
     transferBytes = nil
     switch error {
     case .sessionSetupFailed:
-      // The docs: recreate the camera rather than reuse the stopped one.
-      if phase == .starting || phase.isLive, !retriedSetupOnce {
+      if phase == .starting, let waiter = photoStartWaiter {
+        // During startup the retry belongs to startPhotoChild alone: end its wait as a failure.
+        // (Retrying here too used to race it, and the loser's endShift tore the winner down.)
+        waiter.finish()
+      } else if phase.isLive, !retriedSetupOnce {
+        // The docs: recreate the camera rather than reuse the stopped one.
         retriedSetupOnce = true
+        phase = .starting
         await startPhotoChild()
       } else if phase.isLive {
         phase = .stopped
@@ -567,6 +663,7 @@ final class GlassesController {
   }
 
   private func fail(photoStart message: String, at t0: Date) {
+    glassesLog("photo start FAILED: \(message)")
     lastError = message
     onEvent?(.photoStartFailed(error: message))
     endShift(reason: message)
