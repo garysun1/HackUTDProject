@@ -1,7 +1,7 @@
 import './styles.css';
 import { state, start, onChange, wearerColor, wearerName, fmtTime, fmtTimeS, alertsFor, loadPhoto, placeOf } from './store';
 import { SiteScene, type PinSpec, type SiteData } from './scene';
-import { sessionShifts, positionAt, shiftEnd, renderBrain, inSession, type Shift } from './brain';
+import { sessionShifts, positionAt, shiftEnd, shiftLive, renderBrain, inSession, type Shift } from './brain';
 import { pointInRing, centroid, haversineM } from './geo';
 import ecsw from './data/ecsw.json';
 
@@ -45,12 +45,15 @@ function locate(lat: number, lon: number): string | undefined {
 
 // ---------- clock / replay ----------
 const replay = { mode: 'live' as 'live' | 'replay', playing: false, speed: 60, clock: Date.now() };
-// The replay covers the tracked shifts: from just before the first fix to now. Photos outside any
-// shift (test uploads from other days) do not stretch it and are not drawn.
+// The replay covers the tracked shift: from just before the first fix to the moment the shift
+// actually ended (its shift_end row, or ten minutes after its last fix); while a shift is still
+// live it runs to now. Photos outside any shift do not stretch it and are not drawn.
 function range(): [number, number] {
   const all = sessionShifts(); const now = Date.now();
-  const ts = all.flatMap(s => [s.startMs, s.lastMs]);
-  const t0 = ts.length ? Math.min(...ts) - 5_000 : now - 3600_000; return [t0, Math.max(now, ...ts)];
+  if (!all.length) return [now - 3600_000, now];
+  const t0 = Math.min(...all.map(s => s.startMs)) - 5_000;
+  const over = all.every(s => !shiftLive(s, now));
+  return [t0, over ? Math.max(...all.map(shiftEnd)) + 10_000 : now];
 }
 function setMode(m: 'live' | 'replay') {
   replay.mode = m; $('#live').classList.toggle('on', m === 'live'); const md = $('#mode'); md.textContent = m === 'live' ? 'live' : 'replay'; md.classList.toggle('replay', m === 'replay');
@@ -58,7 +61,9 @@ function setMode(m: 'live' | 'replay') {
 }
 function setClock(ms: number) { replay.clock = ms; }
 $('#play').onclick = () => {
-  if (replay.mode === 'live') { setMode('replay'); replay.clock = range()[0]; replay.playing = true; resetHeat(); scene.setFollow(true); }
+  const [t0, t1] = range();
+  if (replay.mode === 'live') { setMode('replay'); replay.clock = t0; replay.playing = true; resetHeat(); scene.setFollow(true); }
+  else if (!replay.playing && replay.clock >= t1 - 1) { replay.clock = t0; replay.playing = true; resetHeat(); }
   else replay.playing = !replay.playing;
   $('#play').textContent = replay.playing ? '❚❚' : '▶';
 };
@@ -120,8 +125,13 @@ function frame(now: number) {
   requestAnimationFrame(frame);
   const dtReal = (now - lastReal) / 1000; lastReal = now;
   if (replay.mode === 'live') replay.clock = Date.now();
-  else if (replay.playing) { replay.clock += dtReal * 1000 * replay.speed; if (replay.clock >= Date.now()) setMode('live'); }
-  const clock = replay.clock; const [t0, t1] = range();
+  const [t0, t1] = range();
+  if (replay.mode === 'replay' && replay.playing) {
+    replay.clock += dtReal * 1000 * replay.speed;
+    // a live shift hands back to the live clock; a finished one stops at its end
+    if (replay.clock >= t1) { if (t1 >= Date.now() - 1000) setMode('live'); else { replay.clock = t1; replay.playing = false; $('#play').textContent = '▶'; } }
+  }
+  const clock = replay.clock;
   if (document.activeElement !== scrub) scrub.value = String(Math.round(((clock - t0) / (t1 - t0)) * 1000));
   $('#clock').textContent = (replay.mode === 'live' ? '' : `${replay.speed}× · `) + fmtTimeS(clock);
   think.hidden = now > thinkUntil;
