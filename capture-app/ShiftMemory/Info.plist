@@ -61,6 +61,8 @@
 	</array>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Shift Memory records where each photo was taken and, while a shift is running, the path you walk, so the team's console can show the work on a map. Nothing is recorded between shifts.</string>
+	<key>NSMotionUsageDescription</key>
+	<string>During a shift, Shift Memory reads the iPhone's barometer to tell which floor you are on, so photos and your path appear on the right level of the site map. No motion data is stored or uploaded; only the floor number is.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>After you take a photo, Shift Memory listens for a few seconds so you can say what is going on. Only the text is attached to the photo; no audio is stored or uploaded.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>

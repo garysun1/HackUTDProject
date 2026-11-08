@@ -1,3 +1,44 @@
+# Barometric floor (Claude, 2026-11-08 ~00:45 CST) — branch `capture/floor-detection`, on top of `capture/1-photo-button`
+
+Issue #19 follow-up for the 3D site view (PR #25): `CLFloor` is nil at ECSW, so every track point and photo sat on
+the ground floor. Now the iPhone barometer fills `location.floor` (contract v3.1 unchanged; no module change):
+
+- `Location/FloorQuantizer.swift` — pure: relative altitude → floor. Floor f is the band [(f−0.5)h, (f+0.5)h); to
+  change, the altitude must overshoot a band edge by `hysteresis` (0.25 floor = 1 m at h = 4 m). Multi-floor jumps
+  snap to the nearest floor. `FloorQuantizer.resolve(venueFloor:barometricFloor:)` prefers `CLFloor.level`.
+  15 tests in `ShiftMemoryTests/FloorQuantizerTests.swift`.
+- `Location/AltimeterFloorTracker.swift` — `CMAltimeter.startRelativeAltitudeUpdates` (checks
+  `isRelativeAltitudeAvailable`), restarted on every shift start so **floor 0 = where the wearer stood at Start
+  shift**; stopped at End shift (floor nil between shifts). Logs `[Floor] floor 0 -> 1 at 3.2 m relative` to
+  `debug.log`, plus a line every 300 samples. Needs the new `NSMotionUsageDescription` (Info.plist); the first shift
+  shows the Motion & Fitness prompt. Denied/unavailable → floor stays nil unless Core Location has one.
+- Plumbing: `LocationTracker.barometricFloor` hook stamps every fix in `handleFixes` (CLFloor wins), so `latest`,
+  the sampler, `TrackStore`, `TrackUploader` (`floor` key already in its point key list) and the photo's
+  `event_json.location.floor` (`EventEnvelope` via `LocationFix.contractObject`) all carry it with no other change.
+- `AppConfig.floorHeightM` (UserDefaults `location.floorHeightM`, default **4.0 m**, clamped 2.5–8). Settings →
+  Location shows the live floor / relative altitude and a 0.25 m stepper; a change mid-shift keeps the current
+  floor and applies the new step from the next sample. `AppModel.altimeter` is wired in `startLocation()`.
+- Known limits: relative altitude drifts with weather (~8 m per hPa, slowly); a relaunch mid-shift re-zeroes at the
+  wearer's current floor (logged). Floors are relative to the shift start, not building levels.
+
+**Needs a hardware run (Edward, phone on USB-C):** build/install with the device commands below, Start shift on the
+ECSW ground floor, walk the stairs to the top and back, End shift, pull `debug.log` and check the `[Floor]` lines:
+expect `0 -> 1 -> 2 -> 3` going up, `3 -> 2 -> 1 -> 0` coming down, no flicker on landings. If the 4.0 m default
+over- or under-counts (ECSW is 22.6 m / 4 levels = **5.65 m** floor to floor), set Settings → Location → Floor
+height to 5.65 and repeat; then make that the default in `FloorQuantizer.Config.defaultFloorHeightM`. Simulator:
+`CMAltimeter.isRelativeAltitudeAvailable()` is false, so Settings shows "no barometer" and floor is omitted.
+```sh
+cd ~/HackUTDProject/capture-app   # or the worktree ~/HackUTDProject-floor/capture-app
+xcodebuild -project ShiftMemory.xcodeproj -scheme ShiftMemory -destination 'id=00008150-00020DD43E40C01C' \
+  -derivedDataPath /tmp/sm-dev -allowProvisioningUpdates build
+xcrun devicectl device install app --device 00008150-00020DD43E40C01C /tmp/sm-dev/Build/Products/Debug-iphoneos/ShiftMemory.app
+xcrun devicectl device process launch --terminate-existing --device 00008150-00020DD43E40C01C com.edwardkim.hackutd.shiftmemory
+xcrun devicectl device copy from --device 00008150-00020DD43E40C01C --domain-type appDataContainer \
+  --domain-identifier com.edwardkim.hackutd.shiftmemory --source "Library/Application Support/debug.log" --destination ./debug.log
+```
+
+---
+
 # Spoken briefing check (Devin, 2026-11-07 ~20:40–23:30 CST) — on top of the 19:00 state below
 
 **State at 23:30 CST (Edward resuming with Claude):** everything is pushed; `capture/1-photo-button` = origin =

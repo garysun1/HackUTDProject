@@ -40,6 +40,8 @@ final class AppModel {
   let briefingCheck: BriefingCheck
   let floor: FloorStore
   let location: LocationTracker
+  /// Barometric floor during a shift (#19); feeds `LocationFix.floor` through `location`.
+  let altimeter: AltimeterFloorTracker
   let trackStore: TrackStore
   let trackUploader: TrackUploader
   /// Recent fixes (last 10 min) so a photo is placed where it was taken, not where the wearer stood
@@ -127,6 +129,8 @@ final class AppModel {
     briefingCheck = BriefingCheck(nvidia: nvidia, speaker: speaker, narrator: narrator, log: { DebugLog.write("Briefing", $0) })
     floor = FloorStore(repository: FloorRepository(client: client), log: { DebugLog.write("Floor", $0) })
     location = LocationTracker(log: { DebugLog.write("Location", $0) })
+    altimeter = AltimeterFloorTracker(log: { DebugLog.write("Floor", $0) },
+                                      config: FloorQuantizer.Config(floorHeightM: config.floorHeightM))
     let trackStore = TrackStore(directory: support.appending(path: "Track"))
     self.trackStore = trackStore
     trackUploader = TrackUploader(
@@ -177,6 +181,10 @@ final class AppModel {
     coordinator.locationAt = { [weak self] date in self?.fix(near: date) }
     coordinator.shiftIdAt = { [weak self] date in self?.shiftId(at: date) }
     coordinator.locationAllowed = { [weak self] in self?.config.locationEnabled ?? false }
+    location.barometricFloor = { [weak self] in self?.altimeter.floor }
+    config.onFloorHeightChanged = { [weak self] height in
+      self?.altimeter.setConfig(FloorQuantizer.Config(floorHeightM: height))
+    }
     location.onTrackPoint = { [weak self] fix in
       guard let self else { return }
       self.enforceShiftLimit()
@@ -451,12 +459,21 @@ final class AppModel {
   /// Location mode follows the shift: tracking while one is open (also in the background), else
   /// foreground fixes only, so photos taken outside a shift are still placed. Off when disabled.
   func startLocation() {
-    guard config.locationEnabled else { location.stop(); return }
+    guard config.locationEnabled else { location.stop(); altimeter.stop(); return }
     if location.authorization == .notDetermined { location.requestAuthorization() }
     if config.activeShiftId != nil {
-      if location.mode != .shift { location.startShift() }
+      if location.mode != .shift {
+        location.startShift()
+        // Relative altitude is zero where updates start: after a relaunch mid-shift that is the
+        // wearer's current floor, not the floor the shift started on.
+        if let started = config.activeShiftStartedAt, Date().timeIntervalSince(started) > 60 {
+          DebugLog.write("Floor", "resuming a shift started \(Int(Date().timeIntervalSince(started) / 60)) min ago: floor 0 is the current floor, not the shift's first")
+        }
+        altimeter.startShift()
+      }
     } else if location.mode == .shift {
       location.stopShift()
+      altimeter.stop()
     } else if location.mode == .off {
       location.startForeground()
     }

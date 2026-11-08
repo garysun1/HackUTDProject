@@ -107,6 +107,15 @@ final class AppConfig {
   var lastBriefingAckAt: Date? { didSet { defaults.set(lastBriefingAckAt, forKey: Keys.lastBriefingAckAt) } }
   /// Attach the phone's position to photos and record the walking track during a shift (#19).
   var locationEnabled: Bool { didSet { defaults.set(locationEnabled, forKey: Keys.locationEnabled) } }
+  /// Metres of barometric altitude per floor for `location.floor` (FloorQuantizer). 4.0 m default;
+  /// ECSW is 5.65 m floor to floor, to be confirmed by walking its stairs once.
+  var floorHeightM: Double {
+    didSet {
+      defaults.set(floorHeightM, forKey: Keys.floorHeightM)
+      onFloorHeightChanged?(floorHeightM)
+    }
+  }
+  var onFloorHeightChanged: ((Double) -> Void)?
   /// The shift in progress on this device (contract v3.1 `shift_id`); nil between shifts. Persisted
   /// so a relaunch mid-shift keeps the same id and resumes the track.
   var activeShiftId: String? { didSet { defaults.set(activeShiftId, forKey: Keys.activeShiftId) } }
@@ -146,6 +155,7 @@ final class AppConfig {
     static let lastShiftEndedAt = "shift.lastShiftEndedAt"
     static let lastBriefingAckAt = "shift.lastBriefingAckAt"
     static let locationEnabled = "location.enabled"
+    static let floorHeightM = "location.floorHeightM"
     static let activeShiftId = "shift.activeShiftId"
     static let activeShiftStartedAt = "shift.activeShiftStartedAt"
     static let cameraRollImportEnabled = "import.enabled"
@@ -202,6 +212,7 @@ final class AppConfig {
     lastShiftEndedAt = defaults.object(forKey: Keys.lastShiftEndedAt) as? Date
     lastBriefingAckAt = defaults.object(forKey: Keys.lastBriefingAckAt) as? Date
     locationEnabled = defaults.object(forKey: Keys.locationEnabled) as? Bool ?? true
+    floorHeightM = defaults.object(forKey: Keys.floorHeightM) as? Double ?? FloorQuantizer.Config.defaultFloorHeightM
     activeShiftId = defaults.string(forKey: Keys.activeShiftId)
     activeShiftStartedAt = defaults.object(forKey: Keys.activeShiftStartedAt) as? Date
     cameraRollImportEnabled = defaults.bool(forKey: Keys.cameraRollImportEnabled)

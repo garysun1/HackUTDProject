@@ -200,6 +200,11 @@ struct LocationSection: View {
           LabeledContent("Last fix", value: "none yet")
         }
         LabeledContent("Mode", value: modeText(loc.mode))
+        LabeledContent("Floor", value: floorText(model.altimeter))
+        Stepper(value: Binding(get: { model.config.floorHeightM }, set: { model.config.floorHeightM = $0 }),
+                in: FloorQuantizer.Config.floorHeightRange, step: 0.25) {
+          LabeledContent("Floor height", value: String(format: "%.2f m", model.config.floorHeightM))
+        }
         LabeledContent("Track this shift", value: "\(recordedPoints) points · \(pendingPoints) waiting")
         LabeledContent("Backend", value: supportText(up.support))
         if let error = loc.lastError ?? up.lastError {
@@ -233,6 +238,17 @@ struct LocationSection: View {
         try? await Task.sleep(for: .seconds(3))
       }
     }
+  }
+
+  private func floorText(_ a: AltimeterFloorTracker) -> String {
+    switch a.availability {
+    case .unavailable: return "no barometer"
+    case .denied: return "motion access off"
+    case .unknown, .available: break
+    }
+    guard a.isTracking, let floor = a.floor else { return "set at shift start" }
+    let alt = a.relativeAltitudeM.map { String(format: " · %+.1f m", $0) } ?? ""
+    return (floor >= 0 ? "+\(floor)" : "\(floor)") + alt
   }
 
   private func permissionText(_ a: LocationTracker.Authorization, precise: Bool) -> String {

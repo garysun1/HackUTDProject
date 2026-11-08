@@ -68,6 +68,9 @@ final class LocationTracker: NSObject {
   // MARK: Hooks (set by the composition root)
   /// Fired on the main actor for each sampler-accepted fix while `mode == .shift`.
   var onTrackPoint: ((LocationFix) -> Void)?
+  /// The barometric floor relative to the shift start (AltimeterFloorTracker), asked for every
+  /// fix. Used only when Core Location has no `CLFloor` for the fix (no indoor survey at ECSW).
+  var barometricFloor: (() -> Int?)?
 
   // MARK: Private
   @ObservationIgnored private let manager: CLLocationManager
@@ -249,7 +252,10 @@ final class LocationTracker: NSObject {
 
   private func handleFixes(_ fixes: [LocationFix]) {
     let now = Date()
-    for fix in fixes {
+    let barometric = barometricFloor?()
+    for rawFix in fixes {
+      var fix = rawFix
+      fix.floor = FloorQuantizer.resolve(venueFloor: rawFix.floor, barometricFloor: barometric)
       if !loggedFirstFix {
         loggedFirstFix = true
         log("first fix (\(mode)): accuracy \(Int(fix.accuracyM.rounded())) m, age \(Int(now.timeIntervalSince(fix.t).rounded())) s")
