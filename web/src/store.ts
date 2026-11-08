@@ -141,7 +141,10 @@ function connectData(onState: OnState) {
   if (dataConn) { try { dataConn.disconnect(); } catch { /* already closed */ } dataConn = null; }
   resetState(); notify();
   const live = () => gen === generation; // callbacks from a replaced connection are ignored
-  const toEv = (r: any): Ev => ({ eventId: r.eventId, deviceId: r.deviceId, clientT: r.clientT, tMicros: BigInt(r.tMicros), source: r.source, status: r.status, note: r.note ?? undefined, label: r.label ?? undefined, scene: r.scene, locationGuess: r.locationGuess, activity: r.activity, summary: r.summary, peopleCount: Number(r.peopleCount), confidence: Number(r.confidence), perceptionJson: r.perceptionJson });
+  // A photo's time is when it was taken (client_t); the server receive time is the fallback when the
+  // phone clock is unparseable or more than a week off. Replays of past shifts keep their own clock.
+  const takenMicros = (r: any): bigint => { const ms = Date.parse(r.clientT); const srv = BigInt(r.tMicros); if (!Number.isFinite(ms)) return srv; const c = BigInt(Math.round(ms)) * 1000n; const d = c > srv ? c - srv : srv - c; return d > 7n * 86_400_000_000n ? srv : c; };
+  const toEv = (r: any): Ev => ({ eventId: r.eventId, deviceId: r.deviceId, clientT: r.clientT, tMicros: takenMicros(r), source: r.source, status: r.status, note: r.note ?? undefined, label: r.label ?? undefined, scene: r.scene, locationGuess: r.locationGuess, activity: r.activity, summary: r.summary, peopleCount: Number(r.peopleCount), confidence: Number(r.confidence), perceptionJson: r.perceptionJson });
   dataConn = DbConnection.builder()
     .withUri(WS)
     .withDatabaseName(DB)

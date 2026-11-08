@@ -53,6 +53,7 @@ let placed: Placed[] = []; let clusters: { ids: string[]; lat: number; lon: numb
 function placePins() {
   if (!map || !clusterLayer) return;
   // cluster greedily by screen distance so overlapping pins read as one stack
+  placed = placed.filter(p => state.events.has(p.e.eventId)); // a dataset switch can empty the store between renders
   const pts = placed.map(p => ({ ...p, xy: map!.latLngToContainerPoint([p.lat, p.lon]) }));
   const used = new Set<string>(); clusters = [];
   const singles = new Set<string>();
@@ -66,7 +67,7 @@ function placePins() {
   for (const [id, m] of pins) { const on = singles.has(id); if (on && !map.hasLayer(m)) m.addTo(map); if (!on && map.hasLayer(m)) m.remove(); }
   clusterLayer.clearLayers();
   for (const c of clusters) {
-    const evs = c.ids.map(id => state.events.get(id)!).sort((a, b) => (a.tMicros < b.tMicros ? 1 : -1));
+    const evs = c.ids.map(id => state.events.get(id)).filter((e): e is Ev => !!e).sort((a, b) => (a.tMicros < b.tMicros ? 1 : -1)); if (!evs.length) continue;
     const open = evs.some(e => alertsFor(e).some(a => !a.acked));
     const sel = evs.some(e => e.eventId === state.selected);
     const thumbs = evs.slice(0, 3).map((e, i) => { const u = state.photos.get(e.eventId); return `<span class="ct" style="--i:${i};--c:${wearerColor(e.deviceId)}">${u ? `<img src="${u}" alt="">` : ''}</span>`; }).join('');

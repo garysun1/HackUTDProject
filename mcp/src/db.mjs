@@ -99,6 +99,8 @@ export async function snapshot() {
   const placeOf = id => { const e = (byEvent.get(id) || []).find(x => x.kind === 'INVOLVES' && props(x).role === 'setting'); return e ? entityById.get(e.to_id) : null; };
   const assetsOf = id => (byEvent.get(id) || []).filter(x => x.kind === 'INVOLVES' && props(x).role !== 'setting').map(x => entityById.get(x.to_id)).filter(Boolean);
   const changesOf = id => (byEvent.get(id) || []).filter(x => x.kind === 'CHANGES').map(x => ({ ...props(x), entity: entityById.get(x.to_id) }));
+  // a photo's time is when it was taken (client_t); server time is the fallback (unparseable or > 7 days off)
+  for (const e of ev) { const ms = Date.parse(e.client_t); if (Number.isFinite(ms)) { const c = Math.round(ms) * 1000; if (Math.abs(c - Number(e.t_micros)) <= 7 * 86_400_000_000) e.t_micros = c; } }
   ev.sort((a, b) => a.t_micros - b.t_micros);
   return { events: ev, entities: en, edges: ed, alerts: al, wearers: we, assets: as, episodes: ep, wearerName, entityById, placeOf, assetsOf, changesOf, byEvent };
 }
