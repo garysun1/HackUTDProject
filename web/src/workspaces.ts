@@ -23,8 +23,8 @@ const DC_TYPES = { pdu: 'power distribution unit', rack: 'server rack', crac: 'c
 const V = (session: string, sessions: string, tracked: string, trackeds: string, flag: string, flags: string): Vocab => ({ session, sessions, tracked, trackeds, flag, flags, note: 'Note', notes: 'Notes' });
 
 export const WORKSPACES: Workspace[] = [
-  // The live capture database: the view is the latest real shift and the shifts it chains from (brain.ts), so a shift started on stage shows as it happens.
-  { id: 'live', db: DIRECTORY_DB, name: 'HackUTD 2026', subtitle: 'Live capture · Ray-Ban Meta glasses · Richardson, TX', sample: false, vocab: V('Shift', 'Shifts', 'Equipment', 'Equipment', 'Issue', 'Issues'), types: DC_TYPES },
+  // The live capture database: the calibrated ECSW stair walk (shift fe22…, floors 0 → 4) plus every shift started after it (the one on stage), see brain.ts; Friday's test shifts stay out.
+  { id: 'live', db: DIRECTORY_DB, name: 'HackUTD 2026', subtitle: 'Live capture · Ray-Ban Meta glasses · Richardson, TX', sample: false, shift: 'fe2282d3', vocab: V('Shift', 'Shifts', 'Equipment', 'Equipment', 'Issue', 'Issues'), types: DC_TYPES },
   // The team's own weekend, through the same memory: the live database plus a curated overlay of
   // the photos Edward took on the glasses from Saturday morning on. Replay covers all of it; a
   // photo taken during judging lands at the end of the record with its badge (decision 0033).

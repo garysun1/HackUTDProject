@@ -72,7 +72,8 @@ export function sessionShifts(withHidden = false): Shift[] {
   const all = filteredShifts(withHidden);
   if (ALL_SHIFTS || overlayActive()) return all; // a workspace with an overlay is about the whole record
   if (SHIFT_PARAM) return all.filter(s => s.shiftId.startsWith(SHIFT_PARAM));
-  const wsShift = current().shift; if (wsShift) { const own = all.filter(s => s.shiftId.startsWith(wsShift)); if (own.length) return own; }
+  // the workspace's shift plus every shift that starts once it is over (today's live one); earlier shifts stay out
+  const wsShift = current().shift; if (wsShift) { const own = all.filter(s => s.shiftId.startsWith(wsShift)); if (own.length) { const end = Math.max(...own.map(shiftEnd)); return [...own, ...all.filter(s => !own.includes(s) && s.startMs >= end - 15 * 60_000)]; } }
   const real = all.filter(s => s.lastMs - s.startMs >= 120_000 && s.smooth.length >= 5);
   const withFloor = real.filter(s => s.pts.some(p => p.floor !== undefined));
   const pool = withFloor.length ? withFloor : real.length ? real : all;
