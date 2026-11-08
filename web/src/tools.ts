@@ -19,12 +19,12 @@ document.addEventListener('pointerup', () => { if (scrubbing) { scrubbing = fals
 tools.addEventListener('click', e => {
   const t = e.target as HTMLElement;
   const mode = t.closest('.seg [data-mode]') as HTMLElement | null; if (mode) { setMode(mode.dataset.mode as 'map' | 'graph'); return; }
-  const sp = t.closest('[data-speed]') as HTMLElement | null; if (sp) { setSpeed(Number(sp.dataset.speed)); return; }
   if (t.closest('[data-play]')) togglePlay();
-  if (t.closest('[data-live]')) stopReplay();
+  if (t.closest('[data-exit]')) stopReplay();
   if (t.closest('[data-fit]')) { fitRequested++; emitView(); }
   if (t.closest('[data-clear]')) { state.assetFilter = null; notify(); }
 });
+tools.addEventListener('change', e => { const t = e.target as HTMLSelectElement; if (t.matches('[data-speed-sel]')) setSpeed(Number(t.value)); });
 tools.addEventListener('input', e => { const t = e.target as HTMLInputElement; if (t.matches('[data-scrub]')) scrubReplay(Number(t.value) / 1000); });
 document.addEventListener('keydown', e => {
   const tg = e.target as HTMLElement; if (e.altKey || e.ctrlKey || e.metaKey) return;
@@ -44,9 +44,9 @@ export function renderTools(userView: boolean = userViewFn()) {
       (tracedName ? `<button type="button" class="pill" data-clear title="Stop tracing">Tracing <b>${esc(tracedName)}</b> · ${tracedCount} photo${tracedCount === 1 ? '' : 's'} · clear</button>` : '') +
       (view.mode === 'map' ? '' : r.on
         ? `<span class="replay" role="group" aria-label="Replay"><button type="button" class="btn ghost play" data-play title="${r.playing ? 'Pause' : 'Play'} (space)">${r.playing ? '❚❚' : '▶'}</button>` +
-          `<span class="speeds">${speeds().map(s => `<button type="button" data-speed="${s}" aria-pressed="${r.speed === s}">${s}×</button>`).join('')}</span>` +
+          `<select class="speed" data-speed-sel aria-label="Replay speed">${[...new Set([...speeds(), r.speed])].sort((a, b) => a - b).map(s => `<option value="${s}"${r.speed === s ? ' selected' : ''}>${s}×</option>`).join('')}</select>` +
           `<label class="scrub" title="Scrub the ${esc(vocab().session.toLowerCase())}"><input type="range" min="0" max="1000" value="${Math.round(r.progress * 1000)}" data-scrub aria-label="Replay position"></label>` +
-          `<span class="clock mono" data-clock></span><button type="button" class="btn ghost" data-live title="Back to now (L)">Live</button></span>`
+          `<span class="clock mono" data-clock></span><button type="button" class="btn ghost exit" data-exit aria-label="Leave the replay" title="Leave the replay (L)">✕</button></span>`
         : `<button type="button" class="btn ghost" data-play title="Replay the ${esc(vocab().session.toLowerCase())} from its first moment (space)">▶ Replay</button>`) +
       (userView ? `<button type="button" class="btn ghost" data-fit title="Fit everything in view">Fit</button>` : '') +
       `<span class="seg" role="group" aria-label="View"><button type="button" data-mode="map" aria-pressed="${view.mode === 'map'}" ${hasMap ? '' : 'title="No position yet; the site shows once a photo or track arrives"'}>Map</button><button type="button" data-mode="graph" aria-pressed="${view.mode === 'graph'}">${esc(vocab().session)}</button></span>`;

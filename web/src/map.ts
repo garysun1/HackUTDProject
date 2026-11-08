@@ -19,6 +19,7 @@ import { sessionShifts, shifts, positionAt, renderBrain, openAt, shiftEnd, inSes
 const host = document.getElementById('map') as HTMLElement;
 // Replay speeds: a shift plays at up to 300×; a record that spans a day or more gets two faster steps.
 let speedsSig = '';
+function speedOptions(cur: number): string { const l = speedList(); if (!l.includes(cur)) l.push(cur); return l.sort((a, b) => a - b).map(v => `<option value="${v}"${v === cur ? ' selected' : ''}>${v}×</option>`).join(''); }
 function speedList(): number[] { const [t0, t1] = replayRange(); const h = (t1 - t0) / 3_600_000; return h > 6 ? [1, 60, 300, 1800, 3600] : [1, 10, 60, 300]; }
 // A line that appears on the map for a few seconds: a live photo that joined the record.
 let toastTimer = 0;
@@ -32,7 +33,7 @@ function ensureScene(): SiteScene {
   host.innerHTML = `<canvas class="s3-gl" aria-label="3D view of the site"></canvas><div class="s3-labels" aria-hidden="true"></div>
     <div class="s3-ctl"><span class="seg" role="group" aria-label="Camera"><button type="button" data-cam="3d" aria-pressed="true">3D</button><button type="button" data-cam="2d" aria-pressed="false">Top-down</button></span><button type="button" class="btn ghost" data-follow aria-pressed="false" title="Keep the camera on the wearer (F)">Follow</button></div>
     <aside class="s3-brain" aria-label="Shift memory"><div class="bh"><h2>Shift memory</h2></div><div class="s3-brain-stats"></div><div class="s3-brain-body"></div><div class="s3-credit">Imagery © Esri · Building © OpenStreetMap contributors</div></aside>
-    <div class="s3-replay" role="group" aria-label="Replay"><button type="button" data-play aria-label="Play">▶</button><button type="button" data-live class="on">Live</button><div class="speeds" role="group" aria-label="Speed">${speedList().map(v => `<button type="button" data-speed="${v}">${v}×</button>`).join('')}</div><div class="scrub"><input type="range" min="0" max="1000" value="1000" data-scrub aria-label="Time" /><div class="s3-marks"></div></div><span class="clock mono" data-clock>—</span></div>
+    <div class="s3-replay" role="group" aria-label="Replay"><button type="button" data-play aria-label="Play">▶</button><select class="speed" data-speed-sel aria-label="Replay speed">${speedOptions(view.replay.speed)}</select><div class="scrub"><input type="range" min="0" max="1000" value="1000" data-scrub aria-label="Time" /><div class="s3-marks"></div></div><span class="clock mono" data-clock>—</span><button type="button" class="exit" data-exit hidden aria-label="Leave the replay" title="Leave the replay">✕</button></div>
     <div class="s3-toast" role="status" aria-live="polite" hidden></div>
     <div class="s3-legend"><span><i class="sw trail"></i>walk</span><span><i class="sw heat"></i>time spent</span><span><i class="sw photo"></i>photo</span><span><i class="sw alert"></i>open issue</span><span><i class="sw done"></i>resolved</span></div>`;
   const canvas = host.querySelector('canvas')!; const labels = host.querySelector('.s3-labels') as HTMLElement;
@@ -44,7 +45,8 @@ function ensureScene(): SiteScene {
   document.addEventListener('keydown', e => { const t = e.target as HTMLElement; if (t.closest('input, select, textarea, button, a, [role="button"], [contenteditable]')) return; if (e.key === 'f' && view.mode === 'map') followBtn.click(); });
   // replay bar: the same controls as the standalone site view, driving the shared clock
   const bar = host.querySelector('.s3-replay') as HTMLElement; scrubEl = bar.querySelector('[data-scrub]') as HTMLInputElement; marksEl = bar.querySelector('.s3-marks') as HTMLElement;
-  bar.addEventListener('click', e => { const t = e.target as HTMLElement; const sp = t.closest('[data-speed]') as HTMLElement | null; if (sp) { setSpeed(Number(sp.dataset.speed)); return; } if (t.closest('[data-play]')) { if (!view.replay.on) { resetHeat(); scene!.setFollow(true); } togglePlay(); } if (t.closest('[data-live]')) stopReplay(); });
+  bar.addEventListener('click', e => { const t = e.target as HTMLElement; if (t.closest('[data-play]')) { if (!view.replay.on) { resetHeat(); scene!.setFollow(true); } togglePlay(); } if (t.closest('[data-exit]')) stopReplay(); });
+  (bar.querySelector('[data-speed-sel]') as HTMLSelectElement).addEventListener('change', e => setSpeed(Number((e.target as HTMLSelectElement).value)));
   scrubEl.addEventListener('input', () => scrubReplay(Number(scrubEl.value) / 1000));
   scrubEl.addEventListener('pointerdown', () => { scrubbing = true; }); document.addEventListener('pointerup', () => { scrubbing = false; });
   scene.onPinClick = id => select(id);
@@ -190,9 +192,9 @@ function renderBar(clock: number) {
   const r = view.replay; const bar = host.querySelector('.s3-replay') as HTMLElement | null; if (!bar) return;
   const [t0, t1] = replayRange();
   (bar.querySelector('[data-play]') as HTMLElement).textContent = r.on && r.playing ? '❚❚' : '▶';
-  (bar.querySelector('[data-live]') as HTMLElement).classList.toggle('on', !r.on);
-  const sl = speedList(); const ssig = sl.join(','); if (ssig !== speedsSig) { speedsSig = ssig; (bar.querySelector('.speeds') as HTMLElement).innerHTML = sl.map(v => `<button type="button" data-speed="${v}">${v}×</button>`).join(''); }
-  bar.querySelectorAll<HTMLElement>('[data-speed]').forEach(b => b.classList.toggle('on', Number(b.dataset.speed) === r.speed));
+  (bar.querySelector('[data-exit]') as HTMLElement).hidden = !r.on; // ✕ only while replaying: back to the whole record
+  const sel = bar.querySelector('[data-speed-sel]') as HTMLSelectElement; const ssig = `${speedList().join(',')}|${r.speed}`;
+  if (ssig !== speedsSig && document.activeElement !== sel) { speedsSig = ssig; sel.innerHTML = speedOptions(r.speed); }
   if (!scrubbing && document.activeElement !== scrubEl) scrubEl.value = String(Math.round(((clock - t0) / Math.max(1, t1 - t0)) * 1000));
   (bar.querySelector('[data-clock]') as HTMLElement).textContent = (r.on ? `${r.speed}× · ` : '') + fmtTimeS(BigInt(Math.round(clock)) * 1000n);
   // marks: photos (grey), photos with an alert (red), shift changes (blue)

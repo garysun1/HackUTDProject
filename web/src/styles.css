@@ -298,10 +298,8 @@ body[data-conn="connecting"] .col, body[data-conn="error"] .col { opacity: .7; }
 /* replay bar in the column head */
 .floor-tools .replay { display: inline-flex; align-items: center; gap: 6px; }
 .floor-tools .play { width: 30px; padding: 4px 0; text-align: center; }
-.floor-tools .speeds { display: inline-flex; gap: 1px; border: 1px solid var(--line-strong); border-radius: 6px; overflow: hidden; }
-.floor-tools .speeds button { font: 500 12px var(--font); padding: 4px 8px; background: var(--ground); color: var(--ink-2); border: 0; cursor: pointer; min-height: 26px; }
-.floor-tools .speeds button + button { border-left: 1px solid var(--line-strong); }
-.floor-tools .speeds button[aria-pressed="true"] { background: var(--ink); color: var(--ground); }
+.floor-tools .speed { height: 28px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--ground); color: var(--ink-2); font: 500 12px var(--font); padding: 0 6px; cursor: pointer; }
+.floor-tools .exit { width: 28px; padding: 4px 0; text-align: center; }
 .floor-tools .clock { font-size: 12.5px; color: var(--ink-2); min-width: 64px; text-align: right; }
 .legend .k-walk { background: var(--w1); border-radius: 2px; width: 14px; height: 3px; } .legend .k-heat { background: var(--heat); opacity: .7; filter: blur(.5px); }
 @media (max-width: 1100px) { .s3-brain { width: 300px; } }
@@ -314,7 +312,8 @@ body[data-conn="connecting"] .col, body[data-conn="error"] .col { opacity: .7; }
 .s3-replay button:hover { background: var(--hover); color: var(--ink); }
 .s3-replay button.on { background: var(--ink); color: var(--ground); }
 .s3-replay [data-play] { width: 34px; font-size: 13px; }
-.s3-replay .speeds { display: inline-flex; gap: 2px; border-left: 1px solid var(--line); border-right: 1px solid var(--line); padding: 0 6px; }
+.s3-replay .speed { height: 28px; border: 1px solid var(--line); border-radius: 5px; background: var(--ground); color: var(--ink-2); font: 500 13px var(--font); padding: 0 6px; cursor: pointer; }
+.s3-replay .exit { width: 28px; padding: 4px 0; color: var(--ink-3); font-size: 13px; }
 .s3-replay .scrub { flex: 1; position: relative; height: 28px; display: flex; align-items: center; }
 .s3-replay .scrub input { width: 100%; -webkit-appearance: none; appearance: none; height: 4px; background: var(--line-strong); border-radius: 2px; margin: 0; position: relative; z-index: 2; accent-color: var(--ink); }
 .s3-replay .scrub input::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%; background: var(--ink); border: 2px solid var(--ground); box-shadow: 0 0 0 1px var(--line-strong); }
