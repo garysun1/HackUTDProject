@@ -18,7 +18,7 @@ export type Ent = { entityId: string; canonicalName: string; kind: string; alias
 export type Edge = { edgeId: bigint; fromId: string; toId: string; kind: string; props: string };
 export type Episode = { episodeId: bigint; tStartMicros: bigint; tEndMicros: bigint; title: string; summary: string; eventIds: string[] };
 export type Handoff = { handoffId: bigint; sinceMicros: bigint; generatedMicros: bigint; text: string; eventIds: string[] };
-export type Alert = { id: string; alertId: bigint; eventId: string; kind: 'critical' | 'warning'; rawKind: string; text: string; tMicros: bigint; assetId?: string; assetName?: string; deviceId: string; wearerName: string; acked: boolean; slackStatus: string };
+export type Alert = { id: string; alertId: bigint; eventId: string; kind: 'critical' | 'warning'; rawKind: string; text: string; tMicros: bigint; assetId?: string; assetName?: string; deviceId: string; wearerName: string; acked: boolean; ackedMicros?: bigint; slackStatus: string };
 export type Wearer = { deviceId: string; name: string; role: string; shift: string };
 export type Asset = { assetId: string; name: string; assetType: string; location: string; patterns: string[] };
 export type Loc = { eventId: string; deviceId: string; shiftId: string; tMicros: bigint; lat: number; lon: number; accuracyM: number; altM?: number; floor?: number; fixT: string; ageMs?: number };
@@ -162,7 +162,7 @@ function connectData(onState: OnState) {
       conn.db.episode.onInsert(on((_c: any, r: any) => { state.episodes.set(String(r.episodeId), { ...r, episodeId: BigInt(r.episodeId), tStartMicros: BigInt(r.tStartMicros), tEndMicros: BigInt(r.tEndMicros), eventIds: [...r.eventIds] }); notify(); }));
       conn.db.episode.onUpdate(on((_c: any, _o: any, r: any) => { state.episodes.set(String(r.episodeId), { ...r, episodeId: BigInt(r.episodeId), tStartMicros: BigInt(r.tStartMicros), tEndMicros: BigInt(r.tEndMicros), eventIds: [...r.eventIds] }); notify(); }));
       conn.db.handoff.onInsert(on((_c: any, r: any) => { state.handoffs.push({ ...r, handoffId: BigInt(r.handoffId), sinceMicros: BigInt(r.sinceMicros), generatedMicros: BigInt(r.generatedMicros), eventIds: [...r.eventIds] }); notify(); }));
-      const toAlert = (r: any): Alert => ({ id: String(r.alertId), alertId: BigInt(r.alertId), eventId: r.eventId, rawKind: r.kind, kind: r.kind === 'anomaly' ? 'warning' : 'critical', text: r.text, tMicros: BigInt(r.tMicros), assetId: r.entityId || undefined, assetName: r.entityName || undefined, deviceId: r.deviceId, wearerName: r.wearerName, acked: !!r.acked, slackStatus: r.slackStatus });
+      const toAlert = (r: any): Alert => ({ id: String(r.alertId), alertId: BigInt(r.alertId), eventId: r.eventId, rawKind: r.kind, kind: r.kind === 'anomaly' ? 'warning' : 'critical', text: r.text, tMicros: BigInt(r.tMicros), assetId: r.entityId || undefined, assetName: r.entityName || undefined, deviceId: r.deviceId, wearerName: r.wearerName, acked: !!r.acked, ackedMicros: r.ackedMicros != null ? BigInt(r.ackedMicros) : undefined, slackStatus: r.slackStatus });
       conn.db.alert.onInsert(on((_c: any, r: any) => { const a = toAlert(r); state.alerts.set(a.id, a); state.fresh.add(a.eventId); setTimeout(() => { state.fresh.delete(a.eventId); notify(); }, 1200); notify(); }));
       conn.db.alert.onUpdate(on((_c: any, _o: any, r: any) => { const a = toAlert(r); state.alerts.set(a.id, a); notify(); }));
       conn.db.alert.onDelete(on((_c: any, r: any) => { state.alerts.delete(String(r.alertId)); notify(); }));

@@ -1,9 +1,11 @@
-// The memory graph. Photos are nodes; the places, assets and objects the model saw in them
-// are nodes that stem outward; a line is a relationship. Shared entities pull photos together.
-// Time is a soft left-to-right force, so the shift still reads in order. A hand-written force
-// simulation (no dependency) lays it out; new photos drift into place; Replay rebuilds the
-// shift from empty in ten seconds.
-import { state, visibleEvents, displayName, edgesFrom, props, alertsFor, wearerColor, wearerName, fmtTime, notify, loadPhoto, type Ev } from './store';
+// The shift view. Chronological order is the canonical order: photos sit on one horizontal line,
+// time beneath. Four kinds of thing on screen: photo, equipment, issue, note. Equipment and
+// issues hang above the line and thread down to every photo they touch; notes (what the wearer
+// said) hang below. A change arcs from the earlier photo of a piece of equipment to the later one
+// with its text. Everything that is only about one photo (place, people, objects, text read) is
+// behind the click. Hover reveals shared identifiers and look-alike photos. No layout algorithm:
+// nothing moves except a new photo sliding in on the right.
+import { state, visibleEvents, edgesFrom, props, alertsFor, wearerColor, wearerName, fmtTime, notify, loadPhoto, perception, type Ev, type Ent, type Alert } from './store';
 import { select, esc } from './timeline';
 import { view as vs, shownEvents, setScope, onView } from './view';
 import { photoCard, showTip, hideTip } from './card';
@@ -16,18 +18,23 @@ const scopeHead = document.getElementById('scope-head') as HTMLElement; const sc
 document.getElementById('scope-close')!.addEventListener('click', () => setScope(null));
 const ctx = canvas.getContext('2d')!;
 
-// ---------- model ----------
-type Kind = 'photo' | 'place' | 'asset' | 'object';
-type N = { id: string; kind: Kind; x: number; y: number; vx: number; vy: number; r: number; w: number; fx: number | null; fy: number | null; born: number; a: number; deg: number; t: number };
-type L = { s: N; t: N; kind: 'involves' | 'changes' | 'next'; len: number; label?: string; color?: string };
-const nodes = new Map<string, N>(); let links: L[] = [];
-let alpha = 0; const PW = 56, PH = 42; // photo node size
+// ---------- geometry ----------
+const PW = 72, PH = 54; // photo chip
+const STEP = 124, STEP_MAX = 210, BREAK_MIN = 30; // px per photo, extra for long gaps, minutes before a gap is labelled
+const LANE = 36, PILL_H = 26, NOTE_W = 190, NOTE_H = 40;
 let W = 0, H = 0;
-const view = { k: 1, tx: 0, ty: 0 }; let userView = false;
-const bootT = performance.now();
-let hover: string | null = null; let drag: { n: N; moved: boolean; sx: number; sy: number } | null = null; let pan: { sx: number; sy: number; tx: number; ty: number; moved: boolean } | null = null;
+const view = { k: 1, tx: 0, ty: 0 }; let userView = false; let seenFit = fitRequested; let lastReplayStart = 0;
+const bootT = performance.now(); const seen = new Set<string>();
+const anim = new Map<string, { x: number; a: number; t0: number }>();
 const imgs = new Map<string, HTMLImageElement>();
-let raf = 0; let lastFrame = performance.now(); let seenFit = fitRequested; let lastReplayStart = 0;
+let raf = 0; let lastFrame = performance.now();
+let hover: { kind: 'photo' | 'node'; id: string } | null = null;
+let drag: { sx: number; sy: number; tx: number; ty: number; moved: boolean } | null = null;
+
+type Node = { id: string; kind: 'equipment' | 'issue'; label: string; sub: string; photos: string[]; alert?: Alert; x: number; y: number; w: number; lane: number; open: boolean };
+type Note = { id: string; text: string; x: number; y: number; w: number; lane: number };
+type Hit = { kind: 'photo' | 'node'; id: string; x0: number; y0: number; x1: number; y1: number };
+let hits: Hit[] = [];
 
 function photo(id: string): HTMLImageElement | null {
   const url = state.photos.get(id); if (!url) { loadPhoto(id); return null; }
@@ -37,61 +44,67 @@ function photo(id: string): HTMLImageElement | null {
 }
 function frame() { if (!raf) raf = requestAnimationFrame(() => { raf = 0; renderFloor(); }); }
 function toWorld(px: number, py: number) { return { x: (px - view.tx) / view.k, y: (py - view.ty) / view.k }; }
+function shown(): Ev[] { return shownEvents(true); }
 
 // ---------- theme ----------
 function cssVar(name: string): string { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
-let C = { ink: '', ink2: '', ink3: '', ink4: '', line: '', soft: '', place: '', entity: '', warn: '', crit: '', panel: '', ground: '', dark: false };
+let C = { ink: '', ink2: '', ink3: '', ink4: '', line: '', soft: '', entity: '', warn: '', warnBg: '', crit: '', critInk: '', critBg: '', good: '', goodInk: '', panel: '', ground: '', dark: false };
 function readTokens() {
   const dark = matchMedia('(prefers-color-scheme: dark)').matches && document.documentElement.dataset.theme !== 'light' || document.documentElement.dataset.theme === 'dark';
-  C = { ink: cssVar('--ink'), ink2: cssVar('--ink-2'), ink3: cssVar('--ink-3'), ink4: cssVar('--ink-4'), line: cssVar('--line-strong'), soft: cssVar('--line'), place: cssVar('--place'), entity: cssVar('--entity'), warn: cssVar('--warning-ink'), crit: cssVar('--critical'), panel: cssVar('--panel'), ground: cssVar('--ground'), dark };
+  C = { ink: cssVar('--ink'), ink2: cssVar('--ink-2'), ink3: cssVar('--ink-3'), ink4: cssVar('--ink-4'), line: cssVar('--line-strong'), soft: cssVar('--line'), entity: cssVar('--entity'), warn: cssVar('--warning-ink'), warnBg: cssVar('--warning-bg'), crit: cssVar('--critical'), critInk: cssVar('--critical-ink'), critBg: cssVar('--critical-bg'), good: cssVar('--good'), goodInk: cssVar('--good-ink'), panel: cssVar('--panel'), ground: cssVar('--ground'), dark };
 }
 readTokens(); matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { readTokens(); frame(); });
 const withAlpha = (hex: string, a: number) => { const m = /^#([0-9a-f]{6})$/i.exec(hex); if (!m) return hex; const n = parseInt(m[1], 16); return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${a})`; };
 
-// ---------- hover card (shared element in card.ts) ----------
-function entityCard(n: N): string {
-  const ent = state.entities.get(n.id); const evs = photosOf(n.id); const last = evs[0];
-  const kind = n.kind === 'place' ? 'Place' : n.kind === 'asset' ? 'Asset' : 'Seen in photos';
-  return `<div class="tb"><div class="tt"><b>${esc(ent ? displayName(ent) : n.id)}</b>${ent && displayName(ent) !== ent.canonicalName ? ` <span>${esc(ent.canonicalName)}</span>` : ''}</div><div class="ts">${kind} · in ${evs.length} photo${evs.length === 1 ? '' : 's'}${last ? ` · last ${fmtTime(last.tMicros)} by ${esc(wearerName(last.deviceId))}` : ''}. Click to trace.</div></div>`;
+// ---------- plain words ----------
+const TYPE_WORDS: Record<string, string> = { pdu: 'power distribution unit', rack: 'server rack', crac: 'cooling unit', switch: 'network switch', ups: 'battery backup', breaker: 'circuit breaker', transformer: 'transformer', freezer: 'freezer', fridge: 'refrigerator', refrigerator: 'refrigerator', cnc: 'machining center', machine: 'machine', racking: 'storage racking', dock: 'loading dock', panel: 'electrical panel', generator: 'generator', chiller: 'chiller', pump: 'pump', valve: 'valve', sensor: 'sensor', camera: 'camera', door: 'door' };
+const slug = (name: string) => name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+const registryOf = (ent: Ent) => state.assets.get(ent.entityId.toUpperCase().replace(/_/g, '-'));
+/** "Power unit A, Rack R12" + "power distribution unit · PDU-A". The code is secondary. */
+function equipmentWords(ent: Ent): { label: string; sub: string } {
+  const a = registryOf(ent);
+  if (a) { const kind = TYPE_WORDS[(a.assetType || '').toLowerCase()] ?? (a.assetType || '').toLowerCase(); const loc = a.location ? a.location.split('/').pop()!.trim() : ''; return { label: a.name, sub: [kind, loc && !a.name.toLowerCase().includes(loc.toLowerCase()) ? loc : '', a.assetId].filter(Boolean).join(' · ') }; }
+  return { label: ent.canonicalName, sub: ent.kind === 'asset' ? 'equipment' : 'labelled by the wearer' };
 }
-function photosOf(entityId: string): Ev[] { return shown().filter(e => state.edges.some(x => x.fromId === e.eventId && x.toId === entityId)); }
-
-function shown(): Ev[] { return shownEvents(true); }
+/** "PSU 2 fault" from alert text like "FAULT" / "PSU2 OK → PSU2 FAULT" / "status: ... → ..." */
+function issueWords(a: Alert): string {
+  let t = a.text.replace(/\s+/g, ' ').trim();
+  const arrow = t.split('→'); if (arrow.length > 1) t = arrow[arrow.length - 1].trim();
+  t = t.replace(/^[a-z_ ]+:\s*/i, '');
+  if (t === t.toUpperCase() && /[A-Z]{3,}/.test(t)) t = t.charAt(0) + t.slice(1).toLowerCase();
+  t = t.replace(/\bpsu(\d)/i, 'PSU $1').replace(/\balarm\b/i, 'alarm');
+  if (t.length > 38) t = t.slice(0, 37) + '…';
+  return t.charAt(0).toUpperCase() + t.slice(1);
+}
+function identifiers(e: Ev): string[] {
+  const p = perception(e); const out = new Set<string>();
+  for (const s of (p?.text_in_scene ?? []) as string[]) { const str = String(s); for (const m of str.matchAll(/\b(?:ticket|inc|wo|sr|case)\s*#?\s*(\d{3,})\b|#(\d{3,})\b|\b([A-Z]{2,}-\d{1,4}[A-Z]?)\b/gi)) out.add((m[1] ? `ticket ${m[1]}` : m[2] ? `#${m[2]}` : m[3]).toUpperCase()); }
+  return [...out];
+}
 
 // ---------- pointer ----------
-function hit(px: number, py: number): N | null {
-  const { x, y } = toWorld(px, py); let best: N | null = null, bd = 1e9;
-  for (const n of nodes.values()) {
-    if (n.kind === 'object' && n.deg < 2 && !(hover && (hover === n.id || links.some(l => l.t === n && l.s.id === hover))) && !(state.selected && links.some(l => l.t === n && l.s.id === state.selected))) continue;
-    const d = n.kind === 'photo' ? (Math.abs(n.x - x) <= PW / 2 + 4 && Math.abs(n.y - y) <= PH / 2 + 4 ? 0 : 1e9) : Math.hypot(n.x - x, n.y - y) - n.r - 4;
-    if (d <= 0 && (best === null || n.kind === 'photo' || d < bd)) { best = n; bd = d; if (n.kind === 'photo') break; }
-  }
-  return best;
-}
-canvas.addEventListener('mousedown', e => {
-  const r = canvas.getBoundingClientRect(); const px = e.clientX - r.left, py = e.clientY - r.top; const n = hit(px, py);
-  if (n) { drag = { n, moved: false, sx: px, sy: py }; n.fx = n.x; n.fy = n.y; }
-  else pan = { sx: px, sy: py, tx: view.tx, ty: view.ty, moved: false };
-});
+function hit(px: number, py: number): Hit | null { const { x, y } = toWorld(px, py); for (const h of hits) if (x >= h.x0 && x <= h.x1 && y >= h.y0 && y <= h.y1) return h; return null; }
+canvas.addEventListener('mousedown', e => { const r = canvas.getBoundingClientRect(); drag = { sx: e.clientX - r.left, sy: e.clientY - r.top, tx: view.tx, ty: view.ty, moved: false }; });
 canvas.addEventListener('mousemove', e => {
   const r = canvas.getBoundingClientRect(); const px = e.clientX - r.left, py = e.clientY - r.top;
-  if (drag) { const w = toWorld(px, py); drag.n.fx = w.x; drag.n.fy = w.y; if (Math.hypot(px - drag.sx, py - drag.sy) > 4) drag.moved = true; alpha = Math.max(alpha, 0.25); frame(); return; }
-  if (pan) { if (Math.hypot(px - pan.sx, py - pan.sy) > 4) { pan.moved = true; userView = true; } if (pan.moved) { view.tx = pan.tx + (px - pan.sx); view.ty = pan.ty + (py - pan.sy); frame(); } return; }
-  const n = hit(px, py); const prev = hover; hover = n?.id ?? null; canvas.style.cursor = n ? 'pointer' : 'grab';
-  if (n) showTip(n.kind === 'photo' ? photoCard(n.id) : entityCard(n), e.clientX, e.clientY, n.id);
-  else hideTip();
-  if (prev !== hover) frame();
+  if (drag) { if (Math.hypot(px - drag.sx, py - drag.sy) > 4) { drag.moved = true; userView = true; } if (drag.moved) { view.tx = drag.tx + (px - drag.sx); view.ty = drag.ty + (py - drag.sy); frame(); } return; }
+  const h = hit(px, py); const prevId = hover?.id ?? null; hover = h ? { kind: h.kind, id: h.id } : null; canvas.style.cursor = h ? 'pointer' : 'grab';
+  if (h) showTip(h.kind === 'photo' ? photoCard(h.id) : nodeCard(h.id), e.clientX, e.clientY, h.id); else hideTip();
+  if (prevId !== (hover?.id ?? null)) frame();
 });
 addEventListener('mouseup', e => {
-  if (drag) { const n = drag.n; const moved = drag.moved; drag = null; n.fx = n.fy = null; if (!moved) { if (n.kind === 'photo') select(n.id); else { state.assetFilter = state.assetFilter === n.id ? null : n.id; notify(); } } return; }
-  if (pan) { const moved = pan.moved; pan = null; if (!moved && e.target === canvas && state.selected) select(null); }
+  if (!drag) return; const moved = drag.moved; drag = null; if (moved || e.target !== canvas) return;
+  const r = canvas.getBoundingClientRect(); const h = hit(e.clientX - r.left, e.clientY - r.top);
+  if (!h) { if (state.selected) select(null); return; }
+  if (h.kind === 'photo') select(h.id); else { const n = nodeById.get(h.id); const ent = n?.kind === 'issue' ? n.alert?.assetId : h.id; if (ent) { state.assetFilter = state.assetFilter === ent ? null : ent; notify(); } }
 });
 canvas.addEventListener('mouseleave', () => { hover = null; hideTip(); frame(); });
 canvas.addEventListener('dblclick', () => { userView = false; frame(); });
 canvas.addEventListener('wheel', e => {
-  if (!nodes.size) return; e.preventDefault();
+  if (!hits.length) return; e.preventDefault();
   const r = canvas.getBoundingClientRect(); const px = e.clientX - r.left, py = e.clientY - r.top;
-  const k = Math.min(4, Math.max(0.2, view.k * Math.exp(-e.deltaY * 0.0015)));
+  if (e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY)) { view.tx -= e.deltaX || e.deltaY; userView = true; frame(); return; }
+  const k = Math.min(3, Math.max(0.25, view.k * Math.exp(-e.deltaY * 0.0015)));
   view.tx = px - (px - view.tx) * (k / view.k); view.ty = py - (py - view.ty) * (k / view.k); view.k = k; userView = true; frame();
 }, { passive: false });
 document.addEventListener('keydown', e => {
@@ -102,79 +115,70 @@ document.addEventListener('keydown', e => {
   const next = i < 0 ? (fwd ? chrono[0] : chrono[chrono.length - 1]) : chrono[Math.min(chrono.length - 1, Math.max(0, i + (fwd ? 1 : -1)))];
   e.preventDefault(); select(next.eventId);
 });
-addEventListener('resize', () => { alpha = Math.max(alpha, 0.2); frame(); });
+addEventListener('resize', () => frame());
 
-// ---------- graph construction: keep positions, add what is new, drop what left ----------
-function sync(evs: Ev[]) {
-  const now = performance.now(); const booted = now - bootT > 2500 || vs.replay.on;
-  const keep = new Set<string>(); links = [];
-  const chrono = [...evs].reverse();
-  // x target by order in time, gaps capped: a four-hour pause is a longer gap, not an empty screen
-  const xs = new Map<number, number>(); let xAcc = 90;
-  chrono.forEach((e, i) => { if (i) { const m = Number(e.tMicros - chrono[i - 1].tMicros) / 60e6; xAcc += Math.min(260, Math.max(130, 130 + m * 3)); } xs.set(Number(e.tMicros), xAcc); });
-  const xT = (t: number) => xs.get(t) ?? xAcc;
-  let changed = false;
-  const add = (id: string, kind: Kind, near: N[] | null, t: number): N => {
-    let n = nodes.get(id);
-    if (!n) {
-      const base = near && near.length ? { x: near.reduce((s, m) => s + m.x, 0) / near.length, y: near.reduce((s, m) => s + m.y, 0) / near.length } : { x: kind === 'photo' ? xT(t) : W / 2, y: H / 2 };
-      const jitter = kind === 'photo' ? 30 : 60;
-      n = { id, kind, x: base.x + (Math.random() - 0.5) * jitter + (kind === 'photo' && near?.length ? 70 : 0), y: base.y + (Math.random() - 0.5) * jitter, vx: 0, vy: 0, r: kind === 'place' ? 30 : kind === 'asset' ? 13 : 5, w: kind === 'photo' ? 1.6 : kind === 'place' ? 2.2 : kind === 'asset' ? 1 : 0.5, fx: null, fy: null, born: booted ? now : 0, a: booted ? 0 : 1, deg: 0, t };
-      nodes.set(id, n); changed = true;
-    }
-    n.deg = 0; n.t = t; keep.add(id); return n;
-  };
-  let prev: N | null = null;
-  for (const e of chrono) {
-    const t = Number(e.tMicros); const pn = add(e.eventId, 'photo', prev ? [prev] : null, t);
-    for (const ed of edgesFrom(e.eventId)) {
-      const ent = state.entities.get(ed.toId); if (!ent) continue;
-      if (ed.kind === 'INVOLVES') {
-        const kind: Kind = props(ed).role === 'setting' || ent.kind === 'place' ? 'place' : ent.kind === 'asset' ? 'asset' : 'object';
-        const en = add(ent.entityId, kind, [pn], t);
-        links.push({ s: pn, t: en, kind: 'involves', len: kind === 'place' ? 120 : kind === 'asset' ? 85 : 55 });
-        pn.deg++; en.deg++;
-      } else if (ed.kind === 'CHANGES') {
-        const en = add(ent.entityId, ent.kind === 'asset' ? 'asset' : 'object', [pn], t); const p = props(ed);
-        const lbl = `${p.attr ? p.attr + ' ' : ''}${p.from ?? ''} → ${p.to ?? ''}`; links.push({ s: pn, t: en, kind: 'changes', len: 85, label: lbl.length > 44 ? lbl.slice(0, 43) + '…' : lbl });
-        pn.deg++; en.deg++;
-      }
-    }
-    if (prev) links.push({ s: prev, t: pn, kind: 'next', len: 150, color: wearerColor(e.deviceId) });
-    prev = pn;
-  }
-  for (const id of [...nodes.keys()]) if (!keep.has(id)) { nodes.delete(id); changed = true; }
-  // the operator's label promotes an object to an asset-looking node
-  for (const e of chrono) if (e.label) { const n = nodes.get(e.label.toLowerCase().trim().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '')); if (n && n.kind === 'object') { n.kind = 'asset'; n.r = 13; n.w = 1; } }
-  if (changed) alpha = Math.max(alpha, 0.8);
-  return { xT, chrono };
+const nodeById = new Map<string, Node>();
+function nodeCard(id: string): string {
+  const n = nodeById.get(id); if (!n) return '';
+  const last = n.photos.map(p => state.events.get(p)!).sort((a, b) => (a.tMicros < b.tMicros ? 1 : -1))[0];
+  const head = n.kind === 'issue' ? `<span class="ta">${esc(n.label)}</span>` : `<b>${esc(n.label)}</b>`;
+  return `<div class="tb"><div class="tt">${head}</div><div class="ts">${esc(n.sub)}${n.kind === 'issue' ? (n.open ? ' · open' : ' · resolved') : ''} · in ${n.photos.length} photo${n.photos.length === 1 ? '' : 's'}${last ? ` · last ${fmtTime(last.tMicros)} by ${esc(wearerName(last.deviceId))}` : ''}. Click to follow.</div></div>`;
 }
 
-// ---------- the simulation ----------
-function tick(xT: (t: number) => number) {
-  const ns = [...nodes.values()]; const cy = H / 2, cx = W / 2;
-  for (const l of links) {
-    const dx = l.t.x - l.s.x, dy = l.t.y - l.s.y; const d = Math.max(1, Math.hypot(dx, dy));
-    const k = l.kind === 'next' ? 0.03 : 0.07; const f = (d - l.len) * k * alpha;
-    const bs = l.t.w / (l.s.w + l.t.w), bt = l.s.w / (l.s.w + l.t.w);
-    l.s.vx += dx / d * f * bs; l.s.vy += dy / d * f * bs; l.t.vx -= dx / d * f * bt; l.t.vy -= dy / d * f * bt;
+// ---------- layout ----------
+type Layout = { chrono: Ev[]; xOf: Map<string, number>; breaks: { x: number; minutes: number }[]; nodes: Node[]; notes: Note[]; changes: { from: string; to: string; text: string; entity: string }[]; lanesUp: number; lanesDown: number; spineY: number; width: number };
+function layout(evs: Ev[]): Layout {
+  const chrono = [...evs].reverse();
+  const xOf = new Map<string, number>(); const breaks: Layout['breaks'] = []; let x = 90;
+  chrono.forEach((e, i) => { if (i) { const m = Number(e.tMicros - chrono[i - 1].tMicros) / 60e6; const step = Math.min(STEP_MAX, STEP + Math.max(0, m - 2) * 2.5); if (m >= BREAK_MIN) breaks.push({ x: x + step / 2, minutes: Math.round(m) }); x += step; } xOf.set(e.eventId, x); });
+  const width = x + 90;
+  // equipment: registry assets and the wearer's labelled thing; issues: alerts, each with the photos it spans
+  const eq = new Map<string, Node>();
+  for (const e of chrono) {
+    const labelId = e.label ? slug(e.label) : null;
+    for (const ed of edgesFrom(e.eventId, 'INVOLVES')) {
+      const ent = state.entities.get(ed.toId); if (!ent || props(ed).role === 'setting') continue;
+      if (ent.kind !== 'asset' && ent.entityId !== labelId) continue;
+      let n = eq.get(ent.entityId); if (!n) { const w = equipmentWords(ent); n = { id: ent.entityId, kind: 'equipment', label: w.label, sub: w.sub, photos: [], x: 0, y: 0, w: 0, lane: 0, open: false }; eq.set(ent.entityId, n); }
+      n.photos.push(e.eventId);
+    }
   }
-  for (let i = 0; i < ns.length; i++) for (let j = i + 1; j < ns.length; j++) {
-    const a = ns[i], b = ns[j]; let dx = b.x - a.x, dy = b.y - a.y; let d2 = dx * dx + dy * dy;
-    if (d2 > 260 * 260) continue; if (d2 < 1) { dx = Math.random() - 0.5; dy = Math.random() - 0.5; d2 = 1; }
-    const d = Math.sqrt(d2);
-    const f = (1400 * a.w * b.w * alpha) / d2;
-    a.vx -= dx / d * f / a.w; a.vy -= dy / d * f / a.w; b.vx += dx / d * f / b.w; b.vy += dy / d * f / b.w;
-    const ra = a.kind === 'photo' ? 34 : a.r + 6, rb = b.kind === 'photo' ? 34 : b.r + 6; const min = ra + rb;
-    if (d < min) { const push = (min - d) * 0.5; a.vx -= dx / d * push * 0.5; a.vy -= dy / d * push * 0.5; b.vx += dx / d * push * 0.5; b.vy += dy / d * push * 0.5; }
+  const issues: Node[] = [];
+  const evIds = new Set(chrono.map(e => e.eventId));
+  for (const a of state.alerts.values()) {
+    if (!evIds.has(a.eventId)) continue;
+    const raised = state.events.get(a.eventId)!; const photos = [a.eventId];
+    const until = a.acked && a.ackedMicros ? a.ackedMicros : null;
+    for (const e of chrono) if (e.eventId !== a.eventId && e.tMicros > raised.tMicros && (until === null || e.tMicros <= until) && a.assetId && edgesFrom(e.eventId, 'INVOLVES').some(ed => ed.toId === a.assetId)) photos.push(e.eventId);
+    const ent = a.assetId ? state.entities.get(a.assetId) : undefined; const where = ent ? equipmentWords(ent).label : a.assetName || '';
+    issues.push({ id: `alert:${a.id}`, kind: 'issue', label: issueWords(a), sub: where ? `on ${where}` : 'problem seen', photos, alert: a, x: 0, y: 0, w: 0, lane: 0, open: !a.acked });
   }
-  for (const n of ns) {
-    if (n.kind === 'photo') n.vx += (xT(n.t) - n.x) * 0.05 * alpha;
-    else n.vx += (cx - n.x) * 0.002 * alpha;
-    n.vy += (cy - n.y) * 0.02 * alpha;
-    n.vx *= 0.5; n.vy *= 0.5;
-    if (n.fx != null) { n.x = n.fx; n.y = n.fy!; n.vx = n.vy = 0; } else { n.x += n.vx; n.y += n.vy; }
+  // open issues nearest the line, then equipment by first appearance; lanes packed by horizontal overlap
+  ctx.font = '500 12.5px Inter, sans-serif';
+  const place = (ns: Node[]) => {
+    for (const n of ns) { const xs = n.photos.map(p => xOf.get(p)!); n.x = (Math.min(...xs) + Math.max(...xs)) / 2; n.w = Math.max(96, Math.min(260, ctx.measureText(n.label).width + (n.kind === 'issue' ? 44 : 22))); }
+    ns.sort((a, b) => (a.kind !== b.kind ? (a.kind === 'issue' ? -1 : 1) : Math.min(...a.photos.map(p => xOf.get(p)!)) - Math.min(...b.photos.map(p => xOf.get(p)!))));
+    const lanes: { x0: number; x1: number }[][] = [];
+    for (const n of ns) { let l = 0; for (; ; l++) { const row = lanes[l] ?? (lanes[l] = []); if (!row.some(r => n.x - n.w / 2 < r.x1 + 14 && n.x + n.w / 2 > r.x0 - 14)) { row.push({ x0: n.x - n.w / 2, x1: n.x + n.w / 2 }); break; } } n.lane = l; }
+    return lanes.length;
+  };
+  const nodes = [...issues, ...eq.values()]; const lanesUp = place(nodes);
+  // notes below
+  const notes: Note[] = []; const rows: { x0: number; x1: number }[][] = [];
+  for (const e of chrono) if (e.note) { const x0 = xOf.get(e.eventId)! - NOTE_W / 2; let l = 0; for (; ; l++) { const row = rows[l] ?? (rows[l] = []); if (!row.some(r => x0 < r.x1 + 12 && x0 + NOTE_W > r.x0 - 12)) { row.push({ x0, x1: x0 + NOTE_W }); break; } } notes.push({ id: e.eventId, text: e.note, x: xOf.get(e.eventId)!, y: 0, w: NOTE_W, lane: l }); }
+  // changes: before → after on the same equipment
+  const changes: Layout['changes'] = [];
+  for (const e of chrono) for (const ed of edgesFrom(e.eventId, 'CHANGES')) {
+    const p = props(ed); const prev = [...chrono].reverse().find(o => o.tMicros < e.tMicros && edgesFrom(o.eventId, 'INVOLVES').some(x => x.toId === ed.toId));
+    if (!prev) continue; const ent = state.entities.get(ed.toId); const name = ent ? equipmentWords(ent).label : ed.toId;
+    const text = `${p.attr && !/^(status|state|description)$/i.test(String(p.attr)) ? String(p.attr) + ': ' : ''}${p.from ?? ''} → ${p.to ?? ''}`;
+    changes.push({ from: prev.eventId, to: e.eventId, text: text.length > 48 ? text.slice(0, 47) + '…' : text, entity: name });
   }
+  const arcTop = changes.length ? 92 : 40; // room for change arcs and their text between the line and the first lane
+  const spineY = Math.max(170, 40 + lanesUp * LANE + arcTop + PH / 2);
+  for (const n of nodes) n.y = spineY - PH / 2 - arcTop - n.lane * LANE;
+  for (const n of notes) n.y = spineY + PH / 2 + 44 + n.lane * (NOTE_H + 10);
+  return { chrono, xOf, breaks, nodes, notes, changes, lanesUp, lanesDown: rows.length, spineY, width };
 }
 
 // ---------- render ----------
@@ -183,117 +187,162 @@ export function renderFloor() {
   floorEl.dataset.mode = vs.mode;
   const visible = vs.mode === 'graph' || !!vs.scope;
   canvas.hidden = !visible; scopeHead.hidden = !(vs.mode === 'map' && vs.scope);
-  if (vs.scope) scopeTitle.innerHTML = `<b>${esc(vs.scopeLabel || 'Selection')}</b> · ${shown().length} photo${shown().length === 1 ? '' : 's'} · what connects`;
+  if (vs.scope) scopeTitle.innerHTML = `<b>${esc(vs.scopeLabel || 'Selection')}</b> · ${shown().length} photo${shown().length === 1 ? '' : 's'}`;
   if (!visible) { empty.hidden = true; return; }
-  if (vs.replay.start !== lastReplayStart) { lastReplayStart = vs.replay.start; nodes.clear(); links = []; userView = false; }
+  if (vs.replay.start !== lastReplayStart) { lastReplayStart = vs.replay.start; anim.clear(); userView = false; }
   if (fitRequested !== seenFit) { seenFit = fitRequested; userView = false; }
   const dpr = devicePixelRatio || 1;
   W = canvas.clientWidth; H = canvas.clientHeight;
   if (canvas.width !== W * dpr || canvas.height !== H * dpr) { canvas.width = W * dpr; canvas.height = H * dpr; }
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, H);
-
+  hits = []; nodeById.clear();
   const evs = shown(); empty.hidden = evs.length > 0 || vs.replay.on || !!vs.scope;
-  const { xT, chrono } = sync(evs);
+  if (!evs.length) return;
+  const L = layout(evs); for (const n of L.nodes) nodeById.set(n.id, n);
   let moving = vs.replay.playing;
-  if (alpha > 0.004) { for (let i = 0; i < 2; i++) tick(xT); alpha += (0 - alpha) * 0.028; moving = true; } else alpha = 0;
 
-  // view: auto-fit until the user takes over
-  if (nodes.size) {
-    let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
-    for (const n of nodes.values()) { const rx = n.kind === 'photo' ? PW / 2 : n.r + 10, ry = n.kind === 'photo' ? PH / 2 : n.r + 18; x0 = Math.min(x0, n.x - rx); x1 = Math.max(x1, n.x + rx); y0 = Math.min(y0, n.y - ry); y1 = Math.max(y1, n.y + ry); }
-    if (!userView) {
-      const m = 48; const kFit = Math.min((W - 2 * m) / Math.max(120, x1 - x0), (H - 2 * m) / Math.max(120, y1 - y0));
-      // Whole graph when it fits at a readable size; otherwise centre on the selected photo, else keep the newest at the right edge.
-      const MIN = 0.6; const sel = state.selected ? nodes.get(state.selected) : null;
-      const kT = kFit >= MIN ? Math.min(1.3, kFit) : sel ? Math.max(kFit, 0.85) : MIN;
-      let txT = (W - (x0 + x1) * kT) / 2, tyT = (H - (y0 + y1) * kT) / 2;
-      if (kFit < MIN) { if (sel) { txT = W / 2 - sel.x * kT; tyT = H / 2 - sel.y * kT; } else txT = W - m - x1 * kT; }
-      const e = 1 - Math.exp(-dt / 160);
-      if (Math.abs(kT - view.k) > 0.002 || Math.abs(txT - view.tx) > 0.5 || Math.abs(tyT - view.ty) > 0.5) moving = true;
-      view.k += (kT - view.k) * e; view.tx += (txT - view.tx) * e; view.ty += (tyT - view.ty) * e;
-    }
+  // animated x for photos: new ones slide in from the right edge of the content
+  const booted = now - bootT > 2500 || vs.replay.on; const k = 1 - Math.exp(-dt / 120);
+  const ax = (id: string) => { const target = L.xOf.get(id)!; let a = anim.get(id); if (!a) { const isNew = booted && !seen.has(id); a = { x: isNew ? target + 160 : target, a: isNew ? 0 : 1, t0: now }; anim.set(id, a); } seen.add(id); a.x += (target - a.x) * k; a.a += (1 - a.a) * k; if (Math.abs(target - a.x) > 0.3 || 1 - a.a > 0.02) moving = true; else { a.x = target; a.a = 1; } return a; };
+  for (const id of anim.keys()) if (!L.xOf.has(id)) anim.delete(id);
+  const px = new Map<string, { x: number; a: number; t0: number }>(); for (const e of L.chrono) px.set(e.eventId, ax(e.eventId));
+
+  // view: fit while readable; otherwise keep the newest at the right or centre the selection
+  const contentH = L.spineY + PH / 2 + 44 + L.lanesDown * (NOTE_H + 10) + 40; const x0 = 0, x1 = L.width;
+  if (!userView) {
+    const m = 24; const kFit = Math.min((W - 2 * m) / Math.max(200, x1 - x0), (H - 2 * m) / Math.max(200, contentH));
+    const MIN = 0.62; const selX = state.selected && L.xOf.has(state.selected) ? L.xOf.get(state.selected)! : null;
+    const kT = kFit >= MIN ? Math.min(1.25, kFit) : selX !== null ? Math.max(kFit, 0.8) : MIN;
+    let txT = (W - (x0 + x1) * kT) / 2, tyT = (H - contentH * kT) / 2;
+    if (kFit < MIN) { txT = selX !== null ? W / 2 - selX * kT : W - m - x1 * kT; tyT = Math.max(H - contentH * kT - m, Math.min(m, (H - contentH * kT) / 2)); }
+    const e = 1 - Math.exp(-dt / 160);
+    if (Math.abs(kT - view.k) > 0.002 || Math.abs(txT - view.tx) > 0.5 || Math.abs(tyT - view.ty) > 0.5) moving = true;
+    view.k += (kT - view.k) * e; view.tx += (txT - view.tx) * e; view.ty += (tyT - view.ty) * e;
   }
   ctx.save(); ctx.translate(view.tx, view.ty); ctx.scale(view.k, view.k);
 
-  // trace / hover emphasis
-  const traceId = state.assetFilter && nodes.has(state.assetFilter) ? state.assetFilter : null;
-  const focusId = traceId ?? (hover && nodes.get(hover)?.kind !== 'photo' ? hover : null) ?? hover ?? state.selected;
-  const lit = new Set<string>();
-  if (focusId) { lit.add(focusId); for (const l of links) { if (l.kind === 'next') continue; if (l.s.id === focusId) lit.add(l.t.id); if (l.t.id === focusId) lit.add(l.s.id); } }
-  const dimTo = traceId ? 0.12 : 0.45; const dimOf = (id: string) => (focusId && !lit.has(id) ? dimTo : 1);
-  for (const n of nodes.values()) { n.a += (1 - n.a) * (1 - Math.exp(-dt / 220)); if (1 - n.a > 0.02) moving = true; else n.a = 1; }
+  // emphasis: a traced entity, a hovered node, a hovered or selected photo
+  const traceId = state.assetFilter;
+  const focusNode = hover?.kind === 'node' ? nodeById.get(hover.id) : null;
+  const litPhotos = new Set<string>(); let anyFocus = false;
+  if (traceId) { anyFocus = true; for (const n of L.nodes) if (n.id === traceId || n.alert?.assetId === traceId) n.photos.forEach(p => litPhotos.add(p)); }
+  else if (focusNode) { anyFocus = true; focusNode.photos.forEach(p => litPhotos.add(p)); }
+  const focusPhoto = hover?.kind === 'photo' ? hover.id : state.selected;
+  const dim = (id: string) => (anyFocus && !litPhotos.has(id) ? 0.25 : 1);
+  const nodeDim = (n: Node) => (traceId ? (n.id === traceId || n.alert?.assetId === traceId ? 1 : 0.25) : focusNode ? (n === focusNode ? 1 : 0.35) : 1);
 
-  // edges
+  // the line and the breaks
+  ctx.strokeStyle = C.soft; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(40, L.spineY); ctx.lineTo(L.width - 40, L.spineY); ctx.stroke();
+  ctx.font = 'italic 11px Inter, sans-serif'; ctx.fillStyle = C.ink4; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  for (const b of L.breaks) { ctx.fillStyle = C.ground; ctx.fillRect(b.x - 30, L.spineY - 8, 60, 16); ctx.fillStyle = C.ink4; ctx.fillText(`${b.minutes >= 90 ? `${Math.floor(b.minutes / 60)} h` : `${b.minutes} min`} quiet`, b.x, L.spineY); }
+
+  // threads from nodes to photos
   ctx.lineCap = 'round';
-  for (const l of links) {
-    if (l.t.kind === 'object' && l.t.deg < 2 && !lit.has(l.t.id)) continue;
-    const a = Math.min(l.s.a, l.t.a) * (focusId ? (lit.has(l.s.id) && lit.has(l.t.id) ? 1 : dimTo) : 1);
-    ctx.globalAlpha = a;
-    if (l.kind === 'next') { ctx.strokeStyle = withAlpha(l.color!, 0.55); ctx.lineWidth = 1.5; ctx.setLineDash([3, 5]); }
-    else if (l.kind === 'changes') { ctx.strokeStyle = C.warn; ctx.lineWidth = 1.8; ctx.setLineDash([]); }
-    else { ctx.strokeStyle = C.dark ? 'rgba(200,200,195,0.35)' : 'rgba(60,60,56,0.28)'; ctx.lineWidth = focusId && lit.has(l.s.id) && lit.has(l.t.id) ? 1.6 : 1; ctx.setLineDash([]); }
-    const prog = l.kind === 'next' ? Math.min(1, (now - Math.max(l.t.born, l.s.born)) / 650) : 1; if (prog < 1) moving = true;
-    ctx.beginPath(); ctx.moveTo(l.s.x, l.s.y);
-    if (l.kind === 'next') { const mx = (l.s.x + l.t.x) / 2; if (prog >= 1) ctx.bezierCurveTo(mx, l.s.y, mx, l.t.y, l.t.x, l.t.y); else { for (let s = 1; s <= 16; s++) { const q = bez(l.s.x, l.s.y, mx, l.t.x, l.t.y, (s / 16) * prog); ctx.lineTo(q.x, q.y); } } }
-    else ctx.lineTo(l.t.x, l.t.y);
-    ctx.stroke(); ctx.setLineDash([]);
-    if (l.kind === 'changes' && l.label && (focusId === l.s.id || focusId === l.t.id)) { ctx.globalAlpha = 1; ctx.font = '11px "JetBrains Mono", monospace'; ctx.fillStyle = C.warn; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom'; ctx.fillText(l.label, (l.s.x + l.t.x) / 2, (l.s.y + l.t.y) / 2 - 4); }
+  for (const n of L.nodes) {
+    const col = n.kind === 'issue' ? (n.open ? C.crit : C.ink4) : C.line;
+    for (const p of n.photos) {
+      const pp = px.get(p); if (!pp) continue; const prog = Math.min(1, (now - pp.t0) / 650); if (prog < 1) moving = true;
+      ctx.globalAlpha = Math.min(pp.a, nodeDim(n)) * (n.kind === 'issue' ? 0.9 : 0.7) * prog;
+      ctx.strokeStyle = col; ctx.lineWidth = n.kind === 'issue' ? 1.6 : 1;
+      const y0 = n.y + PILL_H / 2, y1 = L.spineY - PH / 2 - 3; const my = (y0 + y1) / 2;
+      ctx.beginPath(); ctx.moveTo(n.x, y0); ctx.bezierCurveTo(n.x, my, pp.x, my, pp.x, y1); ctx.stroke();
+    }
   }
+  // note stems
+  for (const n of L.notes) { const pp = px.get(n.id)!; ctx.globalAlpha = pp.a * dim(n.id) * 0.7; ctx.strokeStyle = C.line; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(pp.x, L.spineY + PH / 2 + 3); ctx.lineTo(pp.x, n.y - 2); ctx.stroke(); }
   ctx.globalAlpha = 1;
 
-  // entity nodes
-  ctx.textBaseline = 'middle';
-  for (const n of nodes.values()) {
-    if (n.kind === 'photo') continue;
-    const ent = state.entities.get(n.id); const name = ent ? displayName(ent) : n.id; const isFocus = focusId === n.id;
-    const open = n.kind !== 'place' && evs.some(e => alertsFor(e).some(al => al.assetId === n.id && !al.acked));
-    ctx.globalAlpha = n.a * dimOf(n.id);
-    if (n.kind === 'place') {
-      ctx.fillStyle = withAlpha(C.place, C.dark ? 0.16 : 0.1); ctx.beginPath(); ctx.arc(n.x, n.y, n.r, 0, 7); ctx.fill();
-      ctx.strokeStyle = withAlpha(C.place, isFocus ? 0.9 : 0.45); ctx.lineWidth = isFocus ? 1.5 : 1; ctx.stroke();
-      ctx.fillStyle = C.place; ctx.font = '600 12px Inter, sans-serif'; ctx.textAlign = 'center'; wrapText(name.toUpperCase(), n.x, n.y, 72, 13);
-    } else if (n.kind === 'asset') {
-      ctx.font = '500 12px "JetBrains Mono", monospace'; const tw = ctx.measureText(name).width + 18; const h = 24;
-      ctx.fillStyle = isFocus && traceId ? C.ink : C.panel; ctx.strokeStyle = open ? C.crit : isFocus ? C.ink : C.line; ctx.lineWidth = open || isFocus ? 1.5 : 1;
-      roundRect(n.x - tw / 2, n.y - h / 2, tw, h, 6); ctx.fill(); ctx.stroke();
-      ctx.fillStyle = isFocus && traceId ? C.ground : open ? C.crit : C.entity; ctx.textAlign = 'center'; ctx.fillText(name, n.x, n.y + 1);
-      n.r = Math.max(13, tw / 2);
-    } else {
-      if (n.deg < 2 && !lit.has(n.id) && !isFocus) continue; // one-off objects stem out only when their photo is in focus
-      ctx.fillStyle = isFocus ? C.ink : C.ink3; ctx.beginPath(); ctx.arc(n.x, n.y, 4, 0, 7); ctx.fill();
-      if (n.deg >= 2 || isFocus || lit.has(n.id)) { ctx.font = '11px Inter, sans-serif'; ctx.fillStyle = C.ink2; ctx.textAlign = 'left'; ctx.fillText(name.length > 28 ? name.slice(0, 27) + '…' : name, n.x + 8, n.y + 1); }
+  // change arcs: before → after, over the line
+  for (const c of L.changes) {
+    const a = px.get(c.from), b = px.get(c.to); if (!a || !b) continue;
+    const lit = !anyFocus || (litPhotos.has(c.from) && litPhotos.has(c.to)); ctx.globalAlpha = (lit ? 1 : 0.2) * Math.min(a.a, b.a);
+    const y = L.spineY - PH / 2 - 10, h = Math.min(56, 22 + (b.x - a.x) * 0.08);
+    ctx.strokeStyle = C.warn; ctx.lineWidth = 1.6; ctx.setLineDash([]);
+    ctx.beginPath(); ctx.moveTo(a.x + PW / 2 - 6, y); ctx.bezierCurveTo(a.x + PW / 2 - 6, y - h, b.x - PW / 2 + 6, y - h, b.x - PW / 2 + 6, y); ctx.stroke();
+    // arrowhead
+    ctx.fillStyle = C.warn; ctx.beginPath(); ctx.moveTo(b.x - PW / 2 + 6, y + 2); ctx.lineTo(b.x - PW / 2 + 1, y - 7); ctx.lineTo(b.x - PW / 2 + 11, y - 7); ctx.closePath(); ctx.fill();
+    ctx.font = '500 11.5px Inter, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom'; const mx = (a.x + b.x) / 2; const tw = ctx.measureText(c.text).width;
+    ctx.fillStyle = C.ground; ctx.fillRect(mx - tw / 2 - 5, y - h * 0.75 - 15, tw + 10, 16); ctx.fillStyle = C.warn; ctx.fillText(c.text, mx, y - h * 0.75);
+  }
+  ctx.globalAlpha = 1; ctx.textBaseline = 'middle';
+
+  // hover reveals on a photo: shared identifiers and look-alikes
+  if (focusPhoto && px.has(focusPhoto)) {
+    const me = state.events.get(focusPhoto)!; const mine = identifiers(me); const a = px.get(focusPhoto)!;
+    for (const e of L.chrono) {
+      if (e.eventId === focusPhoto) continue; const b = px.get(e.eventId)!;
+      const shared = identifiers(e).filter(x => mine.includes(x));
+      const similar = state.edges.some(ed => ed.kind === 'SIMILAR_TO' && ((ed.fromId === focusPhoto && ed.toId === e.eventId) || (ed.fromId === e.eventId && ed.toId === focusPhoto)));
+      if (!shared.length && !similar) continue;
+      const y = L.spineY + PH / 2 + 12, h = Math.min(60, 20 + Math.abs(b.x - a.x) * 0.08);
+      ctx.strokeStyle = shared.length ? C.ink3 : C.ink4; ctx.lineWidth = 1; ctx.setLineDash([3, 4]);
+      ctx.beginPath(); ctx.moveTo(a.x, y); ctx.bezierCurveTo(a.x, y + h, b.x, y + h, b.x, y); ctx.stroke(); ctx.setLineDash([]);
+      ctx.font = '11px "JetBrains Mono", monospace'; ctx.fillStyle = shared.length ? C.ink2 : C.ink4; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+      ctx.fillText(shared.length ? shared.join(' · ') : 'looks alike', (a.x + b.x) / 2, y + h * 0.75 + 2); ctx.textBaseline = 'middle';
     }
   }
 
-  // photo nodes
-  for (const e of chrono) {
-    const n = nodes.get(e.eventId)!; const open = alertsFor(e).some(a => !a.acked); const sel = state.selected === n.id || hover === n.id;
-    const color = open ? C.crit : wearerColor(e.deviceId); const base = n.a * dimOf(n.id);
-    ctx.globalAlpha = base;
-    if (n.born) { const kk = Math.min(1, (now - n.born) / 1200); if (kk < 1) { moving = true; ctx.strokeStyle = color; ctx.globalAlpha = base * (1 - kk); ctx.lineWidth = 2; roundRect(n.x - PW / 2 - 4 - kk * 18, n.y - PH / 2 - 4 - kk * 18, PW + 8 + kk * 36, PH + 8 + kk * 36, 10 + kk * 10); ctx.stroke(); ctx.globalAlpha = base; } }
-    if (open) { ctx.fillStyle = 'rgba(208,59,59,0.16)'; roundRect(n.x - PW / 2 - 6, n.y - PH / 2 - 6, PW + 12, PH + 12, 10); ctx.fill(); }
-    const x0 = n.x - PW / 2, y0 = n.y - PH / 2; const im = photo(n.id);
+  // nodes above the line
+  for (const n of L.nodes) {
+    ctx.globalAlpha = nodeDim(n); const isFocus = focusNode === n || n.id === traceId || n.alert?.assetId === traceId;
+    const x0 = n.x - n.w / 2, y0 = n.y - PILL_H / 2;
+    if (n.kind === 'issue') {
+      ctx.fillStyle = n.open ? C.critBg : C.panel; ctx.strokeStyle = n.open ? C.crit : C.line; ctx.lineWidth = isFocus ? 1.5 : 1;
+      roundRect(x0, y0, n.w, PILL_H, 7); ctx.fill(); ctx.stroke();
+      // mark: a small triangle while open, a check once resolved
+      ctx.fillStyle = n.open ? C.crit : C.goodInk;
+      if (n.open) { ctx.beginPath(); ctx.moveTo(x0 + 14, y0 + 7); ctx.lineTo(x0 + 20.5, y0 + 19); ctx.lineTo(x0 + 7.5, y0 + 19); ctx.closePath(); ctx.fill(); ctx.fillStyle = C.critBg; ctx.fillRect(x0 + 13.3, y0 + 11, 1.4, 4.5); ctx.fillRect(x0 + 13.3, y0 + 16.5, 1.4, 1.4); }
+      else { ctx.strokeStyle = C.goodInk; ctx.lineWidth = 1.8; ctx.beginPath(); ctx.moveTo(x0 + 9, y0 + 13.5); ctx.lineTo(x0 + 13, y0 + 17.5); ctx.lineTo(x0 + 20, y0 + 9.5); ctx.stroke(); }
+      ctx.font = '600 12.5px Inter, sans-serif'; ctx.fillStyle = n.open ? C.critInk : C.ink2; ctx.textAlign = 'left'; ctx.fillText(fit(n.label, n.w - 36), x0 + 28, n.y + 0.5);
+    } else {
+      ctx.fillStyle = isFocus ? C.ink : C.panel; ctx.strokeStyle = isFocus ? C.ink : C.line; ctx.lineWidth = 1;
+      roundRect(x0, y0, n.w, PILL_H, 7); ctx.fill(); ctx.stroke();
+      ctx.font = '500 12.5px Inter, sans-serif'; ctx.fillStyle = isFocus ? C.ground : C.ink; ctx.textAlign = 'center'; ctx.fillText(fit(n.label, n.w - 16), n.x, n.y + 0.5);
+    }
+    if (n.sub && isFocus) { ctx.font = '10.5px Inter, sans-serif'; ctx.fillStyle = C.ink3; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom'; const tw = ctx.measureText(n.sub).width; ctx.fillStyle = C.ground; ctx.fillRect(n.x - tw / 2 - 4, y0 - 17, tw + 8, 15); ctx.fillStyle = C.ink3; ctx.fillText(n.sub, n.x, y0 - 3); ctx.textBaseline = 'middle'; }
+    hits.push({ kind: 'node', id: n.id, x0, y0: y0 - 14, x1: x0 + n.w, y1: y0 + PILL_H });
+  }
+  ctx.globalAlpha = 1;
+
+  // photos on the line
+  for (const e of L.chrono) {
+    const p = px.get(e.eventId)!; const open = alertsFor(e).some(a => !a.acked); const sel = state.selected === e.eventId || hover?.id === e.eventId;
+    const color = open ? C.crit : wearerColor(e.deviceId); const base = p.a * dim(e.eventId); ctx.globalAlpha = base;
+    const x0 = p.x - PW / 2, y0 = L.spineY - PH / 2;
+    if (now - p.t0 < 1200 && booted && p.t0 > bootT + 2500) { const kk = (now - p.t0) / 1200; moving = true; ctx.strokeStyle = color; ctx.globalAlpha = base * (1 - kk); ctx.lineWidth = 2; roundRect(x0 - 4 - kk * 16, y0 - 4 - kk * 16, PW + 8 + kk * 32, PH + 8 + kk * 32, 10 + kk * 8); ctx.stroke(); ctx.globalAlpha = base; }
+    if (open) { ctx.fillStyle = withAlpha(C.crit, 0.14); roundRect(x0 - 6, y0 - 6, PW + 12, PH + 12, 10); ctx.fill(); }
+    const im = photo(e.eventId);
     ctx.save(); roundRect(x0, y0, PW, PH, 6); ctx.clip(); ctx.fillStyle = C.panel; ctx.fillRect(x0, y0, PW, PH);
     if (im) { const s = Math.max(PW / im.naturalWidth, PH / im.naturalHeight); const dw = im.naturalWidth * s, dh = im.naturalHeight * s; ctx.drawImage(im, x0 + (PW - dw) / 2, y0 + (PH - dh) / 2, dw, dh); }
     ctx.restore();
     ctx.strokeStyle = color; ctx.lineWidth = sel ? 2.5 : 2; roundRect(x0, y0, PW, PH, 6); ctx.stroke();
     if (sel) { ctx.strokeStyle = C.ink; ctx.lineWidth = 1.5; roundRect(x0 - 4, y0 - 4, PW + 8, PH + 8, 9); ctx.stroke(); }
-    ctx.font = '11px "JetBrains Mono", monospace'; ctx.fillStyle = C.ink3; ctx.textAlign = 'center'; ctx.textBaseline = 'top'; ctx.fillText(fmtTime(e.tMicros), n.x, y0 + PH + 5); ctx.textBaseline = 'middle';
+    ctx.font = '11px "JetBrains Mono", monospace'; ctx.fillStyle = C.ink3; ctx.textAlign = 'center'; ctx.textBaseline = 'top'; ctx.fillText(fmtTime(e.tMicros), p.x, y0 + PH + 6);
+    ctx.font = '10.5px Inter, sans-serif'; ctx.fillStyle = C.ink4; ctx.fillText(fit(wearerName(e.deviceId), PW + 30), p.x, y0 + PH + 20); ctx.textBaseline = 'middle';
+    hits.push({ kind: 'photo', id: e.eventId, x0, y0, x1: x0 + PW, y1: y0 + PH + 32 });
+  }
+  // notes below the line
+  for (const n of L.notes) {
+    const p = px.get(n.id)!; ctx.globalAlpha = p.a * dim(n.id);
+    const x0 = n.x - n.w / 2;
+    ctx.fillStyle = C.ground; ctx.strokeStyle = C.soft; ctx.lineWidth = 1; roundRect(x0, n.y, n.w, NOTE_H, 6); ctx.fill(); ctx.stroke();
+    ctx.font = 'italic 11.5px Inter, sans-serif'; ctx.fillStyle = C.ink2; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+    wrap(`“${n.text}”`, x0 + 10, n.y + 7, n.w - 20, 14, 2); ctx.textBaseline = 'middle';
   }
   ctx.globalAlpha = 1; ctx.restore();
 
-  // replay caption
-  if (vs.replay.on && chrono.length && vs.mode === 'graph') { const last = chrono[chrono.length - 1]; ctx.font = '12px Inter, sans-serif'; ctx.fillStyle = C.ink3; ctx.textAlign = 'left'; ctx.textBaseline = 'bottom'; ctx.fillText(`Replay · ${fmtTime(last.tMicros)} · ${chrono.length} photo${chrono.length === 1 ? '' : 's'}`, 16, H - 10); }
-
+  if (vs.replay.on && L.chrono.length && vs.mode === 'graph') { const last = L.chrono[L.chrono.length - 1]; ctx.font = '12px Inter, sans-serif'; ctx.fillStyle = C.ink3; ctx.textAlign = 'left'; ctx.textBaseline = 'bottom'; ctx.fillText(`Replay · ${fmtTime(last.tMicros)} · ${L.chrono.length} photo${L.chrono.length === 1 ? '' : 's'}`, 16, H - 10); }
   if (moving) frame();
 }
-function bez(ax: number, ay: number, mx: number, bx: number, by: number, t: number) { const u = 1 - t; return { x: u * u * u * ax + 3 * u * u * t * mx + 3 * u * t * t * mx + t * t * t * bx, y: u * u * u * ay + 3 * u * u * t * ay + 3 * u * t * t * by + t * t * t * by }; }
 function roundRect(x: number, y: number, w: number, h: number, r: number) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
-function wrapText(s: string, x: number, y: number, maxW: number, lh: number) {
+function fit(s: string, maxW: number): string { if (ctx.measureText(s).width <= maxW) return s; let t = s; while (t.length > 1 && ctx.measureText(t + '…').width > maxW) t = t.slice(0, -1); return t + '…'; }
+function wrap(s: string, x: number, y: number, maxW: number, lh: number, maxLines: number) {
   const words = s.split(' '); const lines: string[] = []; let cur = '';
-  for (const w of words) { const t = cur ? cur + ' ' + w : w; if (ctx.measureText(t).width > maxW && cur) { lines.push(cur); cur = w; } else cur = t; }
-  if (cur) lines.push(cur); const top = y - ((lines.length - 1) * lh) / 2;
-  lines.slice(0, 3).forEach((l, i) => ctx.fillText(l, x, top + i * lh));
+  for (const w of words) { const t = cur ? cur + ' ' + w : w; if (ctx.measureText(t).width > maxW && cur) { lines.push(cur); cur = w; if (lines.length === maxLines) break; } else cur = t; }
+  if (lines.length < maxLines && cur) lines.push(cur);
+  if (lines.length === maxLines && (words.join(' ').length > lines.join(' ').length)) lines[maxLines - 1] = fit(lines[maxLines - 1] + '…', maxW);
+  lines.forEach((l, i) => ctx.fillText(l, x, y + i * lh));
 }
 export function floorUserView() { return userView; }
+(window as any).__shift = () => ({ view: { ...view }, W, H, hits: hits.length, mode: vs.mode, shown: shown().length, hidden: canvas.hidden });
 onView(() => renderFloor());

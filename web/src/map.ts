@@ -73,7 +73,7 @@ function placePins() {
     const thumbs = evs.slice(0, 3).map((e, i) => { const u = state.photos.get(e.eventId); return `<span class="ct" style="--i:${i};--c:${wearerColor(e.deviceId)}">${u ? `<img src="${u}" alt="">` : ''}</span>`; }).join('');
     const m = L.marker([c.lat, c.lon], { icon: L.divIcon({ className: 'pin-wrap', html: `<div class="cluster${open ? ' alert' : ''}${sel ? ' sel' : ''}">${thumbs}<b>${evs.length}</b></div>`, iconSize: [56, 40], iconAnchor: [28, 46] }), zIndexOffset: 500, keyboard: false });
     m.on('click', () => { const place = placeOf(evs[0].eventId); setScope(new Set(c.ids), place ? place.canonicalName : `${evs.length} photos here`); });
-    m.on('mouseover', (ev: L.LeafletMouseEvent) => showTip(`<div class="tb"><div class="tt"><b>${evs.length} photos here</b> · ${fmtTime(evs[evs.length - 1].tMicros)}–${fmtTime(evs[0].tMicros)}</div><div class="ts">${[...new Set(evs.map(e => wearerName(e.deviceId)))].map(esc).join(', ')}${open ? ' · <span class="ta">open alert</span>' : ''}. Click to see what connects.</div></div>`, ev.originalEvent.clientX, ev.originalEvent.clientY));
+    m.on('mouseover', (ev: L.LeafletMouseEvent) => showTip(`<div class="tb"><div class="tt"><b>${evs.length} photos here</b> · ${fmtTime(evs[evs.length - 1].tMicros)}–${fmtTime(evs[0].tMicros)}</div><div class="ts">${[...new Set(evs.map(e => wearerName(e.deviceId)))].map(esc).join(', ')}${open ? ' · <span class="ta">open alert</span>' : ''}. Click to see them in order.</div></div>`, ev.originalEvent.clientX, ev.originalEvent.clientY));
     m.on('mouseout', hideTip);
     m.addTo(clusterLayer);
   }

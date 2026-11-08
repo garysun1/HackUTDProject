@@ -27,12 +27,12 @@
     <p class="empty" id="timeline-empty">No events yet. The first photo from the floor will appear here.</p>
   </section>
   <section class="col floor" aria-label="Memory graph">
-    <div class="colhead"><h2>Memory</h2><span id="floor-tools" class="floor-tools"></span><span class="legend"><i class="k k-ph"></i>photo <i class="k k-pl"></i>place <i class="k k-as"></i>asset <i class="k k-chg"></i>change <i class="k k-al"></i>alert</span></div>
+    <div class="colhead"><h2>Shift</h2><span id="floor-tools" class="floor-tools"></span><span class="legend"><i class="k k-ph"></i>photo <i class="k k-as"></i>equipment <i class="k k-al"></i>issue <i class="k k-chg"></i>change <i class="k k-nt"></i>note</span></div>
     <div id="map" class="map" hidden aria-label="Site map: where each wearer walked, where each photo was taken, where the problems are"></div>
     <div id="map-unplaced" class="map-unplaced" hidden></div>
     <div id="scope-head" class="scope-head" hidden><span id="scope-title"></span><button class="btn ghost" id="scope-close" type="button" aria-label="Close">Close</button></div>
-    <canvas id="floor" role="img" aria-label="Memory graph: photos as nodes, the places, assets and objects seen in them as nodes stemming outward, lines as relationships. The timeline lists the same photos."></canvas>
-    <p class="empty" id="floor-empty">The graph draws itself from photos as they arrive.</p>
+    <canvas id="floor" role="img" aria-label="The shift: photos in time order on a line; equipment and issues above, threading to the photos they appear in; the wearer's notes below; changes as arcs from before to after."></canvas>
+    <p class="empty" id="floor-empty">The shift draws itself from photos as they arrive.</p>
     <section class="drawer" id="drawer" hidden role="dialog" aria-labelledby="drawer-title">
       <div class="colhead"><h2 id="drawer-title">Event</h2><button class="btn ghost" id="drawer-close" type="button" aria-label="Close">Close</button></div>
       <img id="drawer-img" alt="Photo taken by the wearer at this event" />

@@ -31,7 +31,7 @@ export function renderTools(userView: boolean) {
         ? `<label class="scrub" title="Scrub the shift"><input type="range" min="0" max="1000" value="${Math.round(view.replay.progress * 1000)}" data-scrub aria-label="Replay position"></label><button type="button" class="btn ghost" data-live>Live</button>`
         : `<button type="button" class="btn ghost" data-replay title="Rebuild the shift from the first photo">▶ Replay</button>`) +
       (userView ? `<button type="button" class="btn ghost" data-fit title="Fit everything in view">Fit</button>` : '') +
-      `<span class="seg" role="group" aria-label="View"><button type="button" data-mode="map" aria-pressed="${view.mode === 'map'}" ${hasMap ? '' : 'title="No photo has a position yet"'}>Map</button><button type="button" data-mode="graph" aria-pressed="${view.mode === 'graph'}">Graph</button></span>`;
+      `<span class="seg" role="group" aria-label="View"><button type="button" data-mode="map" aria-pressed="${view.mode === 'map'}" ${hasMap ? '' : 'title="No photo has a position yet"'}>Map</button><button type="button" data-mode="graph" aria-pressed="${view.mode === 'graph'}">Shift</button></span>`;
   }
   const s = tools.querySelector('[data-scrub]') as HTMLInputElement | null; if (s && view.replay.playing) s.value = String(Math.round(view.replay.progress * 1000));
 }
