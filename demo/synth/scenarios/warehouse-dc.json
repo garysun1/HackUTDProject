@@ -130,9 +130,10 @@
       "id": "05-freezer",
       "t": 44,
       "wearer": "jordan",
-      "prompt": "Insulated walk-in freezer door with frost around the seal; a label reads \"FZ-1\" and a digital display beside it shows \"-18C\".",
+      "prompt": "Insulated stainless walk-in freezer door, clean and closed, with a thin even rim of frost along the seal only; a large printed label on the door reads \"FZ-1\"; a digital temperature display beside the door shows minus eighteen degrees as \"-18.0C\" in large green digits; no alarm lights.",
       "read": [
-        "FZ-1"
+        "FZ-1",
+        "18.0"
       ],
       "room": "Freezer FZ-1"
     },
@@ -239,7 +240,7 @@
         "FL-12",
         "INSPECTED"
       ],
-      "note": "FL-12 passed its check, back on the floor after charging."
+      "note": "FL-12 passed its check and is charging; it goes out again at shift change."
     },
     {
       "id": "14-handoff-board",

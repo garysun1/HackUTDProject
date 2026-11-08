@@ -26,7 +26,8 @@
       "location": "Northlake / Transformer T1",
       "patterns": [
         "TRANSFORMER T1",
-        "XFMR T1"
+        "XFMR T1",
+        "/\\bT-?1\\b/"
       ]
     },
     {
@@ -36,7 +37,8 @@
       "location": "Northlake / Transformer T2",
       "patterns": [
         "TRANSFORMER T2",
-        "XFMR T2"
+        "XFMR T2",
+        "/\\bT-?2\\b/"
       ]
     },
     {
@@ -109,7 +111,7 @@
       "t": 10,
       "wearer": "sam",
       "room": "Control house",
-      "prompt": "Inside a substation control house: a rack of large station batteries with a wall-mounted battery charger above them; a big engraved plate reads \"BAT-1\" and the charger display shows \"129.8 V FLOAT\".",
+      "prompt": "Inside a substation control house: a rack of large station batteries with a wall-mounted battery charger above them; a big engraved plate reads \"BAT-1\"; the charger display shows \"129.8 V FLOAT\" in green and a single green \"NORMAL\" indicator light is lit; no red lights.",
       "read": [
         "BAT-1"
       ]
@@ -251,7 +253,7 @@
       "t": 300,
       "wearer": "lena",
       "room": "Control house",
-      "prompt": "A printed switching log sheet on a clipboard on a control house desk; large printed header \"NORTHLAKE SWITCHING LOG\" and a typed line \"FEEDER 12 RESTORED 11:10\" with a pen lying across the page.",
+      "prompt": "A clipboard on a control house desk holding a single printed sheet with only two lines of large bold typed text and nothing else on the page: \"NORTHLAKE SWITCHING LOG\" and below it \"FEEDER 12 RESTORED 11:10\"; a pen lies beside the clipboard.",
       "read": [
         "NORTHLAKE",
         "FEEDER 12"

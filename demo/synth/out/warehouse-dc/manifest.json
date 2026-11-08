@@ -57,22 +57,6 @@
         ]
       }
     },
-    "05-freezer": {
-      "file": "05-freezer.jpg",
-      "provider": "azure/flux-2-pro",
-      "seed": 1858,
-      "prompt": "Unedited first-person snapshot from a head-mounted wearable camera at eye level, deep focus with everything sharp, no bokeh, inside a large distribution center warehouse, slightly off-level framing, high-bay LED lighting, light sensor noise, realistic, no people or faces in frame. Insulated walk-in freezer door with frost around the seal; a label reads \"FZ-1\" and a digital display beside it shows \"-18C\". Off-center casual framing, not a composed hero shot. Flat practical lighting, deep focus with the background nearly as sharp as the foreground, no cinematic depth of field, no dramatic lighting, no text overlays or watermarks.",
-      "check": {
-        "pass": true,
-        "missing": [],
-        "faces": 0,
-        "looks_real": true,
-        "read": [
-          "FZ-1",
-          "18°C"
-        ]
-      }
-    },
     "04-racking-damaged": {
       "file": "04-racking-damaged.jpg",
       "provider": "azure/flux-2-pro",
@@ -258,6 +242,22 @@
           "BAY 07",
           "OK TO LOAD",
           "BAY 7"
+        ]
+      }
+    },
+    "05-freezer": {
+      "file": "05-freezer.jpg",
+      "provider": "azure/flux-2-pro",
+      "seed": 1858,
+      "prompt": "Unedited first-person snapshot from a head-mounted wearable camera at eye level, deep focus with everything sharp, no bokeh, inside a large distribution center warehouse, slightly off-level framing, high-bay LED lighting, light sensor noise, realistic, no faces in frame (a coworker's gloved hands at most). Insulated stainless walk-in freezer door, clean and closed, with a thin even rim of frost along the seal only; a large printed label on the door reads \"FZ-1\"; a digital temperature display beside the door shows minus eighteen degrees as \"-18.0C\" in large green digits; no alarm lights. Off-center casual framing, not a composed hero shot. Flat practical lighting, deep focus with the background nearly as sharp as the foreground, no cinematic depth of field, no dramatic lighting, no text overlays or watermarks.",
+      "check": {
+        "pass": true,
+        "missing": [],
+        "faces": 0,
+        "looks_real": true,
+        "read": [
+          "FZ-1",
+          "- 18.0°C"
         ]
       }
     }

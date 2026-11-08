@@ -211,75 +211,6 @@
         ]
       }
     },
-    "08-generator-test": {
-      "file": "08-generator-test.jpg",
-      "provider": "azure/flux-2-pro",
-      "seed": 11761,
-      "prompt": "Unedited first-person snapshot from a head-mounted wearable camera at eye level, deep focus with everything sharp, no bokeh, in a hospital back-of-house corridor or equipment room, slightly off-level framing, bright clinical fluorescent lighting, light sensor noise, realistic, no patients, no faces in frame (a coworker's gloved hands at most). Control panel of a large diesel emergency generator in a generator room; a big engraved plate reads \"GEN-1\"; the panel display shows \"RUNNING\" and \"LOAD 38%\" in green; yellow conduit and the generator housing beside it. Off-center casual framing, not a composed hero shot. Flat practical lighting, deep focus with the background nearly as sharp as the foreground, no cinematic depth of field, no dramatic lighting, no text overlays or watermarks.",
-      "check": {
-        "pass": true,
-        "missing": [],
-        "faces": 0,
-        "looks_real": true,
-        "read": [
-          "GEN-1",
-          "RUNNING LOAD 38%",
-          "Corfleer",
-          "DUCOUTT",
-          "MSSR",
-          "INEGINT",
-          "DIESR",
-          "RESUMMING",
-          "MIP",
-          "IDENT",
-          "OVERHEATING",
-          "LOAD",
-          "FUME",
-          "PDNE",
-          "OP MAN",
-          "ALARMENOH",
-          "=",
-          "CEER",
-          "MAUNTERS",
-          "GFOVELDELICH"
-        ]
-      }
-    },
-    "14-generator-done": {
-      "file": "14-generator-done.jpg",
-      "provider": "azure/flux-2-pro",
-      "seed": 11761,
-      "edited_from": "08-generator-test",
-      "prompt": "EDIT of previous shot: change only the panel display so it reads \"COOLDOWN\" and \"TEST COMPLETE\" instead of RUNNING and the load.",
-      "check": {
-        "pass": true,
-        "missing": [],
-        "faces": 0,
-        "looks_real": true,
-        "read": [
-          "GEN-1",
-          "TEST COMPLETE",
-          "Corefer",
-          "DUOCUTT",
-          "MISSIR",
-          "INEBOMT",
-          "DIESR",
-          "RESUMMING",
-          "MGR",
-          "IGDIT",
-          "OVERHEID",
-          "FUNE",
-          "LOAD",
-          "PDIE",
-          "OP PAINT",
-          "CEER",
-          "MÄNNTER",
-          "GFOYDELIGEICH",
-          "ALCOMMERCH",
-          "="
-        ]
-      }
-    },
     "09-pump-fails-test": {
       "file": "09-pump-fails-test.jpg",
       "provider": "azure/flux-2-pro",
@@ -372,6 +303,41 @@
           "Infafore Cook",
           "a / HR",
           "M0208"
+        ]
+      }
+    },
+    "08-generator-test": {
+      "file": "08-generator-test.jpg",
+      "provider": "azure/flux-2-pro",
+      "seed": 11761,
+      "prompt": "Unedited first-person snapshot from a head-mounted wearable camera at eye level, deep focus with everything sharp, no bokeh, in a hospital back-of-house corridor or equipment room, slightly off-level framing, bright clinical fluorescent lighting, light sensor noise, realistic, no patients, no faces in frame (a coworker's gloved hands at most). Control panel of a large diesel emergency generator in a generator room; a big engraved plate reads \"GEN-1\"; the panel display shows \"RUNNING\" and \"LOAD 38%\" in green; the panel has exactly two round indicator lights and both are lit green; there are no red lights or red buttons anywhere on the panel; yellow conduit and the generator housing beside it. Off-center casual framing, not a composed hero shot. Flat practical lighting, deep focus with the background nearly as sharp as the foreground, no cinematic depth of field, no dramatic lighting, no text overlays or watermarks.",
+      "check": {
+        "pass": true,
+        "missing": [],
+        "faces": 0,
+        "looks_real": true,
+        "read": [
+          "GEN-1",
+          "RUNNING",
+          "LOAD 38%"
+        ]
+      }
+    },
+    "14-generator-done": {
+      "file": "14-generator-done.jpg",
+      "provider": "azure/flux-2-pro",
+      "seed": 11761,
+      "edited_from": "08-generator-test",
+      "prompt": "EDIT of previous shot: change only the panel display so it reads \"COOLDOWN\" and \"TEST COMPLETE\" instead of RUNNING and the load; keep every indicator light green.",
+      "check": {
+        "pass": true,
+        "missing": [],
+        "faces": 0,
+        "looks_real": true,
+        "read": [
+          "GEN-1",
+          "COOLDOWN",
+          "TEST COMPLETE"
         ]
       }
     }

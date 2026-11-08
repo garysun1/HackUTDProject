@@ -311,42 +311,6 @@
         ]
       }
     },
-    "06-compressor": {
-      "file": "06-compressor.jpg",
-      "provider": "azure/flux-2-pro",
-      "seed": 36205,
-      "prompt": "Unedited first-person snapshot from a head-mounted wearable camera at eye level, deep focus with everything sharp, no bokeh, on an industrial factory floor, slightly off-level framing, mixed overhead sodium and LED lighting, light sensor noise, realistic grime and wear, no faces in frame (a coworker's gloved hands at most). Control panel of a large industrial rotary screw air compressor in a compressor room; a big engraved plate reads \"CMP-1\"; the panel display shows \"RUNNING\" and \"7.2 BAR\"; a new air filter cartridge in its box sits on top of the cabinet. Off-center casual framing, not a composed hero shot. Flat practical lighting, deep focus with the background nearly as sharp as the foreground, no cinematic depth of field, no dramatic lighting, no text overlays or watermarks.",
-      "check": {
-        "pass": true,
-        "missing": [],
-        "faces": 0,
-        "looks_real": true,
-        "read": [
-          "AIR FILTER CARTRIDGE",
-          "PN 457-AL",
-          "CMP-1",
-          "RUNNING",
-          "7.2 BAR",
-          "WARNING",
-          "EACH",
-          "HIGH FIBER OIL AIR DUCT",
-          "HIGH TO LONG HIGH MOISTURE",
-          "COMPRESSOR",
-          "CMP-1",
-          "DANGER",
-          "TVSR",
-          "PHASE",
-          "ON ALL FAILURE",
-          "EMERVOLTAGE",
-          "N",
-          "OFF",
-          "ON",
-          "RESET",
-          "EMERGENCY STOP",
-          "PUSH TO RESET"
-        ]
-      }
-    },
     "08-tool-crib-hose": {
       "file": "08-tool-crib-hose.jpg",
       "provider": "azure/flux-2-pro",
@@ -449,6 +413,29 @@
         "read": [
           "CNC-07",
           "MECHANIX WEAR"
+        ]
+      }
+    },
+    "06-compressor": {
+      "file": "06-compressor.jpg",
+      "provider": "azure/flux-2-pro",
+      "seed": 36205,
+      "prompt": "Unedited first-person snapshot from a head-mounted wearable camera at eye level, deep focus with everything sharp, no bokeh, on an industrial factory floor, slightly off-level framing, mixed overhead sodium and LED lighting, light sensor noise, realistic grime and wear, no faces in frame (a coworker's gloved hands at most). Control panel of a large industrial rotary screw air compressor in a compressor room, seen from a step back; a big engraved plate reads \"CMP-1\"; the panel display shows \"RUNNING\" and \"7.2 BAR\" in large green text and only green indicator lights are lit; a new air filter cartridge in its box sits on top of the cabinet; no hands in frame. Off-center casual framing, not a composed hero shot. Flat practical lighting, deep focus with the background nearly as sharp as the foreground, no cinematic depth of field, no dramatic lighting, no text overlays or watermarks.",
+      "check": {
+        "pass": true,
+        "missing": [],
+        "faces": 0,
+        "looks_real": true,
+        "read": [
+          "CMP-1",
+          "RUNNING",
+          "7.2 BAR",
+          "PROTER",
+          "POUPEJTE",
+          "RATIEIRAMER",
+          "POBUSONE",
+          "BITLOK",
+          "BBIR TENL59 976 316"
         ]
       }
     }

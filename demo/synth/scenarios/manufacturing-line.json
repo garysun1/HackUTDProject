@@ -145,7 +145,7 @@
       "t": 95,
       "wearer": "luis",
       "room": "Compressor room",
-      "prompt": "Control panel of a large industrial rotary screw air compressor in a compressor room; a big engraved plate reads \"CMP-1\"; the panel display shows \"RUNNING\" and \"7.2 BAR\"; a new air filter cartridge in its box sits on top of the cabinet.",
+      "prompt": "Control panel of a large industrial rotary screw air compressor in a compressor room, seen from a step back; a big engraved plate reads \"CMP-1\"; the panel display shows \"RUNNING\" and \"7.2 BAR\" in large green text and only green indicator lights are lit; a new air filter cartridge in its box sits on top of the cabinet; no hands in frame.",
       "read": [
         "CMP-1",
         "RUNNING"

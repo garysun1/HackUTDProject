@@ -108,24 +108,6 @@
         ]
       }
     },
-    "05-station-battery": {
-      "file": "05-station-battery.jpg",
-      "provider": "azure/flux-2-pro",
-      "seed": 39771,
-      "prompt": "Unedited first-person snapshot from a head-mounted wearable camera at eye level, deep focus with everything sharp, no bokeh, outdoors at an electrical utility substation, slightly off-level framing, overcast daylight, gravel ground, chain-link fence, light sensor noise, realistic, no faces in frame (a coworker's gloved hands at most). Inside a substation control house: a rack of large station batteries with a wall-mounted battery charger above them; a big engraved plate reads \"BAT-1\" and the charger display shows \"129.8 V FLOAT\". Off-center casual framing, not a composed hero shot. Flat practical lighting, deep focus with the background nearly as sharp as the foreground, no cinematic depth of field, no dramatic lighting, no text overlays or watermarks.",
-      "check": {
-        "pass": true,
-        "missing": [],
-        "faces": 0,
-        "looks_real": true,
-        "read": [
-          "CRING & NISTERY",
-          "129.8V FLOAT",
-          "BAT-1",
-          "BAT"
-        ]
-      }
-    },
     "06-transformer-t1": {
       "file": "06-transformer-t1.jpg",
       "provider": "azure/flux-2-pro",
@@ -283,35 +265,6 @@
         ]
       }
     },
-    "14-switching-log": {
-      "file": "14-switching-log.jpg",
-      "provider": "azure/flux-2-pro",
-      "seed": 98506,
-      "prompt": "Unedited first-person snapshot from a head-mounted wearable camera at eye level, deep focus with everything sharp, no bokeh, outdoors at an electrical utility substation, slightly off-level framing, overcast daylight, gravel ground, chain-link fence, light sensor noise, realistic, no faces in frame (a coworker's gloved hands at most). A printed switching log sheet on a clipboard on a control house desk; large printed header \"NORTHLAKE SWITCHING LOG\" and a typed line \"FEEDER 12 RESTORED 11:10\" with a pen lying across the page. Off-center casual framing, not a composed hero shot. Flat practical lighting, deep focus with the background nearly as sharp as the foreground, no cinematic depth of field, no dramatic lighting, no text overlays or watermarks.",
-      "check": {
-        "pass": true,
-        "missing": [],
-        "faces": 0,
-        "looks_real": true,
-        "read": [
-          "NORTHLAKE",
-          "SWITCHING LOG",
-          "FEEDER 12 RESTORED",
-          "11:10",
-          "DATE/TIME",
-          "MOVED/DOWN",
-          "QTY/OWN",
-          "HIGH",
-          "VOLTS",
-          "DISCONNECT",
-          "HIGH VOLTAGE",
-          "OFF",
-          "ON",
-          "OFF-1",
-          "CLOSED"
-        ]
-      }
-    },
     "15-gate-locked": {
       "file": "15-gate-locked.jpg",
       "provider": "azure/flux-2-pro",
@@ -325,6 +278,52 @@
         "read": [
           "NORTHLAKE",
           "SUBSTATION"
+        ]
+      }
+    },
+    "05-station-battery": {
+      "file": "05-station-battery.jpg",
+      "provider": "azure/flux-2-pro",
+      "seed": 39771,
+      "prompt": "Unedited first-person snapshot from a head-mounted wearable camera at eye level, deep focus with everything sharp, no bokeh, outdoors at an electrical utility substation, slightly off-level framing, overcast daylight, gravel ground, chain-link fence, light sensor noise, realistic, no faces in frame (a coworker's gloved hands at most). Inside a substation control house: a rack of large station batteries with a wall-mounted battery charger above them; a big engraved plate reads \"BAT-1\"; the charger display shows \"129.8 V FLOAT\" in green and a single green \"NORMAL\" indicator light is lit; no red lights. Off-center casual framing, not a composed hero shot. Flat practical lighting, deep focus with the background nearly as sharp as the foreground, no cinematic depth of field, no dramatic lighting, no text overlays or watermarks.",
+      "check": {
+        "pass": true,
+        "missing": [],
+        "faces": 0,
+        "looks_real": true,
+        "read": [
+          "129.8 V",
+          "FLOAT",
+          "ATS/DUTIE 1400A",
+          "NORMAL",
+          "BAT-1",
+          "SATPLEVT",
+          "BAT-1",
+          "SATPLEVT",
+          "SATPLEVT",
+          "SATPLEVT",
+          "SATPLEVT",
+          "SATPLEVT"
+        ]
+      }
+    },
+    "14-switching-log": {
+      "file": "14-switching-log.jpg",
+      "provider": "azure/flux-2-pro",
+      "seed": 98506,
+      "prompt": "Unedited first-person snapshot from a head-mounted wearable camera at eye level, deep focus with everything sharp, no bokeh, outdoors at an electrical utility substation, slightly off-level framing, overcast daylight, gravel ground, chain-link fence, light sensor noise, realistic, no faces in frame (a coworker's gloved hands at most). A clipboard on a control house desk holding a single printed sheet with only two lines of large bold typed text and nothing else on the page: \"NORTHLAKE SWITCHING LOG\" and below it \"FEEDER 12 RESTORED 11:10\"; a pen lies beside the clipboard. Off-center casual framing, not a composed hero shot. Flat practical lighting, deep focus with the background nearly as sharp as the foreground, no cinematic depth of field, no dramatic lighting, no text overlays or watermarks.",
+      "check": {
+        "pass": true,
+        "missing": [],
+        "faces": 0,
+        "looks_real": true,
+        "read": [
+          "NORTHLAKE",
+          "SWITCHING LOG",
+          "FEEDER 12",
+          "RESTORED",
+          "11:10",
+          "12"
         ]
       }
     }
