@@ -1,16 +1,13 @@
 // The shift's memory as of a moment in time: issues raised and resolved, time spent, the handoff
 // between shifts with what was carried over, and the photos in order. Every item is
 // derived from the live tables (nothing is invented here); the clock is the replay's.
-import { state, type Alert, type Ev, type TrackPoint, wearerColor, wearerName, fmtTime, loadPhoto, alertsFor, placeOf, changesTo, DIRECTORY_DB } from './store';
+import { state, type Alert, type Ev, type TrackPoint, wearerColor, wearerName, fmtTime, loadPhoto, alertsFor, placeOf, changesTo } from './store';
 import { haversineM } from './geo';
 
 export type Fix = { tMs: number; lat: number; lon: number; floor?: number; acc: number };
 export type Shift = { key: string; deviceId: string; shiftId: string; startMs: number; endMs: number | null; lastMs: number; pts: TrackPoint[]; smooth: Fix[] };
 const params = new URLSearchParams(location.search);
 const SHIFT_PARAM = params.get('shift'); const ALL_SHIFTS = params.get('all') === '1';
-// The shift a database is about when the URL names none: the UTD field test is the calibrated 12-minute walk through ECSW (stairs and elevator, floors 0 → 4).
-const DEFAULT_SHIFT: Record<string, string> = { 'wm-physical': 'fe2282d3' };
-const DB_SHIFT = DEFAULT_SHIFT[params.get('db') ?? DIRECTORY_DB];
 export type Snapshot = {
   shifts: Shift[]; active: Shift[]; latestIdle: Shift | null;
   open: Alert[]; resolvedRecently: Alert[]; events: Ev[]; handoff: HandoffCard | null;
@@ -70,7 +67,6 @@ export function sessionShifts(): Shift[] {
   const all = shifts();
   if (ALL_SHIFTS) return all;
   if (SHIFT_PARAM) return all.filter(s => s.shiftId.startsWith(SHIFT_PARAM));
-  if (DB_SHIFT) { const own = all.filter(s => s.shiftId.startsWith(DB_SHIFT)); if (own.length) return own; }
   const real = all.filter(s => s.lastMs - s.startMs >= 120_000 && s.smooth.length >= 5);
   const withFloor = real.filter(s => s.pts.some(p => p.floor !== undefined));
   const pool = withFloor.length ? withFloor : real.length ? real : all;
