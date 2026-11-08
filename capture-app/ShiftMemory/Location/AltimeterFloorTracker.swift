@@ -111,7 +111,7 @@ final class AltimeterFloorTracker {
     floor = 0
     relativeAltitudeM = 0
     log("relative altitude updates started: floor 0 is here (step \(fusion.config.quantizer.floorHeightM) m, hysteresis \(fusion.config.quantizer.hysteresis), \(fusion.config.sites.count) stair/elevator sites)")
-    altimeter.startRelativeAltitudeUpdates(to: queue) { [weak self] data, error in
+    altimeter.startRelativeAltitudeUpdates(to: queue) { @Sendable [weak self] data, error in
       // Reduce to Sendable values before leaving the queue.
       let altitude = data?.relativeAltitude.doubleValue
       let pressure = data?.pressure.doubleValue

@@ -72,7 +72,9 @@ final class ShiftMotion {
     activity = nil
     activityConfidence = nil
     if CMPedometer.isFloorCountingAvailable() {
-      pedometer.startUpdates(from: start) { [weak self] data, error in
+      // @Sendable: the handler runs on Core Motion's queue. Without it Swift 6 treats the closure as
+      // main-actor isolated (the class is) and the runtime isolation check traps on the first callback.
+      pedometer.startUpdates(from: start) { @Sendable [weak self] data, error in
         let up = data?.floorsAscended?.intValue
         let down = data?.floorsDescended?.intValue
         let errorText = error?.localizedDescription
@@ -90,7 +92,7 @@ final class ShiftMotion {
       log("pedometer floor counting not available on this device")
     }
     if CMMotionActivityManager.isActivityAvailable() {
-      activityManager.startActivityUpdates(to: queue) { [weak self] activity in
+      activityManager.startActivityUpdates(to: queue) { @Sendable [weak self] activity in
         guard let activity else { return }
         let name = Self.name(of: activity)
         let confidence = Self.name(of: activity.confidence)
