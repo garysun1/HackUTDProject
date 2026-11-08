@@ -99,6 +99,13 @@ export function shiftLive(s: Shift, clock: number) { return clock >= s.startMs &
 export function shiftEnd(s: Shift) { return s.endMs ?? s.lastMs; }
 // Alert and work-order rows carry server time; the photo that raised or resolved them carries
 // capture time, which is the honest clock for a replayed shift. Prefer the photo's.
+/** Who resolved an alert: the wearer of the resolving photo (resolution row, else the photo nearest that moment), else the raiser. */
+export function resolverName(a: Alert): string {
+  const r = [...state.resolutions.values()].find(x => x.alertId === a.id); if (r?.deviceId) return wearerName(r.deviceId);
+  const at = resolvedAt(a); let best: Ev | undefined; let bd = 3 * 60_000;
+  for (const e of state.events.values()) { const d = Math.abs(ms(e.tMicros) - at); if (d < bd) { bd = d; best = e; } }
+  return best ? wearerName(best.deviceId) : a.wearerName || wearerName(a.deviceId);
+}
 export function raisedAt(a: Alert) { const e = state.events.get(a.eventId); return e ? ms(e.tMicros) : ms(a.tMicros); }
 export function resolvedAt(a: Alert) {
   if (!a.acked) return Infinity;
@@ -174,7 +181,7 @@ export function renderBrain(el: HTMLElement, ctx: BrainCtx): Snapshot {
     }
     const parts: string[] = [];
     // issues: open first, then resolved, newest first
-    const issue = (a: Alert) => { const done = resolvedAt(a) <= ctx.clock; return `<div class="issue${done ? ' done' : ''}" data-jump="${done ? resolvedAt(a) : raisedAt(a)}"><i class="ic"></i><div class="tx"><b>${esc(a.assetName || a.text)}</b>${a.assetName ? `<span class="what"> · ${esc(a.text)}</span>` : ''}<div class="m">${done ? `resolved ${fmt(resolvedAt(a))}` : `open since ${fmt(raisedAt(a))}`} · ${esc(a.wearerName || wearerName(a.deviceId))}</div></div></div>`; };
+    const issue = (a: Alert) => { const done = resolvedAt(a) <= ctx.clock; return `<div class="issue${done ? ' done' : ''}" data-jump="${done ? resolvedAt(a) : raisedAt(a)}"><i class="ic"></i><div class="tx"><b>${esc(a.assetName || a.text)}</b>${a.assetName ? `<span class="what"> · ${esc(a.text)}</span>` : ''}<div class="m">${done ? `resolved ${fmt(resolvedAt(a))}` : `open since ${fmt(raisedAt(a))}`} · ${esc(done ? resolverName(a) : a.wearerName || wearerName(a.deviceId))}</div></div></div>`; };
     const wo = (i: Issue) => { const done = woDone(i); return `<div class="issue wo${done ? ' done' : i.status === 'in_progress' ? ' prog' : ''}" data-jump="${done ? woResolvedAt(i) : ms(i.openedMicros)}"><i class="ic"></i><div class="tx"><b>${esc(i.title)}</b>${i.assetId ? `<span class="what"> · ${esc(state.assets.get(i.assetId)?.name || i.assetId)}</span>` : ''}<div class="m">${done ? `resolved ${fmt(woResolvedAt(i))}` : `${i.status === 'in_progress' ? 'in progress' : 'open'} since ${fmt(ms(i.openedMicros))}`} · work order ${esc(i.issueId)}</div></div></div>`; };
     const openWo = snap.workOrders.filter(i => !woDone(i)), doneWo = snap.workOrders.filter(woDone);
     parts.push(`<section class="sec"><h3>${esc(v.flags)} <span class="n">${openN} open</span></h3>${raisedN ? snap.open.map(issue).join('') + openWo.map(wo).join('') + snap.resolved.map(issue).join('') + doneWo.map(wo).join('') : '<div class="s3-empty">None raised yet.</div>'}</section>`);

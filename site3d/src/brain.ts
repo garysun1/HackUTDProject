@@ -79,6 +79,12 @@ export function sessionShifts(): Shift[] {
 }
 export function shiftLive(s: Shift, clock: number) { return clock >= s.startMs && (s.endMs !== null ? clock <= s.endMs + 60_000 : clock <= s.lastMs + TEN_MIN); }
 export function shiftEnd(s: Shift) { return s.endMs ?? s.lastMs; }
+/** Who resolved an alert: the wearer of the photo taken at the resolving moment, else the raiser. */
+export function resolverName(a: Alert): string {
+  const at = resolvedAt(a); let best: Ev | undefined; let bd = 3 * 60_000;
+  for (const e of state.events.values()) { const d = Math.abs(e.tMs - at); if (d < bd) { bd = d; best = e; } }
+  return best ? wearerName(best.deviceId) : a.wearerName || wearerName(a.deviceId);
+}
 export function resolvedAt(a: Alert) { return a.acked ? (a.ackedMs ?? a.tMs) : Infinity; }
 export function openAt(a: Alert, clock: number) { return a.tMs <= clock && resolvedAt(a) > clock; }
 
@@ -114,7 +120,7 @@ export function snapshot(clock: number): Snapshot {
     const from = all[i]; const at = shiftEnd(from);
     if (at > clock || shiftLive(from, clock)) continue;
     const to = all.find(s => s !== from && s.startMs >= at - 5 * 60_000) ?? null;
-    if (!to && clock - at > 6 * 3600_000) break; // an old shift with nothing after it is not a handoff
+    if (!to && clock - at > 6 * 3600_000) continue; // an old shift with nothing after it is not a handoff; an earlier one may be
     const carried = state.alerts.filter(a => openAt(a, at)).map(a => ({ a, done: resolvedAt(a) <= clock }));
     const said = [...state.events.values()].filter(e => e.deviceId === from.deviceId && e.tMs >= from.startMs && e.tMs <= at + 60_000 && e.note && /^handoff:/i.test(e.note)).map(e => e.note!.replace(/^handoff:\s*/i, ''));
     const row = [...state.handoffs].reverse().find(h => h.generatedMs <= clock && Math.abs(h.generatedMs - at) < 2 * 3600_000);
@@ -151,7 +157,7 @@ export function renderBrain(el: HTMLElement, ctx: BrainCtx): Snapshot {
       statsEl.querySelector('.stat.resolved')?.addEventListener('click', () => { if (resolved[0]) ctx.onJump(resolvedAt(resolved[0])); });
     }
     // issues: open first, then resolved, newest first
-    const issue = (a: Alert) => { const done = resolvedAt(a) <= ctx.clock; return `<div class="issue${done ? ' done' : ''}" data-jump="${done ? resolvedAt(a) : a.tMs}"><i class="ic"></i><div class="tx"><b>${esc(a.entityName || a.text)}</b>${a.entityName ? `<span class="what"> · ${esc(a.text)}</span>` : ''}<div class="m">${done ? `resolved ${fmtTime(resolvedAt(a))}` : `open since ${fmtTime(a.tMs)}`} · ${esc(a.wearerName || wearerName(a.deviceId))}</div></div></div>`; };
+    const issue = (a: Alert) => { const done = resolvedAt(a) <= ctx.clock; return `<div class="issue${done ? ' done' : ''}" data-jump="${done ? resolvedAt(a) : a.tMs}"><i class="ic"></i><div class="tx"><b>${esc(a.entityName || a.text)}</b>${a.entityName ? `<span class="what"> · ${esc(a.text)}</span>` : ''}<div class="m">${done ? `resolved ${fmtTime(resolvedAt(a))}` : `open since ${fmtTime(a.tMs)}`} · ${esc(done ? resolverName(a) : a.wearerName || wearerName(a.deviceId))}</div></div></div>`; };
     parts.push(`<section class="sec"><h3>Issues <span class="n">${snap.open.length} open</span></h3>${raised.length ? [...snap.open, ...resolved].map(issue).join('') : '<div class="empty">None raised yet.</div>'}</section>`);
     // handoff, one card
     if (snap.handoff) {
