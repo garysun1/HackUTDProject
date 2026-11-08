@@ -91,37 +91,23 @@ struct BriefingView: View {
       HStack(spacing: 8) {
         checkIcon(check.phase)
         Text(checkTitle(check.phase)).font(.subheadline.weight(.semibold)).foregroundStyle(Theme.ink)
+          .fixedSize(horizontal: false, vertical: true)
         Spacer(minLength: 0)
         if check.phase.isActive {
           Button("Stop") { check.cancel() }.font(.footnote).foregroundStyle(Theme.ink3)
         }
       }
       if check.phase == .listening {
-        Text(check.liveTranscript.isEmpty ? "Listening…" : check.liveTranscript)
+        Text(check.liveTranscript.isEmpty ? "Listening… say “yes” when it makes sense." : check.liveTranscript)
           .font(.body).foregroundStyle(check.liveTranscript.isEmpty ? Theme.ink3 : Theme.ink2)
           .fixedSize(horizontal: false, vertical: true)
       } else if !check.heard.isEmpty, check.phase != .speaking, check.phase != .writing {
         Text("You said: “\(check.heard)”").font(.footnote).foregroundStyle(Theme.ink3)
           .fixedSize(horizontal: false, vertical: true)
       }
-      if let spoken = check.spoken, !spoken.mustKnow.isEmpty, check.phase != .writing {
-        VStack(alignment: .leading, spacing: 4) {
-          ForEach(Array(spoken.mustKnow.enumerated()), id: \.offset) { i, fact in
-            let covered = check.grade?.covered.contains(i) == true
-            HStack(alignment: .top, spacing: 6) {
-              Image(systemName: covered ? "checkmark.circle.fill" : "circle")
-                .foregroundStyle(covered ? Theme.accent : Theme.ink3).font(.footnote).padding(.top, 2)
-              Text(fact).font(.footnote).foregroundStyle(covered ? Theme.ink2 : Theme.ink)
-                .fixedSize(horizontal: false, vertical: true)
-            }
-          }
-        }
-        .padding(.top, 2)
-        .accessibilityLabel("Key points to repeat back")
-      }
-      if case .failed = check.phase {
+      if check.phase == .idle, check.spoken != nil {
         HStack(spacing: 12) {
-          Button("Answer again") { onListenAgain() }.buttonStyle(InkButtonStyle(prominent: false))
+          Button("Listen again") { onListenAgain() }.buttonStyle(InkButtonStyle(prominent: false))
           Button("Read it again") { onRerunCheck() }.buttonStyle(InkButtonStyle(prominent: false))
         }
         .padding(.top, 4)
@@ -140,26 +126,25 @@ struct BriefingView: View {
   @ViewBuilder
   private func checkIcon(_ phase: BriefingCheck.Phase) -> some View {
     switch phase {
-    case .writing, .grading: ProgressView().controlSize(.small)
-    case .speaking, .reasking: Image(systemName: "speaker.wave.2.fill").foregroundStyle(Theme.accent)
+    case .writing: ProgressView().controlSize(.small)
+    case .speaking, .reprompting: Image(systemName: "speaker.wave.2.fill").foregroundStyle(Theme.accent)
     case .listening: Image(systemName: "mic.fill").foregroundStyle(Theme.critical)
+    case .waiting: Image(systemName: "ellipsis").foregroundStyle(Theme.ink3)
     case .passed: Image(systemName: "checkmark.seal.fill").foregroundStyle(Theme.accent)
-    case .failed: Image(systemName: "exclamationmark.circle").foregroundStyle(Theme.warning)
     case .unavailable: Image(systemName: "mic.slash").foregroundStyle(Theme.ink3)
-    case .idle: EmptyView()
+    case .idle: Image(systemName: "speaker.slash").foregroundStyle(Theme.ink3)
     }
   }
 
   private func checkTitle(_ phase: BriefingCheck.Phase) -> String {
     switch phase {
-    case .idle: ""
+    case .idle: "No answer heard. Check the items off, or ask me to listen again."
     case .writing: "Writing your briefing…"
     case .speaking: "Reading the briefing"
-    case .listening: "Your turn: say the key points back"
-    case .grading: "Checking…"
-    case .reasking(let missed): missed.count == 1 ? "One more to cover" : "\(missed.count) more to cover"
+    case .listening: "Does that make sense?"
+    case .waiting: "Waiting…"
+    case .reprompting: "Asking again"
     case .passed: "Understood. Starting your shift."
-    case .failed(let missed): missed.count == 1 ? "One point not confirmed" : "\(missed.count) points not confirmed"
     case .unavailable(let why): why
     }
   }

@@ -98,15 +98,25 @@ struct SettingsView: View {
         Toggle("Briefing before each shift", isOn: $config.briefingOnStart)
         Toggle("Read it and check I understood", isOn: $config.spokenBriefingCheck)
           .disabled(!config.briefingOnStart)
-        SecureField("NVIDIA API key", text: $config.nvidiaApiKey)
+        SecureField("NVIDIA API key (Nemotron + Magpie voice)", text: $config.nvidiaApiKey)
           .textContentType(.password)
           .autocorrectionDisabled()
           .textInputAutocapitalization(.never)
           .font(Theme.mono(14))
+        SecureField("ElevenLabs API key (preferred voice)", text: $config.elevenLabsApiKey)
+          .textContentType(.password)
+          .autocorrectionDisabled()
+          .textInputAutocapitalization(.never)
+          .font(Theme.mono(14))
+        TextField("ElevenLabs voice ID (blank = George)", text: $config.elevenLabsVoiceId)
+          .autocorrectionDisabled()
+          .textInputAutocapitalization(.never)
+          .font(Theme.mono(14))
+          .disabled(!config.hasElevenLabsApiKey)
       } header: {
         Text("Voice and briefing")
       } footer: {
-        Text("After the chime, say what is going on: what you see, what you changed, why. It is transcribed on this iPhone and sent as the photo's note, which the backend reads with the image. No audio leaves the phone.\n\nWith the check on, the briefing is written by Nemotron and read in NVIDIA's Magpie voice, then you repeat the key points back; what you said is graded on the facts, not the wording, and the shift starts on a pass. The key is kept in the Keychain. Without it the built-in script and voice are used.")
+        Text("After the chime, say what is going on: what you see, what you changed, why. It is transcribed on this iPhone and sent as the photo's note, which the backend reads with the image. No audio leaves the phone.\n\nWith the check on, Start shift reads the briefing by itself (written by Nemotron from the live floor when the NVIDIA key is set) and asks whether it makes sense; say yes and the shift starts. No answer, and it waits a moment and asks again. Voice: ElevenLabs if its key is set, else NVIDIA Magpie, else the phone's voice. Keys stay in the Keychain.")
       }
 
       Section {

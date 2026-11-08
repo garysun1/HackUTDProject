@@ -80,9 +80,27 @@ final class AppConfig {
     didSet {
       keychain.set(nvidiaApiKey.isEmpty ? nil : nvidiaApiKey, for: Keys.nvidiaApiKey)
       nvidiaKeySnapshot.set(nvidiaApiKey)
+    elevenLabsKeySnapshot.set(elevenLabsApiKey)
+    elevenLabsVoiceSnapshot.set(elevenLabsVoiceId)
     }
   }
   let nvidiaKeySnapshot = SecretSnapshot()
+  /// ElevenLabs: preferred voice when its key is set. Keychain + snapshot like the NVIDIA key.
+  var elevenLabsApiKey: String {
+    didSet {
+      keychain.set(elevenLabsApiKey.isEmpty ? nil : elevenLabsApiKey, for: Keys.elevenLabsApiKey)
+      elevenLabsKeySnapshot.set(elevenLabsApiKey)
+    }
+  }
+  let elevenLabsKeySnapshot = SecretSnapshot()
+  var hasElevenLabsApiKey: Bool { !elevenLabsApiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+  var elevenLabsVoiceId: String {
+    didSet {
+      defaults.set(elevenLabsVoiceId, forKey: Keys.elevenLabsVoiceId)
+      elevenLabsVoiceSnapshot.set(elevenLabsVoiceId)
+    }
+  }
+  let elevenLabsVoiceSnapshot = SecretSnapshot()
   var hasNvidiaApiKey: Bool { !nvidiaApiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
   /// When this wearer last ended a shift / acknowledged a briefing (local only).
   var lastShiftEndedAt: Date? { didSet { defaults.set(lastShiftEndedAt, forKey: Keys.lastShiftEndedAt) } }
@@ -123,6 +141,8 @@ final class AppConfig {
     static let briefingOnStart = "shift.briefingOnStart"
     static let spokenBriefingCheck = "shift.spokenBriefingCheck"
     static let nvidiaApiKey = "nvidia_api_key"
+    static let elevenLabsApiKey = "elevenlabs_api_key"
+    static let elevenLabsVoiceId = "voice.elevenLabsVoiceId"
     static let lastShiftEndedAt = "shift.lastShiftEndedAt"
     static let lastBriefingAckAt = "shift.lastBriefingAckAt"
     static let locationEnabled = "location.enabled"
@@ -148,10 +168,19 @@ final class AppConfig {
       if let v = seed["INGEST_TOKEN"] as? String, !v.isEmpty, keychain.string(for: Keys.ingestToken) == nil {
         keychain.set(v, for: Keys.ingestToken)
       }
-      if let v = seed["NVIDIA_API_KEY"] as? String, !v.isEmpty, keychain.string(for: Keys.nvidiaApiKey) == nil {
-        keychain.set(v, for: Keys.nvidiaApiKey)
-      }
       defaults.set(true, forKey: Keys.seeded)
+    }
+    // Voice keys seed whenever the Keychain lacks them, not only on first launch: they arrived after
+    // the first install, and Claude/Devin drop them into the gitignored Config.plist.
+    if let seed = bundledConfig {
+      for (plistKey, account) in [("NVIDIA_API_KEY", Keys.nvidiaApiKey), ("ELEVENLABS_API_KEY", Keys.elevenLabsApiKey)] {
+        if let v = seed[plistKey] as? String, !v.isEmpty, (keychain.string(for: account) ?? "").isEmpty {
+          keychain.set(v, for: account)
+        }
+      }
+      if let v = seed["ELEVENLABS_VOICE_ID"] as? String, !v.isEmpty, defaults.string(forKey: Keys.elevenLabsVoiceId) == nil {
+        defaults.set(v, forKey: Keys.elevenLabsVoiceId)
+      }
     }
 
     host = defaults.string(forKey: Keys.host) ?? "https://maincloud.spacetimedb.com"
@@ -168,6 +197,8 @@ final class AppConfig {
     briefingOnStart = defaults.object(forKey: Keys.briefingOnStart) as? Bool ?? true
     spokenBriefingCheck = defaults.object(forKey: Keys.spokenBriefingCheck) as? Bool ?? true
     nvidiaApiKey = keychain.string(for: Keys.nvidiaApiKey) ?? ""
+    elevenLabsApiKey = keychain.string(for: Keys.elevenLabsApiKey) ?? ""
+    elevenLabsVoiceId = defaults.string(forKey: Keys.elevenLabsVoiceId) ?? ""
     lastShiftEndedAt = defaults.object(forKey: Keys.lastShiftEndedAt) as? Date
     lastBriefingAckAt = defaults.object(forKey: Keys.lastBriefingAckAt) as? Date
     locationEnabled = defaults.object(forKey: Keys.locationEnabled) as? Bool ?? true

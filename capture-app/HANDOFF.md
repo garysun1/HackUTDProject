@@ -1,27 +1,30 @@
-# Spoken briefing check (Devin, 2026-11-07 ~19:50 CST) — on top of the 19:00 state below
+# Spoken briefing check (Devin, 2026-11-07 ~20:40 CST) — on top of the 19:00 state below
 
 Edward's ask: "some sort of AI needs to synthesize the info, the voice can't be so bad, it all has to be
-automated, and it has to get confirmation that they understand." Phone-only, no module/web/schema change:
+automated, and it has to get confirmation that they understand" — then simplified: confirmation is the wearer
+**saying yes** ("yes / makes sense / got it"); if they don't, pause a few seconds and re-prompt. No grading.
+Phone-only, no module/web/schema change:
 
 - `Briefing/NvidiaClient.swift` — Nemotron (`nvidia/nemotron-3.5-lightning-30b-a3b`, thinking off) on
-  integrate.api.nvidia.com and **Magpie TTS** (hosted NIM on nvcf, `/v1/audio/synthesize`, multipart → WAV,
-  202+poll handled). One `NVIDIA_API_KEY`, Keychain (`AppConfig.nvidiaApiKey`, Settings → Voice and briefing;
-  `Config.plist` key `NVIDIA_API_KEY` seeds it).
-- `Briefing/SpokenBriefing.swift` — pure: fact sheet from the `Briefing`, prompts, tolerant JSON parsers,
-  template + keyword-grade fallbacks (used with no key / offline), re-ask and pass/fail lines, the
-  `Briefing ack:` note text. 13 tests in `SpokenBriefingTests`.
-- `Briefing/BriefingSpeaker.swift` — plays Magpie WAVs (cached per text), falls back to the best system voice;
-  `speakAndWait` for the automated flow.
-- `Briefing/BriefingCheck.swift` — the sequence: write → read → listen (reuses `VoiceNarrator`, on-device STT)
-  → grade → re-ask missed facts (3 rounds max) → **pass auto-acknowledges** the briefing and sets
-  `config.pendingNotePrefix` to the ack note, so the shift's first photo carries
-  "Briefing ack: Edward confirmed the briefing at 7:52 PM. Repeated back: … Said: “…”" into the graph via the
-  existing `note` path. Fail leaves the sheet for manual check-off ("Answer again" / "Read it again").
-- `BriefingView` shows the check card (phase, live transcript, must-know facts ticking off);
-  Settings toggle "Read it and check I understood" (default on, needs "Briefing before each shift").
-- Simulator: build green, **145/145 tests**. **Not yet run with a real key or on the phone** — needs Edward's
-  NVIDIA key; then verify Magpie voice name `Magpie-Multilingual.EN-US.Aria` and Nemotron JSON compliance on
-  hardware and tune prompts. Gary may want a `briefing_ack` table instead of the note (ask in #log).
+  integrate.api.nvidia.com writes the script from the briefing's fact sheet; Magpie TTS (hosted NIM on nvcf,
+  `/v1/audio/synthesize`, multipart → WAV, 202+poll handled) is the second-choice voice. Verified live from the
+  VM with Edward's key: chat 200 (JSON back), `list_voices` 200, synthesize 200 `audio/wav`.
+- `Briefing/ElevenLabsClient.swift` — **preferred voice** when its key is set (`eleven_flash_v2_5`, MP3,
+  default voice George `JBFqnCBsd6RMkjVDRZzb`, voice id editable in Settings). Not yet exercised (no key).
+- `Briefing/SpokenBriefing.swift` — pure: fact sheet, Nemotron prompt + tolerant parser, template fallback,
+  every script ends "Does that make sense?", `answer(_:)` yes/no/unclear detector, re-prompt lines, pass line,
+  `Briefing ack:` note. `SpokenBriefingTests`.
+- `Briefing/BriefingSpeaker.swift` — plays cloud audio (cached per text), system voice fallback; `speakAndWait`.
+- `Briefing/BriefingCheck.swift` — write → read → listen 12 s → yes? pass : wait 3 s → re-prompt → listen …
+  (6 prompts max, then the sheet stays for manual check-off with "Listen again" / "Read it again"). A pass
+  auto-acknowledges and sets `config.pendingNotePrefix` to the ack note, so the shift's first photo carries
+  "Briefing ack: Edward heard the shift briefing (2 open issues) and confirmed it at 8:41 PM. Said: “yes”".
+- Keys: `AppConfig.nvidiaApiKey` / `elevenLabsApiKey` (Keychain, snapshots for off-main reads),
+  `elevenLabsVoiceId`. Settings → Voice and briefing. The gitignored `Config/Config.plist` seeds
+  `NVIDIA_API_KEY`, `ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID` **on every launch when the Keychain lacks them**
+  (the old first-launch-only seeding would have skipped a phone that was already installed). Edward's Mac has the
+  NVIDIA key in that plist; Devin also holds it as a user-scoped secret `NVIDIA_API_KEY`.
+- Voice order: ElevenLabs → Magpie → best installed system voice. Script: Nemotron → template.
 
 ---
 

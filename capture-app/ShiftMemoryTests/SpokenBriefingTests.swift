@@ -3,10 +3,9 @@
 // Shift Memory
 //
 // The spoken briefing's pure parts: the fact sheet carries the issues and the handoff without ids,
-// Nemotron's JSON is parsed tolerantly (fences, prose, strings for indexes), facts the grader left
-// out count as missed, the template fallback asks the question and names the open issues, the
-// keyword grade is forgiving on wording and strict on substance, and the ack note says who, when,
-// what was repeated, and what was not.
+// Nemotron's JSON is parsed tolerantly and always ends with the question, the template drops the tap
+// line, the yes detector takes many ways of agreeing and refuses a no, the re-prompts fit the answer,
+// and the ack note says who, when, and what was said. Plus the two clients' request/reply helpers.
 //
 
 import XCTest
@@ -22,14 +21,14 @@ final class SpokenBriefingTests: XCTestCase {
                  eventId: "e-\(id)", issueId: 7, severity: severity)
   }
 
-  func briefing(needsYou: [BriefingItem] = [], lead: String? = nil, leftForYou: [BriefingItem] = []) -> Briefing {
+  func briefing(needsYou: [BriefingItem] = [], lead: String? = nil) -> Briefing {
     Briefing(headline: "Two issues need you.", leadText: lead, leadGeneratedAt: lead == nil ? nil : now,
-             needsYou: needsYou, leftForYou: leftForYou, changed: [], quiet: ["UPS 1"],
+             needsYou: needsYou, leftForYou: [], changed: [], quiet: ["UPS 1"],
              spokenScript: "Two issues need you. PDU A fault, at Row 1, R12. Tap Got it when you're ready.",
              sinceDate: now.addingTimeInterval(-8 * 3600), generatedAt: now)
   }
 
-  // MARK: Fact sheet
+  // MARK: Fact sheet and scripts
 
   func testFactSheetListsIssuesPlacesHandoffAndQuietWithoutIds() {
     let b = briefing(needsYou: [item("a1", "PDU A fault light"), item("a2", "CRAC 2 alarm", place: "Row 1 end", severity: .warning)],
@@ -43,105 +42,76 @@ final class SpokenBriefingTests: XCTestCase {
     XCTAssertFalse(sheet.contains("e-a1"), "event ids never reach the model")
   }
 
-  // MARK: Parsing
-
-  func testParseScriptAcceptsFencedJSONAndAppendsTheQuestion() {
-    let reply = """
-    Here you go:
-    ```json
-    {"script": "PDU A is faulting at row one, rack twelve. Gary saw it at six.", "must_know": ["PDU A fault at Row 1 R12", "  ", "Reseat PSU 2 if it faults", "x", "y"]}
-    ```
-    """
+  func testParseScriptAcceptsFencedJSONAndEndsWithTheQuestion() {
+    let reply = "Here you go:\n```json\n{\"script\": \"PDU A is faulting at row one, rack twelve. Gary saw it at six\"}\n```"
     let spoken = BriefingSynthesis.parseScript(reply)
     XCTAssertEqual(spoken?.source, .nemotron)
-    XCTAssertEqual(spoken?.mustKnow, ["PDU A fault at Row 1 R12", "Reseat PSU 2 if it faults", "x"], "blank dropped, capped at three")
-    XCTAssertTrue(spoken?.script.hasPrefix("PDU A is faulting") == true)
-    XCTAssertTrue(spoken?.script.hasSuffix(BriefingSynthesis.askLine) == true)
-  }
-
-  func testParseScriptRejectsMissingScript() {
-    XCTAssertNil(BriefingSynthesis.parseScript(#"{"must_know": ["a"]}"#))
+    XCTAssertEqual(spoken?.script, "PDU A is faulting at row one, rack twelve. Gary saw it at six. Does that make sense?")
+    XCTAssertNil(BriefingSynthesis.parseScript(#"{"other": 1}"#))
     XCTAssertNil(BriefingSynthesis.parseScript("I cannot do that."))
   }
 
-  func testParseGradeTreatsUnlistedFactsAsMissedAndAcceptsStringIndexes() {
-    let grade = BriefingSynthesis.parseGrade(#"{"covered": ["0", 2.0], "missed": []}"#, count: 4)
-    XCTAssertEqual(grade?.covered, [0, 2])
-    XCTAssertEqual(grade?.missed, [1, 3])
-    XCTAssertEqual(grade?.passed, false)
-    XCTAssertEqual(BriefingSynthesis.parseGrade(#"{"covered":[0,1],"missed":[]}"#, count: 2)?.passed, true)
-    XCTAssertNil(BriefingSynthesis.parseGrade("no json here", count: 2))
+  func testParseScriptDoesNotDoubleTheQuestion() {
+    let spoken = BriefingSynthesis.parseScript(#"{"script": "Nothing is open. Does that make sense?"}"#)
+    XCTAssertEqual(spoken?.script, "Nothing is open. Does that make sense?")
   }
 
-  func testParseGradeIgnoresOutOfRangeIndexes() {
-    let grade = BriefingSynthesis.parseGrade(#"{"covered": [0, 9], "missed": [-1]}"#, count: 1)
-    XCTAssertEqual(grade?.covered, [0])
-    XCTAssertEqual(grade?.missed, [])
-  }
-
-  // MARK: Fallbacks
-
-  func testTemplateDropsTapLineAsksTheQuestionAndNamesIssuesThenHandoff() {
-    let b = briefing(needsYou: [item("a1", "PDU A fault light"), item("a2", "CRAC 2 alarm", place: nil)],
-                     lead: "Reseat PSU 2 on R12 if it faults again and tell the day lead before you leave.")
-    let spoken = BriefingSynthesis.template(b)
+  func testTemplateDropsTapLineAndAsksTheQuestion() {
+    let spoken = BriefingSynthesis.template(briefing(needsYou: [item("a1", "PDU A fault light")]))
     XCTAssertEqual(spoken.source, .template)
-    XCTAssertFalse(spoken.script.contains("Tap Got it"))
-    XCTAssertTrue(spoken.script.hasSuffix(BriefingSynthesis.askLine))
-    XCTAssertEqual(spoken.mustKnow.count, 3)
-    XCTAssertEqual(spoken.mustKnow[0], "PDU A fault light at Row 1 Rack R12")
-    XCTAssertEqual(spoken.mustKnow[1], "CRAC 2 alarm")
-    XCTAssertTrue(spoken.mustKnow[2].hasPrefix("Reseat PSU 2 on R12"))
-    XCTAssertTrue(spoken.mustKnow[2].hasSuffix("…"), "handoff clipped to twelve words")
+    XCTAssertEqual(spoken.script, "Two issues need you. PDU A fault, at Row 1, R12. Does that make sense?")
   }
 
-  func testKeywordGradeIsLooseOnWordingAndStrictOnSubstance() {
-    let facts = ["PDU A fault at Row 1 Rack R12", "CRAC 2 alarm", "Reseat PSU 2 if it faults"]
-    let grade = BriefingSynthesis.keywordGrade(mustKnow: facts, heard: "um the pdu has a fault and i should reseat the psu")
-    XCTAssertEqual(grade.covered, [0, 2])
-    XCTAssertEqual(grade.missed, [1])
-    XCTAssertTrue(BriefingSynthesis.keywordGrade(mustKnow: facts, heard: "pdu fault, crac alarm, reseat psu").passed)
-    XCTAssertEqual(BriefingSynthesis.keywordGrade(mustKnow: facts, heard: "").missed, [0, 1, 2])
+  // MARK: The answer
+
+  func testYesInManyForms() {
+    for s in ["yes", "Yeah", "yep that makes sense", "okay", "Got it.", "sounds good", "understood", "copy that",
+              "I'm good", "sure thing", "Yes it does", "makes sense to me"] {
+      XCTAssertEqual(BriefingSynthesis.answer(s), .yes, s)
+    }
   }
 
-  func testKeywordGradeSkipsFactsWithNoDistinctiveWords() {
-    XCTAssertTrue(BriefingSynthesis.keywordGrade(mustKnow: ["Check it."], heard: "okay").passed)
+  func testNoAndUnclear() {
+    for s in ["no", "nope", "not really", "can you repeat that", "what", "yes but I don't get the second one"] {
+      XCTAssertEqual(BriefingSynthesis.answer(s), .no, s)
+    }
+    for s in ["", "   ", "hmm", "the weather is nice", "PDU A"] {
+      XCTAssertEqual(BriefingSynthesis.answer(s), .unclear, s)
+    }
+    XCTAssertEqual(BriefingSynthesis.answer(nil), .unclear)
   }
 
-  // MARK: Follow-ups and the note
-
-  func testReaskAndFailScriptsNameTheMissedFacts() {
-    XCTAssertEqual(BriefingSynthesis.reaskScript(missed: ["CRAC 2 alarm"], round: 1),
-                   "Almost. One more time on these. CRAC 2 alarm. Say those back to me.")
-    XCTAssertTrue(BriefingSynthesis.reaskScript(missed: ["a", "b"], round: 2).hasPrefix("Last pass"))
-    XCTAssertTrue(BriefingSynthesis.failScript(missed: ["CRAC 2 alarm"]).contains("CRAC 2 alarm."))
+  func testRepromptsFitTheAnswerAndRound() {
+    XCTAssertTrue(BriefingSynthesis.repromptScript(round: 1, answer: .no).hasPrefix("No problem."))
+    XCTAssertEqual(BriefingSynthesis.repromptScript(round: 1, answer: .unclear), "Still there? Say yes when that makes sense.")
+    XCTAssertEqual(BriefingSynthesis.repromptScript(round: 2, answer: .unclear), "Does that make sense? Just say yes.")
+    XCTAssertTrue(BriefingSynthesis.repromptScript(round: 5, answer: .unclear).contains("check it off"))
   }
 
-  func testAckNoteSaysWhoWhenWhatWasRepeatedAndWhatWasNot() {
-    let facts = ["PDU A fault at Row 1 R12", "CRAC 2 alarm"]
-    let pass = BriefingSynthesis.ackNote(wearer: "Edward", grade: AckGrade(covered: [0, 1], missed: []), mustKnow: facts,
-                                         heard: "pdu fault, crac alarm", rounds: 1, at: now, timeZone: utc)
-    XCTAssertTrue(pass.hasPrefix("Briefing ack: Edward confirmed the briefing at "))
-    XCTAssertTrue(pass.contains("Repeated back: PDU A fault at Row 1 R12. CRAC 2 alarm."))
-    XCTAssertFalse(pass.contains("Not repeated"))
-    XCTAssertTrue(pass.contains("Said: “pdu fault, crac alarm”"))
-
-    let partial = BriefingSynthesis.ackNote(wearer: "", grade: AckGrade(covered: [0], missed: [1]), mustKnow: facts,
-                                            heard: "pdu fault", rounds: 3, at: now, timeZone: utc)
-    XCTAssertTrue(partial.hasPrefix("Briefing ack: Wearer partly confirmed the briefing at "))
-    XCTAssertTrue(partial.contains("after 3 passes."))
-    XCTAssertTrue(partial.contains("Not repeated: CRAC 2 alarm."))
+  func testPassScriptUsesTheName() {
+    XCTAssertEqual(BriefingSynthesis.passScript(wearer: "Edward"), "Good, Edward. You're up to speed. Starting your shift.")
+    XCTAssertEqual(BriefingSynthesis.passScript(wearer: "you"), "Good. You're up to speed. Starting your shift.")
   }
 
-  // MARK: NvidiaClient parsing
+  func testAckNoteSaysWhoWhenAndWhatWasSaid() {
+    let one = BriefingSynthesis.ackNote(wearer: "Edward", heard: "yep makes sense", prompts: 1, openItems: 2, at: now, timeZone: utc)
+    XCTAssertTrue(one.hasPrefix("Briefing ack: Edward heard the shift briefing (2 open issues) and confirmed it at "))
+    XCTAssertTrue(one.hasSuffix(". Said: “yep makes sense”"))
+    XCTAssertFalse(one.contains("prompts"))
+    let three = BriefingSynthesis.ackNote(wearer: "", heard: "", prompts: 3, openItems: 0, at: now, timeZone: utc)
+    XCTAssertTrue(three.hasPrefix("Briefing ack: Wearer heard the shift briefing (nothing open) and confirmed it at "))
+    XCTAssertTrue(three.hasSuffix(" after 3 prompts."))
+  }
 
-  func testContentTextStripsThinkingBlock() {
+  // MARK: Clients
+
+  func testNvidiaContentTextStripsThinkingBlock() {
     let body = Data(#"{"choices":[{"message":{"role":"assistant","content":"<think>hmm</think>\n{\"script\":\"x\"}"}}]}"#.utf8)
     XCTAssertEqual(NvidiaClient.contentText(from: body), #"{"script":"x"}"#)
     XCTAssertNil(NvidiaClient.contentText(from: Data("{}".utf8)))
   }
 
-  func testMultipartBodyAndWavSniff() {
+  func testNvidiaMultipartBodyAndWavSniff() {
     let body = NvidiaClient.multipartBody(fields: [("text", "hi"), ("language", "en-US")], boundary: "B")
     let s = String(decoding: body, as: UTF8.self)
     XCTAssertTrue(s.hasPrefix("--B\r\nContent-Disposition: form-data; name=\"text\"\r\n\r\nhi\r\n"))
@@ -150,6 +120,14 @@ final class SpokenBriefingTests: XCTestCase {
     XCTAssertTrue(NvidiaClient.looksLikeWav(wav))
     wav[0] = 0x7B
     XCTAssertFalse(NvidiaClient.looksLikeWav(wav))
-    XCTAssertFalse(NvidiaClient.looksLikeWav(Data(#"{"detail":"Unauthorized"}"#.utf8)))
+  }
+
+  func testElevenLabsRequestBodyAndMP3Sniff() throws {
+    let body = try XCTUnwrap(JSONSerialization.jsonObject(with: ElevenLabsClient.requestBody(text: "hi")) as? [String: Any])
+    XCTAssertEqual(body["text"] as? String, "hi")
+    XCTAssertEqual(body["model_id"] as? String, "eleven_flash_v2_5")
+    XCTAssertTrue(ElevenLabsClient.looksLikeMP3(Data("ID3".utf8) + Data(repeating: 0, count: 8)))
+    XCTAssertTrue(ElevenLabsClient.looksLikeMP3(Data([0xFF, 0xFB, 0x90, 0x00, 0x00])))
+    XCTAssertFalse(ElevenLabsClient.looksLikeMP3(Data(#"{"detail":"Unauthorized"}"#.utf8)))
   }
 }

@@ -36,6 +36,7 @@ final class AppModel {
   let narrator: VoiceNarrator
   let speaker: BriefingSpeaker
   let nvidia: NvidiaClient
+  let elevenLabs: ElevenLabsClient
   let briefingCheck: BriefingCheck
   let floor: FloorStore
   let location: LocationTracker
@@ -113,7 +114,13 @@ final class AppModel {
     let nvidia = NvidiaClient(apiKey: { keySnapshot.value })
     self.nvidia = nvidia
     speaker.log = { DebugLog.write("Speaker", $0) }
-    speaker.synthesize = { [nvidia] text in
+    let elevenKey = config.elevenLabsKeySnapshot
+    let elevenVoice = config.elevenLabsVoiceSnapshot
+    let elevenLabs = ElevenLabsClient(apiKey: { elevenKey.value }, voiceId: { elevenVoice.value })
+    self.elevenLabs = elevenLabs
+    // Voice: ElevenLabs when its key is set, else Magpie (NVIDIA key), else the speaker's system voice.
+    speaker.synthesize = { [elevenLabs, nvidia] text in
+      if elevenLabs.hasKey { return try await elevenLabs.synthesize(text) }
       guard nvidia.hasKey else { throw NvidiaError(kind: .noKey, detail: "") }
       return try await nvidia.synthesize(text)
     }
@@ -345,7 +352,10 @@ final class AppModel {
     briefingCheck.run(briefing, wearer: config.wearerName)
   }
 
-  func briefingListenAgain() { briefingCheck.listenAgain(wearer: config.wearerName) }
+  func briefingListenAgain() {
+    guard let briefing else { return }
+    briefingCheck.listenAgain(briefing: briefing, wearer: config.wearerName)
+  }
 
   /// The newest generated handoff (module #8) inside the window, if the pipeline has written one.
   private func latestHandoffText(since: Date) async -> String? {
