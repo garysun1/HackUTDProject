@@ -139,11 +139,19 @@ export function snapshot(clock: number): Snapshot {
   const past = all.filter(s => shiftEnd(s) < clock);
   const latestIdle = active.length ? null : (past.length ? past.reduce((a, b) => (shiftEnd(b) > shiftEnd(a) ? b : a)) : null);
   const cutoff = state.windowMin ? Date.now() - state.windowMin * 60_000 : 0;
-  const alerts = [...state.alerts.values()].filter(a => !state.hiddenWearers.has(a.deviceId) && raisedAt(a) >= cutoff);
+  // only what this session's photos raised or touched: a database also holds test photos and seeded
+  // work orders from other demos (HackUTD 2026 had Gary's rack test and the data-center work orders)
+  const scoped = all.length > 0 && !overlayActive(); // no tracked walk (or the weekend overlay): show everything, as before
+  const inScope = (eventId: string | undefined) => { if (!scoped) return true; const e = eventId ? state.events.get(eventId) : undefined; return !!e && inSession(e, all); };
+  const alerts = [...state.alerts.values()].filter(a => !state.hiddenWearers.has(a.deviceId) && raisedAt(a) >= cutoff && inScope(a.eventId));
   const raised = alerts.filter(a => raisedAt(a) <= clock).sort((a, b) => raisedAt(b) - raisedAt(a));
   const open = raised.filter(a => openAt(a, clock));
   const resolved = raised.filter(a => resolvedAt(a) <= clock).sort((a, b) => resolvedAt(b) - resolvedAt(a));
-  const workOrders = [...state.issues.values()].filter(i => ms(i.openedMicros) <= clock).sort((a, b) => ms(b.openedMicros) - ms(a.openedMicros));
+  const sessionIds = new Set([...state.events.values()].filter(e => inSession(e, all)).map(e => e.eventId));
+  const touched = new Set(state.edges.filter(x => sessionIds.has(x.fromId)).map(x => x.toId));
+  const range = all.length ? [Math.min(...all.map(s => s.startMs)), Math.max(...all.map(shiftEnd))] : null;
+  const woInScope = (i: Issue) => !scoped || touched.has(slug(i.assetId)) || (!!i.resolvedEventId && sessionIds.has(i.resolvedEventId)) || (!!range && ms(i.openedMicros) >= range[0] && ms(i.openedMicros) <= range[1]);
+  const workOrders = [...state.issues.values()].filter(i => ms(i.openedMicros) <= clock && woInScope(i)).sort((a, b) => ms(b.openedMicros) - ms(a.openedMicros));
   const events = [...state.events.values()].filter(e => ms(e.tMicros) <= clock && inSession(e, all)).sort((a, b) => ms(a.tMicros) - ms(b.tMicros)).slice(-200);
   let handoff: HandoffCard | null = null;
   for (let i = all.length - 1; i >= 0; i--) {
@@ -160,6 +168,8 @@ export function snapshot(clock: number): Snapshot {
 }
 
 // ---------- render ----------
+/** The module's entity id for a registry asset (module/spacetimedb/src/rules.ts slug). */
+const slug = (name: string) => name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
 const seen = new Set<string>(); let lastSig = ''; let lastCur = ''; let userScrollAt = 0;
 function watchScroll(el: HTMLElement) { if ((el as any).__watched) return; (el as any).__watched = true; for (const ev of ['wheel', 'touchmove', 'pointerdown']) el.addEventListener(ev, () => { userScrollAt = performance.now(); }, { passive: true }); }
 export type BrainCtx = { clock: number; stats: HTMLElement | null; locate: (lat: number, lon: number) => string | undefined; onSelect: (id: string) => void; onJump: (ms: number) => void };
