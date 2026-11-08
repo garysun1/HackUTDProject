@@ -1,7 +1,7 @@
 import './styles.css';
-import { state, start, onChange, wearerColor, wearerName, fmtTime, fmtTimeS, alertsFor, loadPhoto, placeOf } from './store';
-import { SiteScene, type PinSpec, type SiteData } from './scene';
-import { sessionShifts, positionAt, shiftEnd, shiftLive, renderBrain, inSession, type Shift } from './brain';
+import { state, start, onChange, wearerColor, wearerName, fmtTime, fmtTimeS, alertsFor, loadPhoto, placeOf, type Alert } from './store';
+import { SiteScene, type PinSpec, type IssueSpec, type SiteData } from './scene';
+import { sessionShifts, shifts, positionAt, shiftEnd, shiftLive, resolvedAt, renderBrain, inSession, type Shift } from './brain';
 import { pointInRing, centroid, haversineM } from './geo';
 import ecsw from './data/ecsw.json';
 
@@ -90,6 +90,32 @@ scene.onPinHover = (id, x, y) => {
   tip.hidden = false; tip.style.left = Math.min(innerWidth - 300, x + 14) + 'px'; tip.style.top = Math.max(8, y - 60) + 'px';
 };
 
+scene.onIssueClick = id => { const a = state.alerts.find(a => String(a.alertId) === id); if (!a) return; select(a.eventId); };
+scene.onIssueHover = (id, x, y) => {
+  if (!id) { tip.hidden = true; return; } const a = state.alerts.find(a => String(a.alertId) === id); if (!a) return;
+  const done = resolvedAt(a) <= replay.clock;
+  tip.innerHTML = `<div class="t">${done ? `resolved ${fmtTime(resolvedAt(a))}` : `open since ${fmtTime(a.tMs)}`} · ${wearerName(a.deviceId)}</div><p><b>${a.entityName || a.text}</b>${a.entityName ? ` · ${a.text}` : ''}</p>`;
+  tip.hidden = false; tip.style.left = Math.min(innerWidth - 300, x + 14) + 'px'; tip.style.top = Math.max(8, y - 60) + 'px';
+};
+
+// ---------- issue markers ----------
+// An issue sits where the photo that raised it was taken; a photo without a fix falls back to where
+// its wearer's track was at that moment. Issues with neither stay in the panel only.
+function issueSpot(a: Alert): { lat: number; lon: number; floor?: number } | null {
+  const l = state.locations.get(a.eventId); if (l) return { lat: l.lat, lon: l.lon, floor: l.floor };
+  for (const s of shifts()) { if (s.deviceId !== a.deviceId || a.tMs < s.startMs || a.tMs > shiftEnd(s) + 60_000) continue; const p = positionAt(s, a.tMs); if (p) return { lat: p.lat, lon: p.lon, floor: p.floor }; }
+  return null;
+}
+function issueSpecs(clock: number, lvl: (f: number | undefined) => number): IssueSpec[] {
+  const out: IssueSpec[] = []; const stack = new Map<string, number>();
+  for (const a of state.alerts) {
+    if (a.tMs > clock) continue; const at = issueSpot(a); if (!at) continue;
+    const [x, z] = scene.proj.toXZ(at.lon, at.lat); const key = `${x.toFixed(0)}|${z.toFixed(0)}|${lvl(at.floor)}`; const lift = stack.get(key) ?? 0; stack.set(key, lift + 1);
+    out.push({ id: String(a.alertId), x, y: lvl(at.floor) * scene.floorH, z, open: resolvedAt(a) > clock, title: `${a.entityName || a.text}${a.entityName ? ' · ' + a.text : ''}`, lift });
+  }
+  return out;
+}
+
 // ---------- heat (incremental over the clock) ----------
 const heatCursor = new Map<string, number>(); let heatClock = -Infinity;
 function resetHeat() { scene.heat?.reset(); heatCursor.clear(); heatClock = -Infinity; }
@@ -172,6 +198,7 @@ function frame(now: number) {
     pins.push({ id: e.eventId, x, y: lvl(l.floor) * scene.floorH, z, color: wearerColor(e.deviceId), time: fmtTime(e.tMs), alert: alertsFor(e.eventId).some(a => a.tMs <= clock && (!a.acked || (a.ackedMs ?? a.tMs) > clock)), thumb: url, selected: selected === e.eventId, title: e.summary });
   }
   scene.setPins(pins);
+  scene.setIssues(issueSpecs(clock, lvl));
   if (now - brainAt > 250) { brainAt = now; renderBrain($('#brain-body'), { clock, selected, locate, onSelect: select, onJump: ms => { if (replay.mode === 'live') setMode('replay'); setClock(ms + 1000); } }); }
   scene.frame();
 }

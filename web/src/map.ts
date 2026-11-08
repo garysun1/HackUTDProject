@@ -3,16 +3,17 @@
 // and a heat layer where they lingered; photo pins where photos were taken, red while an alert is
 // open. Live, or driven by the replay clock. The shift-memory panel sits beside it. Reads the
 // console's store (subscriptions, capture time); nothing here is fetched separately.
-import { state, wearerColor, wearerName, fmtTime, fmtTimeS, loadPhoto, alertsFor } from './store';
+import { state, wearerColor, wearerName, fmtTime, fmtTimeS, loadPhoto, alertsFor, type Alert } from './store';
 import { select } from './timeline';
 import { view, onView, clock as viewClock, jumpTo, shownEvents, togglePlay, stopReplay, setSpeed, scrubReplay, replayRange, setRangeSource } from './view';
 import { photoCard, showTip, hideTip } from './card';
+import { esc } from './timeline';
 import { fitRequested } from './tools';
 import { current } from './workspaces';
-import { SiteScene, type PinSpec, type SiteData } from './site3d/scene';
+import { SiteScene, type PinSpec, type IssueSpec, type SiteData } from './site3d/scene';
 import { pointInRing, centroid, haversineM } from './site3d/geo';
 import ecsw from './site3d/data/ecsw.json';
-import { sessionShifts, positionAt, renderBrain, openAt, shiftEnd, inSession, sessionRange, type Shift } from './brain';
+import { sessionShifts, shifts, positionAt, renderBrain, openAt, shiftEnd, inSession, sessionRange, raisedAt, resolvedAt, type Shift } from './brain';
 
 const host = document.getElementById('map') as HTMLElement;
 let scene: SiteScene | null = null; let brainEl: HTMLElement; let statsEl: HTMLElement; let followBtn: HTMLButtonElement; let seenFit = fitRequested;
@@ -24,7 +25,7 @@ function ensureScene(): SiteScene {
     <div class="s3-ctl"><span class="seg" role="group" aria-label="Camera"><button type="button" data-cam="3d" aria-pressed="true">3D</button><button type="button" data-cam="2d" aria-pressed="false">Top-down</button></span><button type="button" class="btn ghost" data-follow aria-pressed="false" title="Keep the camera on the wearer (F)">Follow</button></div>
     <aside class="s3-brain" aria-label="Shift memory"><div class="bh"><h2>Shift memory</h2></div><div class="s3-brain-stats"></div><div class="s3-brain-body"></div></aside>
     <div class="s3-replay" role="group" aria-label="Replay"><button type="button" data-play aria-label="Play">▶</button><button type="button" data-live class="on">Live</button><div class="speeds" role="group" aria-label="Speed">${[1, 10, 60, 300].map(v => `<button type="button" data-speed="${v}">${v}×</button>`).join('')}</div><div class="scrub"><input type="range" min="0" max="1000" value="1000" data-scrub aria-label="Time" /><div class="s3-marks"></div></div><span class="clock mono" data-clock>—</span></div>
-    <div class="s3-legend"><span><i class="sw trail"></i>walk</span><span><i class="sw heat"></i>time spent</span><span><i class="sw photo"></i>photo</span><span><i class="sw alert"></i>open issue</span><span class="attr">Imagery © Esri · Building © OpenStreetMap contributors</span></div>`;
+    <div class="s3-legend"><span><i class="sw trail"></i>walk</span><span><i class="sw heat"></i>time spent</span><span><i class="sw photo"></i>photo</span><span><i class="sw alert"></i>open issue</span><span><i class="sw done"></i>resolved</span><span class="attr">Imagery © Esri · Building © OpenStreetMap contributors</span></div>`;
   const canvas = host.querySelector('canvas')!; const labels = host.querySelector('.s3-labels') as HTMLElement;
   scene = new SiteScene(canvas, labels, host); (window as any).__scene = scene;
   brainEl = host.querySelector('.s3-brain-body') as HTMLElement; statsEl = host.querySelector('.s3-brain-stats') as HTMLElement; followBtn = host.querySelector('[data-follow]') as HTMLButtonElement;
@@ -39,6 +40,12 @@ function ensureScene(): SiteScene {
   scrubEl.addEventListener('pointerdown', () => { scrubbing = true; }); document.addEventListener('pointerup', () => { scrubbing = false; });
   scene.onPinClick = id => select(id);
   scene.onPinHover = (id, x, y) => { if (id) showTip(photoCard(id), x, y, id); else hideTip(); };
+  scene.onIssueClick = id => { const a = state.alerts.get(id); if (a) { select(a.eventId); if (raisedAt(a) > viewClock()) jumpTo(raisedAt(a) + 1000); } };
+  scene.onIssueHover = (id, x, y) => {
+    const a = id ? state.alerts.get(id) : undefined; if (!a) { hideTip(); return; }
+    const t = (v: number) => fmtTime(BigInt(Math.round(v)) * 1000n); const done = resolvedAt(a) <= viewClock();
+    showTip(`<div class="t">${done ? `resolved ${t(resolvedAt(a))}` : `open since ${t(raisedAt(a))}`} · ${esc(a.wearerName || wearerName(a.deviceId))}</div><p><b>${esc(a.assetName || a.text)}</b>${a.assetName ? ` · ${esc(a.text)}` : ''}</p>`, x, y, id);
+  };
   document.addEventListener('select', () => { const id = state.selected; const l = id ? state.locations.get(id) : null; if (l && scene && site) { const [x, z] = scene.proj.toXZ(l.lon, l.lat); scene.focus(x, z); } });
   return scene;
 }
@@ -75,6 +82,26 @@ function locate(lat: number, lon: number): string | undefined {
   for (const r of site.rooms) if (pointInRing(pt, r.ring)) return r.name;
   if (site.outer && pointInRing(pt, site.outer)) return 'inside ECSW';
   return site.kind === 'ecsw' ? 'outside the building' : undefined;
+}
+
+// ---------- issue markers ----------
+// An issue sits where the photo that raised it was taken; a photo without a fix falls back to where
+// its wearer's track was at that moment. Issues with neither stay in the panel only.
+function issueSpot(a: Alert): { lat: number; lon: number; floor?: number } | null {
+  const l = state.locations.get(a.eventId); if (l) return { lat: l.lat, lon: l.lon, floor: l.floor };
+  const at = raisedAt(a);
+  for (const s of shifts()) { if (s.deviceId !== a.deviceId || at < s.startMs || at > shiftEnd(s) + 60_000) continue; const p = positionAt(s, at); if (p) return { lat: p.lat, lon: p.lon, floor: p.floor }; }
+  return null;
+}
+function issueSpecs(sc: SiteScene, clock: number, lvl: (f: number | undefined) => number): IssueSpec[] {
+  const out: IssueSpec[] = []; const stack = new Map<string, number>();
+  const cutoff = state.windowMin ? Date.now() - state.windowMin * 60_000 : 0;
+  for (const a of state.alerts.values()) {
+    if (raisedAt(a) > clock || raisedAt(a) < cutoff || state.hiddenWearers.has(a.deviceId)) continue; const at = issueSpot(a); if (!at) continue;
+    const [x, z] = sc.proj.toXZ(at.lon, at.lat); const key = `${x.toFixed(0)}|${z.toFixed(0)}|${lvl(at.floor)}`; const lift = stack.get(key) ?? 0; stack.set(key, lift + 1);
+    out.push({ id: a.id, x, y: lvl(at.floor) * sc.floorH, z, open: resolvedAt(a) > clock, title: `${a.assetName || a.text}${a.assetName ? ' · ' + a.text : ''}`, lift });
+  }
+  return out;
 }
 
 // ---------- heat (incremental over the clock) ----------
@@ -142,6 +169,7 @@ function frameBody() {
     pins.push({ id: e.eventId, x, y: lvl(l.floor) * sc.floorH, z, color: wearerColor(e.deviceId), time: fmtTime(e.tMicros), alert, thumb: url, selected: state.selected === e.eventId, title: e.summary });
   }
   sc.setPins(pins);
+  sc.setIssues(issueSpecs(sc, clock, lvl));
   if (fitRequested !== seenFit) { seenFit = fitRequested; sc.resetView(); }
   const now = performance.now();
   if (now - brainAt > 250) { brainAt = now; renderBrain(brainEl, { clock, stats: statsEl, locate, onSelect: select, onJump: jumpTo }); }

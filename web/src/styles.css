@@ -242,6 +242,12 @@ body[data-conn="connecting"] .col, body[data-conn="error"] .col { opacity: .7; }
 .s3-pin b { position: absolute; left: 0; right: 0; bottom: 0; font: 9.5px/1 var(--mono); background: var(--glass-bg); color: var(--ink-2); text-align: center; padding: 2px 0; font-weight: 500; }
 .s3-pin:hover, .s3-pin.sel { transform: translate(0, -24px) scale(1.25); z-index: 5; }
 .s3-pin.alert { border-color: var(--critical); animation: s3-burn 1.6s ease-in-out infinite; }
+.s3-idot { pointer-events: auto !important; cursor: pointer; width: 18px; height: 18px; display: grid; place-items: center; transform: translate(0, -2px); }
+.s3-idot i { width: 12px; height: 12px; border-radius: 50%; background: var(--critical); border: 2px solid var(--ground); box-shadow: 0 0 0 1px var(--line), 0 0 12px color-mix(in srgb, var(--critical) 70%, transparent); animation: s3-burn 1.6s ease-in-out infinite; }
+.s3-idot.done i { width: 8px; height: 8px; background: var(--good); box-shadow: 0 0 0 1px var(--line); animation: none; transition: width .5s .6s, height .5s .6s; }
+.s3-idot.done.just i { animation: s3-idot-solved 1.1s ease-out; } @keyframes s3-idot-solved { 0% { transform: scale(1.6); box-shadow: 0 0 0 0 color-mix(in srgb, var(--good) 70%, transparent), 0 0 16px var(--good); } 60% { transform: scale(1.3); box-shadow: 0 0 0 10px color-mix(in srgb, var(--good) 0%, transparent), 0 0 8px var(--good); } 100% { transform: scale(1); box-shadow: 0 0 0 1px var(--line); } }
+.s3-idot:hover i { transform: scale(1.3); }
+.s3-idot.arrive { animation: s3-ping .6s cubic-bezier(.2, 1.4, .4, 1); } @keyframes s3-ping { from { transform: translate(0, -2px) scale(.1); opacity: 0; } 60% { transform: translate(0, -2px) scale(1.5); opacity: 1; } to { transform: translate(0, -2px) scale(1); } }
 .s3-pin.arrive { animation: s3-drop .5s ease-out; } @keyframes s3-drop { from { transform: translate(0, -60px); opacity: 0; } }
 @keyframes s3-burn { 50% { box-shadow: 0 0 0 5px color-mix(in srgb, var(--critical) 25%, transparent); } }
 /* shift-memory panel beside the map */
@@ -321,7 +327,7 @@ body[data-conn="connecting"] .col, body[data-conn="error"] .col { opacity: .7; }
 .s3-legend { position: absolute; left: 12px; bottom: 66px; z-index: 950; display: flex; gap: 14px; align-items: center; color: var(--ink-2); font-size: 12px; pointer-events: none; background: var(--glass-bg); backdrop-filter: blur(10px); border: 1px solid var(--line); border-radius: var(--r); padding: 4px 10px; }
 .s3-legend span { display: inline-flex; align-items: center; gap: 5px; }
 .s3-legend .sw { display: inline-block; width: 12px; height: 12px; border-radius: 50%; }
-.s3-legend .sw.trail { background: var(--w1); border-radius: 2px; height: 3px; width: 16px; } .s3-legend .sw.heat { background: var(--heat); opacity: .6; filter: blur(1px); } .s3-legend .sw.photo { background: var(--ground); border: 2px solid var(--w1); border-radius: 2px; } .s3-legend .sw.alert { background: var(--critical); animation: s3-burn 1.6s infinite; }
+.s3-legend .sw.trail { background: var(--w1); border-radius: 2px; height: 3px; width: 16px; } .s3-legend .sw.heat { background: var(--heat); opacity: .6; filter: blur(1px); } .s3-legend .sw.photo { background: var(--ground); border: 2px solid var(--w1); border-radius: 2px; } .s3-legend .sw.alert { background: var(--critical); animation: s3-burn 1.6s infinite; } .s3-legend .sw.done { background: var(--good); }
 .s3-legend .attr { margin-left: 8px; color: var(--ink-4); font-size: 11px; }
 .map .s3-attr { display: none; }
 @media (max-width: 1100px) { .s3-replay { right: 324px; } }

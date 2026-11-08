@@ -21,6 +21,7 @@ export type SiteData = {
   paths?: { highway: string; pts: LonLat[] }[];
   tileRadius?: number;
 };
+export type IssueSpec = { id: string; x: number; y: number; z: number; open: boolean; title: string; lift: number /* stacking order when several issues share a spot */ };
 export type PinSpec = { id: string; x: number; y: number; z: number; color: string; time: string; alert: boolean; thumb?: string; selected: boolean; title: string };
 export type WearerSpec = { color: string; name: string; sub: string; pos: [number, number, number] | null; trail: number[] /* flat xyz */; acc?: number /* metres of GPS uncertainty, drawn as a ring */ };
 
@@ -54,14 +55,16 @@ function hexA(hex: string, a: number) { const c = new THREE.Color(hex); return `
 
 type WearerVis = { head: THREE.Mesh; ring: THREE.Mesh; accRing: THREE.Mesh; beam: THREE.Mesh; light: THREE.PointLight; line: Line2; geom: LineGeometry; label: CSS2DObject; labelEl: HTMLElement; color: THREE.Color; n: number; born: number };
 type PinVis = { obj: CSS2DObject; el: HTMLElement; pole: THREE.Mesh; sig: string };
+type IssueVis = { obj: CSS2DObject; el: HTMLElement; pole: THREE.Mesh; ring: THREE.Mesh; open: boolean | null; born: number; solvedAt: number };
 
 export class SiteScene {
   renderer: THREE.WebGLRenderer; labels: CSS2DRenderer; scene = new THREE.Scene();
   persp: THREE.PerspectiveCamera; ortho: THREE.OrthographicCamera; ctrl3d: OrbitControls; ctrl2d: OrbitControls;
   mode: '3d' | '2d' = '3d'; follow = false; followPos: THREE.Vector3 | null = null; followId: string | null = null;
   proj!: Proj; floorH = 3.6; beamH = 24; levels = 1; site = new THREE.Group(); ground = new THREE.Group(); heat: HeatLayer | null = null;
-  wearers = new Map<string, WearerVis>(); pins = new Map<string, PinVis>(); roomLabels: CSS2DObject[] = []; bldLabels: CSS2DObject[] = []; upper: THREE.Object3D[] = [];
+  wearers = new Map<string, WearerVis>(); pins = new Map<string, PinVis>(); issues = new Map<string, IssueVis>(); roomLabels: CSS2DObject[] = []; bldLabels: CSS2DObject[] = []; upper: THREE.Object3D[] = [];
   onPinClick: (id: string) => void = () => {}; onPinHover: (id: string | null, x: number, y: number) => void = () => {};
+  onIssueClick: (id: string) => void = () => {}; onIssueHover: (id: string | null, x: number, y: number) => void = () => {};
   private clock = new THREE.Clock(); private materials: { m: THREE.Material; role: string }[] = []; private lineMats: LineMaterial[] = [];
   private sun: THREE.DirectionalLight; private hemi: THREE.HemisphereLight;
 
@@ -130,6 +133,7 @@ export class SiteScene {
     this.disposeGroup(this.site); this.disposeGroup(this.ground); this.materials = this.materials.filter(e => e.role === 'pole'); this.roomLabels = []; this.bldLabels = []; this.upper = [];
     for (const w of this.wearers.values()) { this.scene.remove(w.head, w.ring, w.beam, w.light, w.line, w.label); } this.wearers.clear();
     for (const p of this.pins.values()) { this.scene.remove(p.obj, p.pole); } this.pins.clear();
+    for (const v of this.issues.values()) { this.scene.remove(v.obj, v.pole, v.ring); v.el.remove(); } this.issues.clear();
     if (this.heat) { this.scene.remove(this.heat.mesh); this.heat.tex.dispose(); this.heat.mesh.geometry.dispose(); this.heat = null; }
     const [lon0, lat0] = data.center; this.proj = new Proj(lon0, lat0);
     this.buildGround(lon0, lat0, data.tileRadius ?? 4);
@@ -284,6 +288,38 @@ export class SiteScene {
     for (const [id, v] of this.pins) if (!keep.has(id)) { this.scene.remove(v.obj, v.pole); v.el.remove(); this.pins.delete(id); }
   }
 
+  // ---------- issues ----------
+  // Every issue is a dot on the model where the photo that raised it was taken: red and pulsing
+  // while open, green once resolved. Several issues at one spot stack upward.
+  setIssues(list: IssueSpec[]) {
+    const keep = new Set<string>();
+    const red = cssVar('--critical') || '#d03b3b', green = cssVar('--good') || '#0ca30c';
+    for (const p of list) {
+      keep.add(p.id);
+      let v = this.issues.get(p.id);
+      if (!v) {
+        const el = document.createElement('div'); el.className = 's3-idot arrive'; el.dataset.id = p.id; el.innerHTML = '<i></i>';
+        el.addEventListener('click', ev => { ev.stopPropagation(); this.onIssueClick(p.id); });
+        el.addEventListener('mouseenter', ev => this.onIssueHover(p.id, ev.clientX, ev.clientY)); el.addEventListener('mouseleave', () => this.onIssueHover(null, 0, 0));
+        const obj = new CSS2DObject(el);
+        const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 1, 6), new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.55, depthWrite: false })); pole.renderOrder = 3;
+        const ring = rot(new THREE.Mesh(new THREE.RingGeometry(1.6, 2.4, 48), new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.6, side: THREE.DoubleSide, depthWrite: false }))); ring.renderOrder = 3;
+        v = { obj, el, pole, ring, open: null, born: performance.now(), solvedAt: 0 }; this.issues.set(p.id, v); this.scene.add(obj, pole, ring);
+      }
+      const top = p.y + 7 + p.lift * 3.2;
+      v.obj.position.set(p.x, top, p.z); v.pole.scale.y = top - p.y; v.pole.position.set(p.x, p.y + (top - p.y) / 2, p.z); v.ring.position.set(p.x, p.y + 0.3, p.z);
+      if (v.open !== p.open) {
+        v.open = p.open; const c = new THREE.Color(p.open ? red : green);
+        (v.pole.material as THREE.MeshBasicMaterial).color.copy(c); (v.ring.material as THREE.MeshBasicMaterial).color.copy(c);
+        v.el.classList.toggle('open', p.open); v.el.classList.toggle('done', !p.open); v.el.title = p.title;
+        // resolving pulses once (a ring that swells and fades, the dot flashes) and settles small
+        if (!p.open) { v.solvedAt = performance.now(); v.ring.scale.setScalar(1); const el = v.el; el.classList.add('just'); setTimeout(() => el.classList.remove('just'), 1200); }
+        else v.solvedAt = 0;
+      }
+    }
+    for (const [id, v] of this.issues) if (!keep.has(id)) { this.scene.remove(v.obj, v.pole, v.ring); v.el.remove(); this.issues.delete(id); }
+  }
+
   // ---------- view ----------
   setView(mode: '3d' | '2d') {
     this.mode = mode; this.ctrl3d.enabled = mode === '3d'; this.ctrl2d.enabled = mode === '2d';
@@ -316,6 +352,11 @@ export class SiteScene {
       } else if (this.ortho.zoom < 2.8) { this.ortho.zoom += (3 - this.ortho.zoom) * Math.min(1, dt * 2); this.ortho.updateProjectionMatrix(); }
     }
     c.update();
+    for (const v of this.issues.values()) {
+      const rm = v.ring.material as THREE.MeshBasicMaterial;
+      if (v.open) { const k = 1 + 0.35 * (0.5 + 0.5 * Math.sin(t / 260)); v.ring.scale.setScalar(k); rm.opacity = 0.75 - 0.4 * (k - 1) / 0.35; }
+      else if (v.solvedAt) { const f = Math.min(1, (t - v.solvedAt) / 1100); v.ring.scale.setScalar(1 + 2.2 * f); rm.opacity = 0.7 * (1 - f) + (f >= 1 ? 0.3 : 0); if (f >= 1) { v.ring.scale.setScalar(0.6); v.solvedAt = 0; } }
+    }
     for (const w of this.wearers.values()) {
       const ph = ((t - w.born) % 1800) / 1800; w.ring.scale.setScalar(1 + ph * 1.6); (w.ring.material as THREE.MeshBasicMaterial).opacity = 0.7 * (1 - ph);
       (w.beam.material as THREE.MeshBasicMaterial).opacity = 0.16 + 0.06 * Math.sin(t / 400);
