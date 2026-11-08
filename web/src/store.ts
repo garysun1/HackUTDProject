@@ -8,6 +8,11 @@ const pinned = new URLSearchParams(location.search).get('db');
 let chosen: string | null = null; try { chosen = localStorage.getItem('wm.db'); } catch { /* private mode */ }
 export let DB = pinned || chosen || DIRECTORY_DB;
 export function dbChosen() { return !!(pinned || chosen); }
+// Which workspace, when several share a database (the weekend overlay sits on the live capture).
+// `?ws=` pins one; otherwise the choice is remembered per browser next to the database.
+const pinnedWs = new URLSearchParams(location.search).get('ws');
+let chosenWs: string | null = null; try { chosenWs = localStorage.getItem('wm.ws'); } catch { /* private mode */ }
+export let WS_ID: string | null = pinnedWs || chosenWs;
 export const HOST = 'https://maincloud.spacetimedb.com';
 export const WS = 'wss://maincloud.spacetimedb.com';
 
@@ -46,6 +51,12 @@ export const state = {
   resolutions: new Map<string, Resolution>(), // alert resolutions with the photo that proved it (#23)
   selected: null as string | null,
   windowMin: 0 as number, // 0 = all
+  // A static overlay laid over the live database (the weekend workspace). While one is active,
+  // live rows older than its end are replaced by its curated copies; later live rows are shown
+  // on top of it, and the ones the workspace names get a badge (decision 0033).
+  overlay: null as null | { url: string; endMicros: bigint; badgeAfterMicros: bigint; ids: Set<string>; hideLive: Set<string>; badge: string },
+  staticPhotos: new Map<string, string>(), // eventId -> URL of a photo shipped with an overlay
+  badges: new Map<string, string>(), // eventId -> badge text
   hiddenWearers: new Set<string>(),
   connected: false,
   fresh: new Set<string>(),
@@ -118,6 +129,7 @@ const photoCol = 'jpeg_b_64';
 const inflight = new Set<string>();
 export async function loadPhoto(eventId: string): Promise<string | undefined> {
   if (state.photos.has(eventId)) return state.photos.get(eventId);
+  const st = state.staticPhotos.get(eventId); if (st) { state.photos.set(eventId, st); return st; }
   if (inflight.has(eventId)) return; inflight.add(eventId);
   try {
     const r = await fetch(`${HOST}/v1/database/${DB}/sql`, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: `SELECT mime, ${photoCol} FROM photo WHERE event_id = '${eventId.replace(/'/g, '')}'` });
@@ -144,11 +156,29 @@ function resetState() {
   state.events.clear(); state.entities.clear(); state.edges = []; state.episodes.clear(); state.handoffs = []; state.alerts.clear();
   state.wearers.clear(); state.assets.clear(); state.photos.clear(); state.locations.clear(); state.track.clear(); state.questions.clear(); state.issues.clear(); state.resolutions.clear();
   state.selected = null; state.fresh.clear(); state.assetFilter = null; state.hiddenWearers.clear();
+  state.overlay = null; state.staticPhotos.clear(); state.badges.clear();
 }
+// The overlay module (overlay.ts) registers itself here, so the store need not know the workspace list.
+let overlayLoader: ((db: string, wsId: string | null) => void) | null = null;
+export function setOverlayLoader(fn: (db: string, wsId: string | null) => void) { overlayLoader = fn; }
+/** Does a live row belong on screen while an overlay is active? Rows the overlay already carries,
+ *  rows it hides, and rows older than its end (which it replaces) do not. */
+export function liveRowOk(id: string | null, tMicros: bigint | null): boolean {
+  const o = state.overlay; if (!o) return true;
+  if (id && (o.ids.has(id) || o.hideLive.has(id))) return false;
+  if (tMicros !== null && tMicros <= o.endMicros) return false;
+  return true;
+}
+/** A live photo that arrives after the overlay ends is the moment the workspace was built for. */
+/** A live photo with people in it, taken after the record and after `badgeAfter` (the demo), is the
+ *  moment the workspace was built for; a photo of a panel or a cable on stage is not. Called on
+ *  insert and again on update, since the people count arrives with perception. */
+export function badgeLive(e: Ev) { const o = state.overlay; if (o && o.badge && !o.ids.has(e.eventId) && e.tMicros > o.badgeAfterMicros && e.peopleCount >= 1 && !state.badges.has(e.eventId)) state.badges.set(e.eventId, o.badge); }
 function connectData(onState: OnState) {
   const gen = ++generation;
   if (dataConn) { try { dataConn.disconnect(); } catch { /* already closed */ } dataConn = null; }
   resetState(); notify();
+  overlayLoader?.(DB, WS_ID);
   const live = () => gen === generation; // callbacks from a replaced connection are ignored
   // A photo's time is when it was taken (client_t); the server receive time is the fallback when the
   // phone clock is unparseable or more than a week off. Replays of past shifts keep their own clock.
@@ -161,9 +191,9 @@ function connectData(onState: OnState) {
       if (!live()) return;
       state.connected = true; onState('live');
       const on = <T extends any[]>(fn: (...a: T) => void) => (...a: T) => { if (live()) fn(...a); };
-      conn.db.event.onInsert(on((_c: any, r: any) => { const e = toEv(r); state.events.set(e.eventId, e); state.fresh.add(e.eventId); setTimeout(() => { state.fresh.delete(e.eventId); notify(); }, 1200); notify(); }));
-      conn.db.event.onUpdate(on((_c: any, _o: any, r: any) => { const e = toEv(r); state.events.set(e.eventId, e); notify(); }));
-      conn.db.event.onDelete(on((_c: any, r: any) => { state.events.delete(r.eventId); notify(); }));
+      conn.db.event.onInsert(on((_c: any, r: any) => { const e = toEv(r); if (!liveRowOk(e.eventId, e.tMicros)) return; badgeLive(e); state.events.set(e.eventId, e); state.fresh.add(e.eventId); setTimeout(() => { state.fresh.delete(e.eventId); notify(); }, 1200); notify(); }));
+      conn.db.event.onUpdate(on((_c: any, _o: any, r: any) => { const e = toEv(r); if (!liveRowOk(e.eventId, e.tMicros)) return; badgeLive(e); state.events.set(e.eventId, e); notify(); }));
+      conn.db.event.onDelete(on((_c: any, r: any) => { if (state.overlay?.ids.has(r.eventId)) return; state.events.delete(r.eventId); notify(); }));
       conn.db.entity.onInsert(on((_c: any, r: any) => { state.entities.set(r.entityId, { ...r, firstSeenMicros: BigInt(r.firstSeenMicros), lastSeenMicros: BigInt(r.lastSeenMicros), aliases: [...r.aliases] }); notify(); }));
       conn.db.entity.onUpdate(on((_c: any, _o: any, r: any) => { state.entities.set(r.entityId, { ...r, firstSeenMicros: BigInt(r.firstSeenMicros), lastSeenMicros: BigInt(r.lastSeenMicros), aliases: [...r.aliases] }); notify(); }));
       conn.db.edge.onInsert(on((_c: any, r: any) => { state.edges.push({ ...r, edgeId: BigInt(r.edgeId) }); notify(); }));
@@ -172,27 +202,27 @@ function connectData(onState: OnState) {
       conn.db.episode.onUpdate(on((_c: any, _o: any, r: any) => { state.episodes.set(String(r.episodeId), { ...r, episodeId: BigInt(r.episodeId), tStartMicros: BigInt(r.tStartMicros), tEndMicros: BigInt(r.tEndMicros), eventIds: [...r.eventIds] }); notify(); }));
       conn.db.handoff.onInsert(on((_c: any, r: any) => { state.handoffs.push({ ...r, handoffId: BigInt(r.handoffId), sinceMicros: BigInt(r.sinceMicros), generatedMicros: BigInt(r.generatedMicros), eventIds: [...r.eventIds] }); notify(); }));
       const toAlert = (r: any): Alert => ({ id: String(r.alertId), alertId: BigInt(r.alertId), eventId: r.eventId, rawKind: r.kind, kind: r.kind === 'anomaly' ? 'warning' : 'critical', text: r.text, tMicros: BigInt(r.tMicros), assetId: r.entityId || undefined, assetName: r.entityName || undefined, deviceId: r.deviceId, wearerName: r.wearerName, acked: !!r.acked, ackedMicros: r.ackedMicros != null ? BigInt(r.ackedMicros) : undefined, slackStatus: r.slackStatus });
-      conn.db.alert.onInsert(on((_c: any, r: any) => { const a = toAlert(r); state.alerts.set(a.id, a); state.fresh.add(a.eventId); setTimeout(() => { state.fresh.delete(a.eventId); notify(); }, 1200); notify(); }));
-      conn.db.alert.onUpdate(on((_c: any, _o: any, r: any) => { const a = toAlert(r); state.alerts.set(a.id, a); notify(); }));
+      conn.db.alert.onInsert(on((_c: any, r: any) => { const a = toAlert(r); if (!liveRowOk(a.eventId, a.tMicros)) return; state.alerts.set(a.id, a); state.fresh.add(a.eventId); setTimeout(() => { state.fresh.delete(a.eventId); notify(); }, 1200); notify(); }));
+      conn.db.alert.onUpdate(on((_c: any, _o: any, r: any) => { const a = toAlert(r); if (!liveRowOk(a.eventId, a.tMicros)) return; state.alerts.set(a.id, a); notify(); }));
       conn.db.alert.onDelete(on((_c: any, r: any) => { state.alerts.delete(String(r.alertId)); notify(); }));
       const toLoc = (r: any): Loc => ({ eventId: r.eventId, deviceId: r.deviceId, shiftId: r.shiftId, tMicros: BigInt(r.tMicros), lat: Number(r.lat), lon: Number(r.lon), accuracyM: Number(r.accuracyM), altM: r.altM ?? undefined, floor: r.floor ?? undefined, fixT: r.fixT, ageMs: r.ageMs ?? undefined });
-      conn.db.eventLocation.onInsert(on((_c: any, r: any) => { state.locations.set(r.eventId, toLoc(r)); notify(); }));
-      conn.db.eventLocation.onUpdate(on((_c: any, _o: any, r: any) => { state.locations.set(r.eventId, toLoc(r)); notify(); }));
-      conn.db.eventLocation.onDelete(on((_c: any, r: any) => { state.locations.delete(r.eventId); notify(); }));
+      conn.db.eventLocation.onInsert(on((_c: any, r: any) => { const l = toLoc(r); if (!liveRowOk(l.eventId, l.tMicros)) return; state.locations.set(r.eventId, l); notify(); }));
+      conn.db.eventLocation.onUpdate(on((_c: any, _o: any, r: any) => { const l = toLoc(r); if (!liveRowOk(l.eventId, l.tMicros)) return; state.locations.set(r.eventId, l); notify(); }));
+      conn.db.eventLocation.onDelete(on((_c: any, r: any) => { if (state.overlay?.ids.has(r.eventId)) return; state.locations.delete(r.eventId); notify(); }));
       // A track point's time is the phone's clock (`t`), like a photo's capture time; the server
       // micros are the fallback, and the only time a replayed dataset would otherwise show (#26).
       const walkedMicros = (r: any): bigint => { const srv = BigInt(r.tMicros); const ms = Date.parse(r.t); if (!Number.isFinite(ms)) return srv; const c = BigInt(Math.round(ms)) * 1000n; const d = c > srv ? c - srv : srv - c; return d > 7n * 86_400_000_000n ? srv : c; };
       const toPt = (r: any): TrackPoint => ({ pointId: String(r.pointId), deviceId: r.deviceId, shiftId: r.shiftId, tMicros: walkedMicros(r), kind: r.kind, lat: Number(r.lat), lon: Number(r.lon), accuracyM: Number(r.accuracyM), floor: r.floor ?? undefined });
-      conn.db.trackPoint.onInsert(on((_c: any, r: any) => { const p = toPt(r); state.track.set(p.pointId, p); notify(); }));
+      conn.db.trackPoint.onInsert(on((_c: any, r: any) => { const p = toPt(r); if (!liveRowOk(null, p.tMicros)) return; state.track.set(p.pointId, p); notify(); }));
       conn.db.trackPoint.onDelete(on((_c: any, r: any) => { state.track.delete(String(r.pointId)); notify(); }));
       const toQ = (r: any): Question => ({ questionId: String(r.questionId), tMicros: BigInt(r.tMicros), source: r.source, tool: r.tool, text: r.text, answer: r.answer, eventIds: [...r.eventIds], asker: r.asker });
       conn.db.question.onInsert(on((_c: any, r: any) => { const q = toQ(r); state.questions.set(q.questionId, q); state.fresh.add('q:' + q.questionId); setTimeout(() => { state.fresh.delete('q:' + q.questionId); notify(); }, 1500); notify(); }));
       conn.db.question.onDelete(on((_c: any, r: any) => { state.questions.delete(String(r.questionId)); notify(); }));
       const toIssue = (r: any): Issue => ({ issueId: r.issueId, title: r.title, assetId: r.assetId, openedBy: r.openedBy, openedMicros: BigInt(r.openedMicros), status: r.status, resolvedEventId: r.resolvedEventId ?? undefined, resolvedMicros: r.resolvedMicros != null ? BigInt(r.resolvedMicros) : undefined, resolutionNote: r.resolutionNote ?? undefined });
-      conn.db.issue.onInsert(on((_c: any, r: any) => { state.issues.set(r.issueId, toIssue(r)); notify(); }));
-      conn.db.issue.onUpdate(on((_c: any, _o: any, r: any) => { state.issues.set(r.issueId, toIssue(r)); notify(); }));
+      conn.db.issue.onInsert(on((_c: any, r: any) => { if (state.overlay) return; state.issues.set(r.issueId, toIssue(r)); notify(); })); // an overlay carries its own problems; the live sample work orders stay out of it
+      conn.db.issue.onUpdate(on((_c: any, _o: any, r: any) => { if (state.overlay) return; state.issues.set(r.issueId, toIssue(r)); notify(); }));
       conn.db.issue.onDelete(on((_c: any, r: any) => { state.issues.delete(r.issueId); notify(); }));
-      conn.db.alertResolution.onInsert(on((_c: any, r: any) => { state.resolutions.set(String(r.id), { id: String(r.id), alertId: String(r.alertId), eventId: r.eventId, deviceId: r.deviceId, tMicros: BigInt(r.tMicros), how: r.how }); notify(); }));
+      conn.db.alertResolution.onInsert(on((_c: any, r: any) => { if (!liveRowOk(r.eventId, BigInt(r.tMicros))) return; state.resolutions.set(String(r.id), { id: String(r.id), alertId: String(r.alertId), eventId: r.eventId, deviceId: r.deviceId, tMicros: BigInt(r.tMicros), how: r.how }); notify(); }));
       conn.db.wearer.onInsert(on((_c: any, r: any) => { state.wearers.set(r.deviceId, { ...r }); notify(); }));
       conn.db.wearer.onUpdate(on((_c: any, _o: any, r: any) => { state.wearers.set(r.deviceId, { ...r }); notify(); }));
       conn.db.asset.onInsert(on((_c: any, r: any) => { state.assets.set(r.assetId, { ...r, patterns: [...r.patterns] }); notify(); }));
@@ -207,10 +237,13 @@ function connectData(onState: OnState) {
 }
 let lastOnState: OnState | null = null;
 /** Switch the workspace from the UI. null = follow the server's demo_config again. */
-export function setDb(db: string | null) {
+export function setDb(db: string | null) { setWorkspace(db, null); }
+/** Choose a workspace: its database and, when several share one, its id. null = follow the server's demo_config again. */
+export function setWorkspace(db: string | null, wsId: string | null) {
   chosen = db; try { if (db) localStorage.setItem('wm.db', db); else localStorage.removeItem('wm.db'); } catch { /* ignore */ }
+  const prevWs = WS_ID; WS_ID = pinnedWs || wsId; try { if (wsId) localStorage.setItem('wm.ws', wsId); else localStorage.removeItem('wm.ws'); } catch { /* ignore */ }
   const next = pinned || chosen || serverDb || DIRECTORY_DB;
-  if (next !== DB) { DB = next; if (lastOnState) connectData(lastOnState); } else notify();
+  if (next !== DB || WS_ID !== prevWs) { DB = next; if (lastOnState) connectData(lastOnState); } else notify();
 }
 let serverDb: string | null = null;
 export function connect(onState: OnState) {

@@ -1,0 +1,91 @@
+{
+  "tz": "-06:00",
+  "wearers": [
+    { "deviceId": "edward-iphone", "name": "Edward", "role": "Builder", "shift": "Day" },
+    { "deviceId": "gary-iphone", "name": "Gary", "role": "Builder", "shift": "Night" }
+  ],
+  "shifts": [
+    { "shiftId": "wk-sat-pm", "deviceId": "edward-iphone", "start": "2026-11-07T13:00:00-06:00", "end": "2026-11-07T22:00:00-06:00", "title": "Saturday afternoon" },
+    { "shiftId": "wk-sat-night", "deviceId": "edward-iphone", "start": "2026-11-07T22:00:00-06:00", "end": "2026-11-08T06:00:00-06:00", "title": "Saturday night" }
+  ],
+  "events": [
+    {
+      "id": "wk-0001",
+      "deviceId": "edward-iphone",
+      "t": "2026-11-07T18:50:49-06:00",
+      "source": "shutter_button",
+      "photo": "module:b640d072-00fe-4de4-be19-76e49ba33ae3",
+      "keepFaces": "all",
+      "lat": 32.98588, "lon": -96.75132, "accuracyM": 15, "floor": 0,
+      "place": "ECSW classroom",
+      "summary": "Two laptops open on a classroom table, a terminal showing a failed upload.",
+      "activity": "debugging the capture app",
+      "people": 2,
+      "textInScene": ["ingest_token"],
+      "dwellMin": 90
+    },
+    {
+      "id": "wk-0002",
+      "deviceId": "edward-iphone",
+      "t": "2026-11-07T21:10:00-06:00",
+      "source": "camera_roll",
+      "photo": "photos/photo-75.jpg",
+      "keepFaces": "all",
+      "lat": 32.98612, "lon": -96.75125, "accuracyM": 12, "floor": 0,
+      "place": "Axxess Atrium",
+      "summary": "A crowded atrium with tables of teams working under banners.",
+      "activity": "dinner",
+      "people": 40,
+      "textInScene": ["HACKUTD 2026"],
+      "dwellMin": 30
+    },
+    {
+      "id": "wk-0003",
+      "deviceId": "edward-iphone",
+      "t": "2026-11-08T00:20:00-06:00",
+      "source": "camera_roll",
+      "photo": "photos/photo-91.jpg",
+      "keepFaces": "all",
+      "lat": 32.98595, "lon": -96.75140, "accuracyM": 20, "floor": 1,
+      "place": "ECSW second floor landing",
+      "summary": "An empty stairwell landing with a vending machine, lights on.",
+      "activity": "walking to the classroom",
+      "people": 0,
+      "textInScene": [],
+      "dwellMin": 2
+    },
+    {
+      "id": "wk-0004",
+      "deviceId": "edward-iphone",
+      "t": "2026-11-08T02:35:55-06:00",
+      "source": "shutter_button",
+      "photo": "module:0cea6c45-f157-4931-a216-ec1a5b26cd45",
+      "keepFaces": "all",
+      "lat": 32.98617, "lon": -96.75124, "accuracyM": 10, "floor": 0,
+      "place": "ECSW north entrance",
+      "summary": "Glass entrance doors at night, a phone screen showing a successful upload.",
+      "activity": "first real photo uploaded",
+      "people": 1,
+      "textInScene": ["in_graph"],
+      "dwellMin": 5
+    }
+  ],
+  "issues": [
+    {
+      "id": "wk-issue-token",
+      "title": "First real photo blocked on the ingest token",
+      "asset": "capture app",
+      "kind": "fault_text",
+      "raisedBy": "wk-0001",
+      "resolvedBy": "wk-0004",
+      "how": "photo_shows_recovery",
+      "note": "Token set through the admin reducer; upload went through."
+    }
+  ],
+  "hideLive": [
+    "96d4000f-d34b-4d62-a80e-bf588ae94c29",
+    "fd04b475-6bfa-46e4-91ff-27aad2bb597a",
+    "6b25730d-01c2-44e4-aaf2-37c7c5cd177b"
+  ],
+  "extraWaypoints": []
+}

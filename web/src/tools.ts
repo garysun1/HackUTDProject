@@ -8,7 +8,7 @@ import { vocab } from './workspaces';
 const tools = document.getElementById('floor-tools') as HTMLElement;
 export let fitRequested = 0; // bumped when the user asks to fit; the views compare against their own copy
 let key = '';
-const SPEEDS = [1, 10, 60, 300];
+const speeds = () => { const [t0, t1] = replayRange(); return (t1 - t0) / 3_600_000 > 6 ? [1, 60, 300, 1800, 3600] : [1, 10, 60, 300]; }; // a record spanning a day gets two faster steps
 // Both render paths (store change, view tick) must agree on userView, or the bar is rebuilt under the pointer.
 let userViewFn: () => boolean = () => false;
 export function setUserViewSource(fn: () => boolean) { userViewFn = fn; }
@@ -37,14 +37,14 @@ export function renderTools(userView: boolean = userViewFn()) {
   const tracedCount = traced ? shownEvents().filter(e => state.edges.some(x => x.fromId === e.eventId && x.toId === traced.entityId)).length : 0;
   const hasMap = state.locations.size > 0 || state.track.size > 0;
   const r = view.replay;
-  const k = `${view.mode}|${vocab().session}|${hasMap}|${r.on}|${r.playing}|${r.speed}|${tracedName}|${tracedCount}|${userView}`;
+  const k = `${view.mode}|${vocab().session}|${hasMap}|${r.on}|${r.playing}|${r.speed}|${tracedName}|${tracedCount}|${userView}|${speeds().length}`;
   if (k !== key) {
     key = k;
     tools.innerHTML =
       (tracedName ? `<button type="button" class="pill" data-clear title="Stop tracing">Tracing <b>${esc(tracedName)}</b> · ${tracedCount} photo${tracedCount === 1 ? '' : 's'} · clear</button>` : '') +
       (view.mode === 'map' ? '' : r.on
         ? `<span class="replay" role="group" aria-label="Replay"><button type="button" class="btn ghost play" data-play title="${r.playing ? 'Pause' : 'Play'} (space)">${r.playing ? '❚❚' : '▶'}</button>` +
-          `<span class="speeds">${SPEEDS.map(s => `<button type="button" data-speed="${s}" aria-pressed="${r.speed === s}">${s}×</button>`).join('')}</span>` +
+          `<span class="speeds">${speeds().map(s => `<button type="button" data-speed="${s}" aria-pressed="${r.speed === s}">${s}×</button>`).join('')}</span>` +
           `<label class="scrub" title="Scrub the ${esc(vocab().session.toLowerCase())}"><input type="range" min="0" max="1000" value="${Math.round(r.progress * 1000)}" data-scrub aria-label="Replay position"></label>` +
           `<span class="clock mono" data-clock></span><button type="button" class="btn ghost" data-live title="Back to now (L)">Live</button></span>`
         : `<button type="button" class="btn ghost" data-play title="Replay the ${esc(vocab().session.toLowerCase())} from its first moment (space)">▶ Replay</button>`) +
