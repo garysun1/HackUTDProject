@@ -127,15 +127,33 @@ export async function ackAlert(alertId: bigint) { await callProcedure('ack_alert
 // ---------- photos (lazy, via SQL endpoint) ----------
 const photoCol = 'jpeg_b_64';
 const inflight = new Set<string>();
+// Photos load at most PHOTO_SLOTS at a time; a failed or empty fetch is not retried until its backoff
+// has passed (the map and panel ask for every missing photo on every frame, so without this a slow or
+// failing Maincloud turns into a stream of large requests that starves the page). A response that
+// arrives after the workspace changed is dropped.
+const PHOTO_SLOTS = 4; let photoActive = 0; const photoQueue: (() => void)[] = [];
+const photoRetry = new Map<string, { at: number; n: number }>();
 export async function loadPhoto(eventId: string): Promise<string | undefined> {
   if (state.photos.has(eventId)) return state.photos.get(eventId);
   const st = state.staticPhotos.get(eventId); if (st) { state.photos.set(eventId, st); return st; }
-  if (inflight.has(eventId)) return; inflight.add(eventId);
+  if (inflight.has(eventId)) return;
+  const wait = photoRetry.get(eventId); if (wait && Date.now() < wait.at) return;
+  inflight.add(eventId);
+  const db = DB, gen = generation;
+  if (photoActive >= PHOTO_SLOTS) await new Promise<void>(r => photoQueue.push(r));
+  photoActive++;
+  let ok = false;
   try {
-    const r = await fetch(`${HOST}/v1/database/${DB}/sql`, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: `SELECT mime, ${photoCol} FROM photo WHERE event_id = '${eventId.replace(/'/g, '')}'` });
-    const [res] = await r.json(); const row = res.rows?.[0]; if (!row) return;
-    const url = `data:${row[0]};base64,${row[1]}`; state.photos.set(eventId, url); notify(); return url;
-  } finally { inflight.delete(eventId); }
+    if (gen !== generation) return; // the workspace changed while this waited in the queue
+    const r = await fetch(`${HOST}/v1/database/${db}/sql`, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: `SELECT mime, ${photoCol} FROM photo WHERE event_id = '${eventId.replace(/'/g, '')}'` });
+    if (!r.ok) return;
+    const [res] = await r.json(); const row = res?.rows?.[0]; if (!row) return;
+    if (gen !== generation) return;
+    const url = `data:${row[0]};base64,${row[1]}`; state.photos.set(eventId, url); ok = true; photoRetry.delete(eventId); notify(); return url;
+  } catch { return; } finally {
+    inflight.delete(eventId); photoActive--; photoQueue.shift()?.();
+    if (!ok && gen === generation) { const n = (photoRetry.get(eventId)?.n ?? 0) + 1; photoRetry.set(eventId, { n, at: Date.now() + Math.min(60_000, 2_000 * 2 ** (n - 1)) }); }
+  }
 }
 
 // ---------- procedures over HTTP (same path the phone uses) ----------
@@ -156,7 +174,7 @@ function resetState() {
   state.events.clear(); state.entities.clear(); state.edges = []; state.episodes.clear(); state.handoffs = []; state.alerts.clear();
   state.wearers.clear(); state.assets.clear(); state.photos.clear(); state.locations.clear(); state.track.clear(); state.questions.clear(); state.issues.clear(); state.resolutions.clear();
   state.selected = null; state.fresh.clear(); state.assetFilter = null; state.hiddenWearers.clear();
-  state.overlay = null; state.staticPhotos.clear(); state.badges.clear();
+  state.overlay = null; state.staticPhotos.clear(); state.badges.clear(); photoRetry.clear();
 }
 // The overlay module (overlay.ts) registers itself here, so the store need not know the workspace list.
 let overlayLoader: ((db: string, wsId: string | null) => void) | null = null;
@@ -243,6 +261,8 @@ export function setWorkspace(db: string | null, wsId: string | null) {
   chosen = db; try { if (db) localStorage.setItem('wm.db', db); else localStorage.removeItem('wm.db'); } catch { /* ignore */ }
   const prevWs = WS_ID; WS_ID = pinnedWs || wsId; try { if (wsId) localStorage.setItem('wm.ws', wsId); else localStorage.removeItem('wm.ws'); } catch { /* ignore */ }
   const next = pinned || chosen || serverDb || DIRECTORY_DB;
+  // a URL that pins ?db= would keep the old database: open the chosen workspace as its own page instead
+  if (pinned && db && db !== pinned) { location.href = `${location.pathname}?ws=${encodeURIComponent(wsId ?? '')}`; return; }
   if (next !== DB || WS_ID !== prevWs) { DB = next; if (lastOnState) connectData(lastOnState); } else notify();
 }
 let serverDb: string | null = null;
