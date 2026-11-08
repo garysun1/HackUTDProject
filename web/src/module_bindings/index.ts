@@ -37,6 +37,7 @@ import {
 import AckAlertReducer from "./ack_alert_reducer";
 import DeleteAssetReducer from "./delete_asset_reducer";
 import ReperceiveReducer from "./reperceive_reducer";
+import SetConfigReducer from "./set_config_reducer";
 import SetLabelReducer from "./set_label_reducer";
 import SetNoteReducer from "./set_note_reducer";
 import UpsertAssetReducer from "./upsert_asset_reducer";
@@ -51,6 +52,7 @@ import * as SlackTestProcedure from "./slack_test_procedure";
 // Import all table schema definitions
 import AlertRow from "./alert_table";
 import AssetRow from "./asset_table";
+import DemoConfigRow from "./demo_config_table";
 import EdgeRow from "./edge_table";
 import EntityRow from "./entity_table";
 import EpisodeRow from "./episode_table";
@@ -93,6 +95,17 @@ const tablesSchema = __schema({
       { name: 'asset_asset_id_key', constraint: 'unique', columns: ['assetId'] },
     ],
   }, AssetRow),
+  demoConfig: __table({
+    name: 'demo_config',
+    indexes: [
+      { accessor: 'key', name: 'demo_config_key_idx_btree', algorithm: 'btree', columns: [
+        'key',
+      ] },
+    ],
+    constraints: [
+      { name: 'demo_config_key_key', constraint: 'unique', columns: ['key'] },
+    ],
+  }, DemoConfigRow),
   edge: __table({
     name: 'edge',
     indexes: [
@@ -227,6 +240,7 @@ const reducersSchema = __reducers(
   __reducerSchema("ack_alert", AckAlertReducer),
   __reducerSchema("delete_asset", DeleteAssetReducer),
   __reducerSchema("reperceive", ReperceiveReducer),
+  __reducerSchema("set_config", SetConfigReducer),
   __reducerSchema("set_label", SetLabelReducer),
   __reducerSchema("set_note", SetNoteReducer),
   __reducerSchema("upsert_asset", UpsertAssetReducer),

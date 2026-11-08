@@ -6,7 +6,7 @@ import { renderMap, mapUserView } from './map';
 import { renderTools } from './tools';
 import { view, setMode } from './view';
 
-document.getElementById('db')!.textContent = DB;
+const dbEl = document.getElementById('db')!; dbEl.textContent = DB;
 const conn = document.getElementById('conn')!; const connText = document.getElementById('conn-text')!;
 const windowSel = document.getElementById('window') as HTMLSelectElement;
 const wearersEl = document.getElementById('wearers')!;
@@ -34,6 +34,7 @@ wearersEl.addEventListener('click', e => { const b = (e.target as HTMLElement).c
 
 onChange(() => {
   if (!view.modeChosen && state.locations.size && view.mode !== 'map') setMode('map', false); // the first positioned photo brings the map up
+  dbEl.textContent = DB; // follows the dataset switch
   renderChips(); renderTimeline(); renderRail(); // detail panel first: it changes the canvas width
   renderTools(view.mode === 'map' ? mapUserView() : floorUserView()); renderMap(); renderFloor();
 });

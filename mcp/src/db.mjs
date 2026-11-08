@@ -1,7 +1,21 @@
 // Read access to the wm-physical SpacetimeDB module over its HTTP API.
 // Tables are public; procedures/reducers are called through /call/<name>.
 const HOST = (process.env.SPACETIME_HOST || 'https://maincloud.spacetimedb.com').replace(/\/+$/, '');
-const DB = process.env.SPACETIME_DB_NAME || 'wm-physical';
+// The directory database holds demo_config.active_dataset naming the database to read (decision
+// 0029). SPACETIME_DB_NAME pins one and ignores the switch.
+const DIRECTORY = 'wm-physical';
+const PINNED = process.env.SPACETIME_DB_NAME || '';
+let dbCache = { t: 0, name: PINNED || DIRECTORY };
+export async function activeDb() {
+  if (PINNED) return PINNED;
+  if (Date.now() - dbCache.t < 10_000) return dbCache.name;
+  try {
+    const r = await fetch(`${HOST}/v1/database/${DIRECTORY}/sql`, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: "SELECT value FROM demo_config WHERE key = 'active_dataset'" });
+    const [res] = await r.json(); const v = res?.rows?.[0]?.[0];
+    dbCache = { t: Date.now(), name: (v && String(v).trim()) || DIRECTORY };
+  } catch { dbCache.t = Date.now(); }
+  return dbCache.name;
+}
 const TZ = process.env.WM_TZ || 'America/Chicago';
 
 function decode(v) {
@@ -13,6 +27,7 @@ function decode(v) {
 }
 
 export async function sql(query) {
+  const DB = await activeDb();
   const r = await fetch(`${HOST}/v1/database/${DB}/sql`, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: query });
   if (!r.ok) throw new Error(`sql ${r.status}: ${(await r.text()).slice(0, 200)}`);
   const [res] = await r.json();
@@ -21,6 +36,7 @@ export async function sql(query) {
 }
 
 export async function call(name, args) {
+  const DB = await activeDb();
   const r = await fetch(`${HOST}/v1/database/${DB}/call/${name}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(args) });
   const text = await r.text();
   if (!r.ok) throw new Error(`${name} ${r.status}: ${text.slice(0, 300)}`);

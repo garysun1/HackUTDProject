@@ -193,8 +193,20 @@ const trackPoint = table(
   }
 );
 
+// Demo configuration, switchable from the database without touching the frontend (decision 0029).
+// Key `active_dataset` names the database the console and MCP server should read: `wm-physical`
+// (the real capture) or one of the synthetic scenario databases. Only wm-physical's row is read.
+const demoConfig = table(
+  { name: 'demo_config', public: true },
+  {
+    key: t.string().primaryKey(),
+    value: t.string(),
+    updatedMicros: t.u64(),
+  }
+);
+
 const spacetimedb = schema(
-  { event, photo, entity, edge, episode, handoff, alert, asset, wearer, perceiveJob, eventLocation, trackPoint },
+  { event, photo, entity, edge, episode, handoff, alert, asset, wearer, perceiveJob, eventLocation, trackPoint, demoConfig },
   {
     // #14: secrets live in the database's environment, set with
     //   spacetime publish wm-physical --env-only --server maincloud  (see module/README.md)
@@ -938,6 +950,17 @@ export const ackAlert = spacetimedb.reducer({ alertId: t.u64() }, (ctx, { alertI
 });
 
 // ---------- admin reducers (token from env: ADMIN_TOKEN, else INGEST_TOKEN) ----------
+export const setConfig = spacetimedb.reducer(
+  { adminToken: t.string(), key: t.string(), value: t.string() },
+  (ctx, { adminToken, key, value }) => {
+    if (adminToken !== (ctx.env.ADMIN_TOKEN ?? ctx.env.INGEST_TOKEN)) throw new SenderError('unauthorized');
+    if (!/^[a-z_]{1,40}$/.test(key)) throw new SenderError('bad_key');
+    const row = { key, value, updatedMicros: ctx.timestamp.microsSinceUnixEpoch };
+    if (ctx.db.demoConfig.key.find(key)) ctx.db.demoConfig.key.update(row);
+    else ctx.db.demoConfig.insert(row);
+  }
+);
+
 
 export const upsertAsset = spacetimedb.reducer(
   {

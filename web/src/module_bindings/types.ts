@@ -35,6 +35,13 @@ export const Asset = __t.object("Asset", {
 });
 export type Asset = __Infer<typeof Asset>;
 
+export const DemoConfig = __t.object("DemoConfig", {
+  key: __t.string(),
+  value: __t.string(),
+  updatedMicros: __t.u64(),
+});
+export type DemoConfig = __Infer<typeof DemoConfig>;
+
 export const Edge = __t.object("Edge", {
   edgeId: __t.u64(),
   fromId: __t.string(),

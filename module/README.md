@@ -27,6 +27,30 @@ cd module && node --experimental-strip-types --test test/rules.test.ts
    posting again.
 5. New alerts post to Slack through `SLACK_WEBHOOK_URL`; the result is in `alert.slack_status`.
 
+## Datasets (decision 0029)
+
+Six databases run this module: `wm-physical` (the real capture) and five synthetic floors,
+`wm-nmc2`, `wm-plant`, `wm-hospital`, `wm-substation`, `wm-warehouse`, replayed from
+`demo/synth/`. Which one the console and MCP server show is the row `active_dataset` in
+`wm-physical`'s `demo_config` table. Switch it with the admin token; every open console follows
+within a second, no reload:
+
+```bash
+ADMIN_TOKEN=... node module/scripts/dataset.mjs            # current dataset and photo counts
+ADMIN_TOKEN=... node module/scripts/dataset.mjs wm-nmc2    # show the data center shift
+ADMIN_TOKEN=... node module/scripts/dataset.mjs live       # back to the real capture
+```
+
+Rebuild a synthetic database from its scenario (seeds registry and wearers, ingests the photos
+with a synthetic walk and shift track, waits for perception):
+
+```bash
+INGEST_TOKEN=... node demo/synth/replay.mjs nmc2-datacenter --db wm-nmc2
+```
+
+Publishing a new module version goes to all six (`spacetime publish <db> -s maincloud`); each
+database keeps its own env, so pass the keys on the first publish of a new database.
+
 ## Secrets and config (#14)
 
 Secrets are the database's environment variables, declared in the schema and never in the repo.

@@ -1,7 +1,11 @@
 // Live state fed by SpacetimeDB subscriptions. One store, many lenses.
 import { DbConnection } from './module_bindings';
 
-export const DB = new URLSearchParams(location.search).get('db') || 'wm-physical';
+// The directory database holds demo_config.active_dataset, which names the database to read
+// (decision 0029). `?db=` in the URL pins one and ignores the switch.
+export const DIRECTORY_DB = 'wm-physical';
+const pinned = new URLSearchParams(location.search).get('db');
+export let DB = pinned || DIRECTORY_DB;
 export const HOST = 'https://maincloud.spacetimedb.com';
 export const WS = 'wss://maincloud.spacetimedb.com';
 
@@ -125,43 +129,73 @@ export async function hasProcedure(name: string): Promise<boolean> {
 }
 
 // ---------- connection ----------
-export function connect(onState: (s: 'connecting' | 'live' | 'error', msg?: string) => void) {
+type OnState = (s: 'connecting' | 'live' | 'error', msg?: string) => void;
+let generation = 0; let dataConn: any = null;
+function resetState() {
+  state.events.clear(); state.entities.clear(); state.edges = []; state.episodes.clear(); state.handoffs = []; state.alerts.clear();
+  state.wearers.clear(); state.assets.clear(); state.photos.clear(); state.locations.clear(); state.track.clear();
+  state.selected = null; state.fresh.clear(); state.assetFilter = null; state.hiddenWearers.clear();
+}
+function connectData(onState: OnState) {
+  const gen = ++generation;
+  if (dataConn) { try { dataConn.disconnect(); } catch { /* already closed */ } dataConn = null; }
+  resetState(); notify();
+  const live = () => gen === generation; // callbacks from a replaced connection are ignored
   const toEv = (r: any): Ev => ({ eventId: r.eventId, deviceId: r.deviceId, clientT: r.clientT, tMicros: BigInt(r.tMicros), source: r.source, status: r.status, note: r.note ?? undefined, label: r.label ?? undefined, scene: r.scene, locationGuess: r.locationGuess, activity: r.activity, summary: r.summary, peopleCount: Number(r.peopleCount), confidence: Number(r.confidence), perceptionJson: r.perceptionJson });
-  DbConnection.builder()
+  dataConn = DbConnection.builder()
     .withUri(WS)
     .withDatabaseName(DB)
     .onConnect((conn) => {
+      if (!live()) return;
       state.connected = true; onState('live');
-      conn.db.event.onInsert((_c, r) => { const e = toEv(r); state.events.set(e.eventId, e); state.fresh.add(e.eventId); setTimeout(() => { state.fresh.delete(e.eventId); notify(); }, 1200); notify(); });
-      conn.db.event.onUpdate((_c, _o, r) => { const e = toEv(r); state.events.set(e.eventId, e); notify(); });
-      conn.db.event.onDelete((_c, r) => { state.events.delete(r.eventId); notify(); });
-      conn.db.entity.onInsert((_c, r) => { state.entities.set(r.entityId, { ...r, firstSeenMicros: BigInt(r.firstSeenMicros), lastSeenMicros: BigInt(r.lastSeenMicros), aliases: [...r.aliases] }); notify(); });
-      conn.db.entity.onUpdate((_c, _o, r) => { state.entities.set(r.entityId, { ...r, firstSeenMicros: BigInt(r.firstSeenMicros), lastSeenMicros: BigInt(r.lastSeenMicros), aliases: [...r.aliases] }); notify(); });
-      conn.db.edge.onInsert((_c, r) => { state.edges.push({ ...r, edgeId: BigInt(r.edgeId) }); notify(); });
-      conn.db.edge.onDelete((_c, r) => { state.edges = state.edges.filter(x => x.edgeId !== BigInt(r.edgeId)); notify(); });
-      conn.db.episode.onInsert((_c, r) => { state.episodes.set(String(r.episodeId), { ...r, episodeId: BigInt(r.episodeId), tStartMicros: BigInt(r.tStartMicros), tEndMicros: BigInt(r.tEndMicros), eventIds: [...r.eventIds] }); notify(); });
-      conn.db.episode.onUpdate((_c, _o, r) => { state.episodes.set(String(r.episodeId), { ...r, episodeId: BigInt(r.episodeId), tStartMicros: BigInt(r.tStartMicros), tEndMicros: BigInt(r.tEndMicros), eventIds: [...r.eventIds] }); notify(); });
-      conn.db.handoff.onInsert((_c, r) => { state.handoffs.push({ ...r, handoffId: BigInt(r.handoffId), sinceMicros: BigInt(r.sinceMicros), generatedMicros: BigInt(r.generatedMicros), eventIds: [...r.eventIds] }); notify(); });
+      const on = <T extends any[]>(fn: (...a: T) => void) => (...a: T) => { if (live()) fn(...a); };
+      conn.db.event.onInsert(on((_c: any, r: any) => { const e = toEv(r); state.events.set(e.eventId, e); state.fresh.add(e.eventId); setTimeout(() => { state.fresh.delete(e.eventId); notify(); }, 1200); notify(); }));
+      conn.db.event.onUpdate(on((_c: any, _o: any, r: any) => { const e = toEv(r); state.events.set(e.eventId, e); notify(); }));
+      conn.db.event.onDelete(on((_c: any, r: any) => { state.events.delete(r.eventId); notify(); }));
+      conn.db.entity.onInsert(on((_c: any, r: any) => { state.entities.set(r.entityId, { ...r, firstSeenMicros: BigInt(r.firstSeenMicros), lastSeenMicros: BigInt(r.lastSeenMicros), aliases: [...r.aliases] }); notify(); }));
+      conn.db.entity.onUpdate(on((_c: any, _o: any, r: any) => { state.entities.set(r.entityId, { ...r, firstSeenMicros: BigInt(r.firstSeenMicros), lastSeenMicros: BigInt(r.lastSeenMicros), aliases: [...r.aliases] }); notify(); }));
+      conn.db.edge.onInsert(on((_c: any, r: any) => { state.edges.push({ ...r, edgeId: BigInt(r.edgeId) }); notify(); }));
+      conn.db.edge.onDelete(on((_c: any, r: any) => { state.edges = state.edges.filter(x => x.edgeId !== BigInt(r.edgeId)); notify(); }));
+      conn.db.episode.onInsert(on((_c: any, r: any) => { state.episodes.set(String(r.episodeId), { ...r, episodeId: BigInt(r.episodeId), tStartMicros: BigInt(r.tStartMicros), tEndMicros: BigInt(r.tEndMicros), eventIds: [...r.eventIds] }); notify(); }));
+      conn.db.episode.onUpdate(on((_c: any, _o: any, r: any) => { state.episodes.set(String(r.episodeId), { ...r, episodeId: BigInt(r.episodeId), tStartMicros: BigInt(r.tStartMicros), tEndMicros: BigInt(r.tEndMicros), eventIds: [...r.eventIds] }); notify(); }));
+      conn.db.handoff.onInsert(on((_c: any, r: any) => { state.handoffs.push({ ...r, handoffId: BigInt(r.handoffId), sinceMicros: BigInt(r.sinceMicros), generatedMicros: BigInt(r.generatedMicros), eventIds: [...r.eventIds] }); notify(); }));
       const toAlert = (r: any): Alert => ({ id: String(r.alertId), alertId: BigInt(r.alertId), eventId: r.eventId, rawKind: r.kind, kind: r.kind === 'anomaly' ? 'warning' : 'critical', text: r.text, tMicros: BigInt(r.tMicros), assetId: r.entityId || undefined, assetName: r.entityName || undefined, deviceId: r.deviceId, wearerName: r.wearerName, acked: !!r.acked, slackStatus: r.slackStatus });
-      conn.db.alert.onInsert((_c, r) => { const a = toAlert(r); state.alerts.set(a.id, a); state.fresh.add(a.eventId); setTimeout(() => { state.fresh.delete(a.eventId); notify(); }, 1200); notify(); });
-      conn.db.alert.onUpdate((_c, _o, r) => { const a = toAlert(r); state.alerts.set(a.id, a); notify(); });
-      conn.db.alert.onDelete((_c, r) => { state.alerts.delete(String(r.alertId)); notify(); });
+      conn.db.alert.onInsert(on((_c: any, r: any) => { const a = toAlert(r); state.alerts.set(a.id, a); state.fresh.add(a.eventId); setTimeout(() => { state.fresh.delete(a.eventId); notify(); }, 1200); notify(); }));
+      conn.db.alert.onUpdate(on((_c: any, _o: any, r: any) => { const a = toAlert(r); state.alerts.set(a.id, a); notify(); }));
+      conn.db.alert.onDelete(on((_c: any, r: any) => { state.alerts.delete(String(r.alertId)); notify(); }));
       const toLoc = (r: any): Loc => ({ eventId: r.eventId, deviceId: r.deviceId, shiftId: r.shiftId, tMicros: BigInt(r.tMicros), lat: Number(r.lat), lon: Number(r.lon), accuracyM: Number(r.accuracyM), altM: r.altM ?? undefined, floor: r.floor ?? undefined, fixT: r.fixT, ageMs: r.ageMs ?? undefined });
-      conn.db.eventLocation.onInsert((_c, r) => { state.locations.set(r.eventId, toLoc(r)); notify(); });
-      conn.db.eventLocation.onUpdate((_c, _o, r) => { state.locations.set(r.eventId, toLoc(r)); notify(); });
-      conn.db.eventLocation.onDelete((_c, r) => { state.locations.delete(r.eventId); notify(); });
+      conn.db.eventLocation.onInsert(on((_c: any, r: any) => { state.locations.set(r.eventId, toLoc(r)); notify(); }));
+      conn.db.eventLocation.onUpdate(on((_c: any, _o: any, r: any) => { state.locations.set(r.eventId, toLoc(r)); notify(); }));
+      conn.db.eventLocation.onDelete(on((_c: any, r: any) => { state.locations.delete(r.eventId); notify(); }));
       const toPt = (r: any): TrackPoint => ({ pointId: String(r.pointId), deviceId: r.deviceId, shiftId: r.shiftId, tMicros: BigInt(r.tMicros), kind: r.kind, lat: Number(r.lat), lon: Number(r.lon), accuracyM: Number(r.accuracyM), floor: r.floor ?? undefined });
-      conn.db.trackPoint.onInsert((_c, r) => { const p = toPt(r); state.track.set(p.pointId, p); notify(); });
-      conn.db.trackPoint.onDelete((_c, r) => { state.track.delete(String(r.pointId)); notify(); });
-      conn.db.wearer.onInsert((_c, r) => { state.wearers.set(r.deviceId, { ...r }); notify(); });
-      conn.db.wearer.onUpdate((_c, _o, r) => { state.wearers.set(r.deviceId, { ...r }); notify(); });
-      conn.db.asset.onInsert((_c, r) => { state.assets.set(r.assetId, { ...r, patterns: [...r.patterns] }); notify(); });
-      conn.db.asset.onUpdate((_c, _o, r) => { state.assets.set(r.assetId, { ...r, patterns: [...r.patterns] }); notify(); });
+      conn.db.trackPoint.onInsert(on((_c: any, r: any) => { const p = toPt(r); state.track.set(p.pointId, p); notify(); }));
+      conn.db.trackPoint.onDelete(on((_c: any, r: any) => { state.track.delete(String(r.pointId)); notify(); }));
+      conn.db.wearer.onInsert(on((_c: any, r: any) => { state.wearers.set(r.deviceId, { ...r }); notify(); }));
+      conn.db.wearer.onUpdate(on((_c: any, _o: any, r: any) => { state.wearers.set(r.deviceId, { ...r }); notify(); }));
+      conn.db.asset.onInsert(on((_c: any, r: any) => { state.assets.set(r.assetId, { ...r, patterns: [...r.patterns] }); notify(); }));
+      conn.db.asset.onUpdate(on((_c: any, _o: any, r: any) => { state.assets.set(r.assetId, { ...r, patterns: [...r.patterns] }); notify(); }));
       conn.subscriptionBuilder()
-        .onApplied(() => notify())
+        .onApplied(() => { if (live()) notify(); })
         .subscribe(['SELECT * FROM event', 'SELECT * FROM entity', 'SELECT * FROM edge', 'SELECT * FROM episode', 'SELECT * FROM handoff', 'SELECT * FROM alert', 'SELECT * FROM wearer', 'SELECT * FROM asset', 'SELECT * FROM event_location', 'SELECT * FROM track_point']);
     })
-    .onConnectError((_ctx, err) => { state.connected = false; onState('error', String(err?.message ?? err)); })
-    .onDisconnect(() => { state.connected = false; onState('connecting', 'reconnecting'); })
+    .onConnectError((_ctx, err) => { if (live()) { state.connected = false; onState('error', String(err?.message ?? err)); } })
+    .onDisconnect(() => { if (live()) { state.connected = false; onState('connecting', 'reconnecting'); } })
+    .build();
+}
+export function connect(onState: OnState) {
+  connectData(onState);
+  if (pinned) return;
+  // Follow the switch: demo_config.active_dataset on the directory database. Changing it live
+  // swaps the data connection; nothing in the UI needs to know.
+  DbConnection.builder()
+    .withUri(WS)
+    .withDatabaseName(DIRECTORY_DB)
+    .onConnect((conn) => {
+      const apply = (r: any) => { if (r.key !== 'active_dataset') return; const next = String(r.value || '').trim() || DIRECTORY_DB; if (next !== DB) { DB = next; connectData(onState); } };
+      conn.db.demoConfig.onInsert((_c: any, r: any) => apply(r));
+      conn.db.demoConfig.onUpdate((_c: any, _o: any, r: any) => apply(r));
+      conn.subscriptionBuilder().subscribe(['SELECT * FROM demo_config']);
+    })
+    .onConnectError(() => { /* the data connection reports its own state */ })
     .build();
 }

@@ -167,5 +167,12 @@
         "ONLINE"
       ]
     }
-  ]
+  ],
+  "site": {
+    "lat": 32.979,
+    "lon": -96.7061,
+    "radius_m": 60,
+    "label": "Richardson, TX colocation hall (synthetic placement)",
+    "synthetic": true
+  }
 }
