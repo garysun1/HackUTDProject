@@ -171,3 +171,15 @@ h1, h2, h3 { margin: 0; font-weight: 600; letter-spacing: -0.005em; font-size: 1
 #tip .t { font-family: var(--mono); font-size: 11px; color: var(--ink-4); } #tip p { margin: 2px 0 0; }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
 @media (max-width: 900px) { #brain { width: 300px; } #replay { right: 324px; } }
+/* portrait (phone video): 3D on top, panel below, replay bar at the foot */
+@media (orientation: portrait) and (max-width: 760px) {
+  #gl, #labels { height: 52vh; bottom: auto; }
+  #brain { left: 8px; right: 8px; width: auto; top: calc(52vh + 6px); bottom: 58px; }
+  #replay { left: 8px; right: 8px; bottom: 8px; }
+  #legend { left: 8px; bottom: auto; top: calc(52vh - 30px); }
+  #top { top: 8px; left: 8px; right: 8px; }
+  #top .brand .sub { display: none; }
+}
+/* ?video=1: the model fills the frame; the panel and bars are kept in the DOM (the recorder drives them) but not shown */
+body.video #brain, body.video #replay, body.video #legend, body.video #top, body.video #tip { visibility: hidden; pointer-events: none; }
+body.video #gl, body.video #labels { height: 100%; bottom: 0; }

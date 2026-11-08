@@ -39,6 +39,8 @@ export type PinSpec = { id: string; x: number; y: number; z: number; color: stri
 export type WearerSpec = { color: string; name: string; sub: string; pos: [number, number, number] | null; trail: number[] /* flat xyz */; acc?: number /* metres of GPS uncertainty, drawn as a ring */ };
 
 const IMAGERY = (z: number, x: number, y: number) => `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${z}/${y}/${x}`;
+// ?ortho=<m>: half-height of the top-down view in metres (video framing); default 140
+const ORTHO_HALF = Number(new URLSearchParams(location.search).get('ortho')) || 140;
 const rot = <T extends THREE.Object3D>(o: T): T => { o.rotation.x = -Math.PI / 2; return o; };
 
 export class HeatLayer {
@@ -87,9 +89,9 @@ export class SiteScene {
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping; this.renderer.toneMappingExposure = 1.05;
     this.renderer.shadowMap.enabled = true; this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.labels = new CSS2DRenderer({ element: labelsEl });
-    const asp = innerWidth / innerHeight;
+    const asp = this.viewW() / this.viewH();
     this.persp = new THREE.PerspectiveCamera(42, asp, 0.5, 5000); this.persp.position.set(150, 125, 185);
-    const o = 140; this.ortho = new THREE.OrthographicCamera(-o * asp, o * asp, o, -o, 0.5, 5000); this.ortho.position.set(0, 600, 0.001); this.ortho.up.set(0, 0, -1); this.ortho.lookAt(0, 0, 0);
+    const o = ORTHO_HALF; this.ortho = new THREE.OrthographicCamera(-o * asp, o * asp, o, -o, 0.5, 5000); this.ortho.position.set(0, 600, 0.001); this.ortho.up.set(0, 0, -1); this.ortho.lookAt(0, 0, 0);
     this.ctrl3d = new OrbitControls(this.persp, canvas); this.ctrl3d.enableDamping = true; this.ctrl3d.dampingFactor = 0.08; this.ctrl3d.maxPolarAngle = Math.PI / 2 - 0.04; this.ctrl3d.minDistance = 18; this.ctrl3d.maxDistance = 900; this.ctrl3d.target.set(0, 4, 0);
     this.ctrl2d = new OrbitControls(this.ortho, canvas); this.ctrl2d.enableRotate = false; this.ctrl2d.enableDamping = true; this.ctrl2d.dampingFactor = 0.1; this.ctrl2d.minZoom = 0.35; this.ctrl2d.maxZoom = 8; this.ctrl2d.enabled = false;
     this.ctrl2d.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN }; this.ctrl2d.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_PAN };
@@ -104,11 +106,14 @@ export class SiteScene {
   }
 
   get camera() { return this.mode === '3d' ? this.persp : this.ortho; }
+  // the canvas's CSS box, not the window: in the portrait layout the 3D view is the top part of the screen
+  private viewW() { return Math.round(this.renderer.domElement.getBoundingClientRect().width) || innerWidth; }
+  private viewH() { return Math.round(this.renderer.domElement.getBoundingClientRect().height) || innerHeight; }
   resize() {
-    const w = innerWidth, h = innerHeight, asp = w / h;
-    this.renderer.setSize(w, h); this.labels.setSize(w, h);
+    const w = this.viewW(), h = this.viewH(), asp = w / h;
+    this.renderer.setSize(w, h, false); this.labels.setSize(w, h);
     this.persp.aspect = asp; this.persp.updateProjectionMatrix();
-    const o = 140; this.ortho.left = -o * asp; this.ortho.right = o * asp; this.ortho.top = o; this.ortho.bottom = -o; this.ortho.updateProjectionMatrix();
+    const o = ORTHO_HALF; this.ortho.left = -o * asp; this.ortho.right = o * asp; this.ortho.top = o; this.ortho.bottom = -o; this.ortho.updateProjectionMatrix();
     for (const m of this.lineMats) m.resolution.set(w, h);
   }
   applyTheme() {

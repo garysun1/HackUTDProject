@@ -4,6 +4,7 @@ import { SiteScene, type PinSpec, type IssueSpec, type SiteData } from './scene'
 import { sessionShifts, shifts, positionAt, shiftEnd, shiftLive, resolvedAt, renderBrain, inSession, type Shift } from './brain';
 import { centroid } from './geo';
 import { siteFor, locateIn, type KnownSite } from './sites';
+if (new URLSearchParams(location.search).has('video')) document.body.classList.add('video');
 
 const $ = <T extends HTMLElement>(s: string) => document.querySelector<T>(s)!;
 const scene = new SiteScene($('#gl'), $('#labels'));
@@ -59,7 +60,7 @@ function setMode(m: 'live' | 'replay') {
 function setClock(ms: number) { replay.clock = ms; }
 $('#play').onclick = () => {
   const [t0, t1] = range();
-  if (replay.mode === 'live') { setMode('replay'); replay.clock = t0; replay.playing = true; resetHeat(); scene.setFollow(true); }
+  if (replay.mode === 'live') { setMode('replay'); replay.clock = t0; replay.playing = true; resetHeat(); scene.setFollow(!new URLSearchParams(location.search).has('nofollow')); }
   else if (!replay.playing && replay.clock >= t1 - 1) { replay.clock = t0; replay.playing = true; resetHeat(); }
   else replay.playing = !replay.playing;
   $('#play').textContent = replay.playing ? '❚❚' : '▶';
