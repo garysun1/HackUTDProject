@@ -248,7 +248,7 @@ function main() {
 
   const pushDwell = (wp, from, to, rng) => {
     // Jitter: a slow random walk around the spot, a few metres indoors, ~1 m outdoors.
-    const amp = wp.real ? 0.4 : wp.indoor ? 3 : 1;
+    const amp = wp.real ? 0.4 : wp.indoor ? 1.5 : 1;
     let dx = 0, dy = 0;
     for (let t = Math.ceil(from); t <= to; t += 1) {
       dx = dx * 0.9 + gauss(rng) * amp * 0.3;
@@ -382,10 +382,10 @@ function main() {
       emitted.push({ t: smp.t, lat: smp.lat, lon: smp.lon, trueLat: smp.lat, trueLon: smp.lon, floor: smp.floor, accuracyM: Math.round(smp.acc ?? acc) });
       last = smp; continue;
     }
-    const [lo, hi] = smp.indoor ? [8, 25] : [4, 9];
+    const [lo, hi] = smp.indoor ? [8, 18] : [4, 9];
     const target = uni(noiseRng, lo, hi);
     acc = Math.min(hi, Math.max(lo, acc * 0.6 + target * 0.4)); // accuracy drifts rather than jumps
-    const sigma = acc / 4;
+    const sigma = acc / 6;
     const p = offset(smp.lat, smp.lon, gauss(noiseRng) * sigma, gauss(noiseRng) * sigma);
     emitted.push({ t: smp.t, lat: p.lat, lon: p.lon, trueLat: smp.lat, trueLon: smp.lon, floor: smp.floor, accuracyM: Math.round(acc) });
     last = smp;

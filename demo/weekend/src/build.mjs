@@ -332,6 +332,20 @@ function main() {
       return JSON.parse(fs.readFileSync(fp, 'utf8')).map((w) => ({ t: w.t, lat: w.lat, lon: w.lon, ...(w.floor !== undefined && w.floor !== null ? { floor: w.floor } : {}), dwellMin: w.dwellMin ?? 0, ...(w.wander !== undefined ? { wander: w.wander } : {}), ...(w.real ? { real: true } : {}), ...(w.accuracyM !== undefined ? { accuracyM: w.accuracyM } : {}) }));
     }),
   ].sort((a, b) => Date.parse(a.t) - Date.parse(b.t));
+  // Where the phone's real fixes cover a moment, the walk follows them: a guessed photo position
+  // nearby would pull the walker off the measured track and back. Such photos are also pinned on
+  // the real track at their capture time (interpolated between the two nearest fixes).
+  {
+    const real = waypoints.filter((w) => w.real).map((w) => ({ ...w, ms: Date.parse(w.t) }));
+    const nearest = (ms) => { let lo = 0, hi = real.length - 1; if (!real.length) return null; while (lo < hi) { const mid = (lo + hi) >> 1; if (real[mid].ms < ms) lo = mid + 1; else hi = mid; } const i = lo; const a = real[i - 1], b = real[i]; const best = !a ? b : !b ? a : (ms - a.ms <= b.ms - ms ? a : b); return { a, b, best, dt: Math.abs(best.ms - ms) };
+    };
+    let dropped = 0, snapped = 0;
+    for (let i = waypoints.length - 1; i >= 0; i--) { const w = waypoints[i]; if (w.real) continue; const n = nearest(Date.parse(w.t)); if (n && n.dt <= 90_000) { waypoints.splice(i, 1); dropped++; } }
+    for (const l of locations) { const e = events.find((x) => x.id === l.eventId); if (!e || e.snapToTrack === false) continue; const ms = Date.parse(e.t); const n = nearest(ms); if (!n || n.dt > 60_000) continue;
+      let lat = n.best.lat, lon = n.best.lon; if (n.a && n.b && n.b.ms > n.a.ms && ms >= n.a.ms && ms <= n.b.ms) { const f = (ms - n.a.ms) / (n.b.ms - n.a.ms); lat = n.a.lat + (n.b.lat - n.a.lat) * f; lon = n.a.lon + (n.b.lon - n.a.lon) * f; }
+      l.lat = +lat.toFixed(7); l.lon = +lon.toFixed(7); if (n.best.accuracyM != null) l.accuracyM = n.best.accuracyM; snapped++; }
+    if (dropped || snapped) console.error(`track: ${dropped} guessed waypoint(s) dropped inside real coverage, ${snapped} photo position(s) snapped to the real track`);
+  }
 
   let track = [];
   const trackScript = path.join(SRC_DIR, 'track.mjs');
