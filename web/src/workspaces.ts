@@ -15,13 +15,15 @@ export type Workspace = {
   campus?: boolean;        // draw the wider campus (web/src/site3d/data/campus.json) around ECSW
   tileRadius?: number;     // imagery tiles each way from the site centre (default 4)
   badge?: string;          // text pinned on live photos that arrive after the overlay ends (the judging beat)
+  shift?: string;          // the shift (id prefix) this workspace is about when the URL names none; else the latest real shift
 };
 
 const DC_TYPES = { pdu: 'power distribution unit', rack: 'server rack', crac: 'cooling unit', switch: 'network switch', ups: 'battery backup', panel: 'electrical panel', generator: 'generator', chiller: 'chiller' };
 const V = (session: string, sessions: string, tracked: string, trackeds: string, flag: string, flags: string): Vocab => ({ session, sessions, tracked, trackeds, flag, flags, note: 'Note', notes: 'Notes' });
 
 export const WORKSPACES: Workspace[] = [
-  { id: 'live', db: DIRECTORY_DB, name: 'UTD field test', subtitle: 'Live capture · Ray-Ban Meta glasses · Richardson, TX', sample: false, vocab: V('Shift', 'Shifts', 'Equipment', 'Equipment', 'Issue', 'Issues'), types: DC_TYPES },
+  // The field test is the calibrated 12-minute walk through ECSW (shift fe22…: stairs and the elevator, floors 0 → 4); later test shifts stay in the database and out of this view.
+  { id: 'live', db: DIRECTORY_DB, name: 'UTD field test', subtitle: 'Live capture · Ray-Ban Meta glasses · Richardson, TX', sample: false, shift: 'fe2282d3', vocab: V('Shift', 'Shifts', 'Equipment', 'Equipment', 'Issue', 'Issues'), types: DC_TYPES },
   // The team's own weekend, through the same memory: the live database plus a curated overlay of
   // the photos Edward took on the glasses from Saturday morning on. Replay covers all of it; a
   // photo taken during judging lands at the end of the record with its badge (decision 0033).

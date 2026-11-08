@@ -12,7 +12,7 @@ export function dbChosen() { return !!(pinned || chosen); }
 // `?ws=` pins one; otherwise the choice is remembered per browser next to the database.
 const pinnedWs = new URLSearchParams(location.search).get('ws');
 let chosenWs: string | null = null; try { chosenWs = localStorage.getItem('wm.ws'); } catch { /* private mode */ }
-export let WS_ID: string | null = pinnedWs || chosenWs;
+export let WS_ID: string | null = pinnedWs || (pinned ? null : chosenWs); // a URL that names the database means its first workspace, not the one this browser last chose
 export const HOST = 'https://maincloud.spacetimedb.com';
 export const WS = 'wss://maincloud.spacetimedb.com';
 

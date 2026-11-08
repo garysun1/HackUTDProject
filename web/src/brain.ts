@@ -4,7 +4,7 @@
 // Mirrors site3d/src/brain.ts, the standalone reference, over the console's store.
 import { state, type Alert, type Ev, type Issue, type TrackPoint, wearerColor, wearerName, fmtTime, loadPhoto, alertsFor, placeOf, edgesFrom, props } from './store';
 import { esc } from './timeline';
-import { vocab } from './workspaces';
+import { vocab, current } from './workspaces';
 import { haversineM } from './site3d/geo';
 import { overlayActive, badgeOf } from './overlay';
 
@@ -69,6 +69,7 @@ export function sessionShifts(): Shift[] {
   const all = filteredShifts();
   if (ALL_SHIFTS || overlayActive()) return all; // a workspace with an overlay is about the whole record
   if (SHIFT_PARAM) return all.filter(s => s.shiftId.startsWith(SHIFT_PARAM));
+  const wsShift = current().shift; if (wsShift) { const own = all.filter(s => s.shiftId.startsWith(wsShift)); if (own.length) return own; }
   const real = all.filter(s => s.lastMs - s.startMs >= 120_000 && s.smooth.length >= 5);
   const withFloor = real.filter(s => s.pts.some(p => p.floor !== undefined));
   const pool = withFloor.length ? withFloor : real.length ? real : all;
