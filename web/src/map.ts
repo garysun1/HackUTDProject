@@ -1,157 +1,145 @@
-// The site map (#21): where each wearer walked, where each photo was taken, where the problems
-// are. Leaflet over a light basemap. Photo pins carry the thumbnail in the wearer's color, red
-// and pulsing while an alert is open, and settle to neutral when it is acknowledged. Pins that
-// fall within accuracy of each other cluster; a cluster opens the relationship graph scoped to
-// its photos, so judges see where, then what connects. Replay draws the track and drops pins in
-// order. Degrades to tracks and pins on a blank canvas if tiles cannot load.
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
-import { state, alertsFor, wearerColor, wearerName, fmtTime, placeOf, type Ev, type TrackPoint } from './store';
-import { select, esc } from './timeline';
-import { view, shownEvents, replayCut, setScope, onView } from './view';
+// The map (#21, #26): the 3D site. Opaque neighbours, the main building translucent with its
+// floors, the mapped ground floor, imagery underneath; each wearer a lit dot with a fading trail
+// and a heat layer where they lingered; photo pins where photos were taken, red while an alert is
+// open. Live, or driven by the replay clock. The shift-memory panel sits beside it. Reads the
+// console's store (subscriptions, capture time); nothing here is fetched separately.
+import { state, wearerColor, wearerName, fmtTime, loadPhoto, alertsFor } from './store';
+import { select } from './timeline';
+import { view, onView, clock as viewClock, jumpTo, shownEvents } from './view';
 import { photoCard, showTip, hideTip } from './card';
 import { fitRequested } from './tools';
+import { current } from './workspaces';
+import { SiteScene, type PinSpec, type SiteData } from './site3d/scene';
+import { pointInRing, centroid, haversineM } from './site3d/geo';
+import ecsw from './site3d/data/ecsw.json';
+import { shifts, positionAt, renderBrain, openAt, type Shift } from './brain';
 
 const host = document.getElementById('map') as HTMLElement;
-const unplaced = document.getElementById('map-unplaced') as HTMLElement;
-let map: L.Map | null = null; let tiles: L.TileLayer | null = null;
-let userView = false; let lastFit = 0; let seenFit = fitRequested;
-const pins = new Map<string, L.Marker>(); const pinUrl = new Map<string, string>(); const burning = new Set<string>();
-const tracks = new Map<string, L.Polyline>(); const nowDots = new Map<string, L.CircleMarker>(); const circles = new Map<string, L.Circle>();
-let clusterLayer: L.LayerGroup | null = null; let accuracyLayer: L.LayerGroup | null = null;
-// Esri's topographic tiles need no key and reach building scale (z19). Dark mode inverts them in CSS.
-const TILES = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}';
-const ATTR = 'Tiles &copy; Esri &mdash; Esri, HERE, Garmin, OpenStreetMap contributors';
-const isDark = () => (matchMedia('(prefers-color-scheme: dark)').matches && document.documentElement.dataset.theme !== 'light') || document.documentElement.dataset.theme === 'dark';
+let scene: SiteScene | null = null; let brainEl: HTMLElement; let followBtn: HTMLButtonElement; let seenFit = fitRequested;
+let raf = 0; let brainAt = 0;
 
-function ensureMap(): L.Map {
-  if (map) return map;
-  map = L.map(host, { zoomControl: false, attributionControl: true, preferCanvas: false, zoomSnap: 0.25, wheelPxPerZoomLevel: 90 });
-  L.control.zoom({ position: 'bottomright' }).addTo(map);
-  map.attributionControl.setPrefix('');
-  tiles = L.tileLayer(TILES, { attribution: ATTR, maxZoom: 20, maxNativeZoom: 19, className: 'basemap' }).addTo(map);
-  const theme = () => host.classList.toggle('dark', isDark()); theme();
-  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', theme);
-  accuracyLayer = L.layerGroup().addTo(map); clusterLayer = L.layerGroup().addTo(map);
-  map.setView([32.9858, -96.7501], 17);
-  map.on('dragstart', () => { userView = true; }); map.on('zoomstart', e => { if ((e as any).originalEvent) userView = true; });
-  map.on('zoomend moveend', () => placePins());
-  map.on('click', () => { if (state.selected) select(null); });
-  host.addEventListener('dblclick', () => { /* Leaflet zooms; keep */ });
-  return map;
+function ensureScene(): SiteScene {
+  if (scene) return scene;
+  host.innerHTML = `<canvas class="s3-gl" aria-label="3D view of the site"></canvas><div class="s3-labels" aria-hidden="true"></div>
+    <div class="s3-ctl"><span class="seg" role="group" aria-label="Camera"><button type="button" data-cam="3d" aria-pressed="true">3D</button><button type="button" data-cam="2d" aria-pressed="false">Top-down</button></span><button type="button" class="btn ghost" data-follow aria-pressed="false" title="Keep the camera on the wearer (F)">Follow</button></div>
+    <aside class="s3-brain" aria-label="Shift memory"><div class="bh"><h2>Shift memory</h2></div><div class="s3-brain-body"></div></aside>
+    <div class="s3-attr">Imagery © Esri · Building © OpenStreetMap contributors</div>`;
+  const canvas = host.querySelector('canvas')!; const labels = host.querySelector('.s3-labels') as HTMLElement;
+  scene = new SiteScene(canvas, labels, host); (window as any).__scene = scene;
+  brainEl = host.querySelector('.s3-brain-body') as HTMLElement; followBtn = host.querySelector('[data-follow]') as HTMLButtonElement;
+  host.querySelectorAll<HTMLButtonElement>('[data-cam]').forEach(b => b.addEventListener('click', () => { scene!.setView(b.dataset.cam as '3d' | '2d'); host.querySelectorAll('[data-cam]').forEach(x => x.setAttribute('aria-pressed', String(x === b))); }));
+  followBtn.addEventListener('click', () => scene!.setFollow(!scene!.follow));
+  host.addEventListener('site:follow', (e: any) => followBtn.setAttribute('aria-pressed', String(e.detail.on)));
+  document.addEventListener('keydown', e => { const t = e.target as HTMLElement; if (t.closest('input, select, textarea, button, a, [role="button"], [contenteditable]')) return; if (e.key === 'f' && view.mode === 'map') followBtn.click(); });
+  scene.onPinClick = id => select(id);
+  scene.onPinHover = (id, x, y) => { if (id) showTip(photoCard(id), x, y, id); else hideTip(); };
+  document.addEventListener('select', () => { const id = state.selected; const l = id ? state.locations.get(id) : null; if (l && scene && site) { const [x, z] = scene.proj.toXZ(l.lon, l.lat); scene.focus(x, z); } });
+  return scene;
 }
 
-// ---------- pins ----------
-function pinHtml(e: Ev, url: string | undefined, open: boolean, sel: boolean): string {
-  return `<div class="pin${open ? ' alert' : ''}${sel ? ' sel' : ''}" style="--c:${open ? 'var(--critical)' : wearerColor(e.deviceId)}">${url ? `<img src="${url}" alt="">` : '<i></i>'}<b>${fmtTime(e.tMicros)}</b></div>`;
+// ---------- site ----------
+type Site = { kind: 'ecsw' | 'generic'; rooms: { name: string; ring: [number, number][] }[]; outer: [number, number][] | null; builtFor: string };
+let site: Site | null = null;
+const ECSW_CENTER = ecsw.center as [number, number];
+function dataCentroid(): [number, number] | null {
+  const pts: [number, number][] = [];
+  for (const p of state.track.values()) if (p.kind === 'point') pts.push([p.lon, p.lat]);
+  for (const l of state.locations.values()) pts.push([l.lon, l.lat]);
+  return pts.length ? centroid(pts) : null;
 }
-function icon(html: string, w = 44, h = 34) { return L.divIcon({ className: 'pin-wrap', html, iconSize: [w, h], iconAnchor: [w / 2, h + 6] }); }
-
-type Placed = { e: Ev; lat: number; lon: number };
-let placed: Placed[] = []; let clusters: { ids: string[]; lat: number; lon: number }[] = [];
-
-function placePins() {
-  if (!map || !clusterLayer) return;
-  // cluster greedily by screen distance so overlapping pins read as one stack
-  const pts = placed.map(p => ({ ...p, xy: map!.latLngToContainerPoint([p.lat, p.lon]) }));
-  const used = new Set<string>(); clusters = [];
-  const singles = new Set<string>();
-  for (const p of pts) {
-    if (used.has(p.e.eventId)) continue;
-    const group = pts.filter(q => !used.has(q.e.eventId) && Math.abs(q.xy.x - p.xy.x) < 40 && Math.abs(q.xy.y - p.xy.y) < 34);
-    for (const q of group) used.add(q.e.eventId);
-    if (group.length > 1) clusters.push({ ids: group.map(q => q.e.eventId), lat: group.reduce((s, q) => s + q.lat, 0) / group.length, lon: group.reduce((s, q) => s + q.lon, 0) / group.length });
-    else singles.add(p.e.eventId);
+function ensureSite(sc: SiteScene) {
+  const c = dataCentroid(); const nearEcsw = !c || haversineM(c[1], c[0], ECSW_CENTER[1], ECSW_CENTER[0]) < 400;
+  const key = nearEcsw ? 'ecsw' : `generic:${current().db}`;
+  if (site && site.builtFor === key) return;
+  if (nearEcsw) {
+    const d: SiteData = { center: ECSW_CENTER, main: { name: ecsw.ecsw.name, levels: ecsw.ecsw.levels, height: ecsw.ecsw.height, outer: ecsw.ecsw.outer as any, inner: ecsw.ecsw.inner as any }, indoor: ecsw.indoor as any, neighbors: ecsw.neighbors as any, paths: ecsw.paths as any, tileRadius: 4 };
+    sc.buildSite(d);
+    site = { kind: 'ecsw', outer: ecsw.ecsw.outer as any, rooms: (ecsw.indoor as any[]).filter(r => r.name && r.pts.length >= 3).map(r => ({ name: r.name, ring: r.pts })), builtFor: key };
+  } else {
+    sc.buildSite({ center: c!, tileRadius: 3 });
+    const xs: [number, number][] = []; for (const p of state.track.values()) if (p.kind === 'point') xs.push(sc.proj.toXZ(p.lon, p.lat)); for (const l of state.locations.values()) xs.push(sc.proj.toXZ(l.lon, l.lat));
+    const minX = Math.min(...xs.map(p => p[0])) - 10, maxX = Math.max(...xs.map(p => p[0])) + 10, minZ = Math.min(...xs.map(p => p[1])) - 10, maxZ = Math.max(...xs.map(p => p[1])) + 10;
+    sc.buildHall(minX, maxX, minZ, maxZ, current().name);
+    site = { kind: 'generic', outer: null, rooms: [], builtFor: key };
   }
-  for (const [id, m] of pins) { const on = singles.has(id); if (on && !map.hasLayer(m)) m.addTo(map); if (!on && map.hasLayer(m)) m.remove(); }
-  clusterLayer.clearLayers();
-  for (const c of clusters) {
-    const evs = c.ids.map(id => state.events.get(id)!).sort((a, b) => (a.tMicros < b.tMicros ? 1 : -1));
-    const open = evs.some(e => alertsFor(e).some(a => !a.acked));
-    const sel = evs.some(e => e.eventId === state.selected);
-    const thumbs = evs.slice(0, 3).map((e, i) => { const u = state.photos.get(e.eventId); return `<span class="ct" style="--i:${i};--c:${wearerColor(e.deviceId)}">${u ? `<img src="${u}" alt="">` : ''}</span>`; }).join('');
-    const m = L.marker([c.lat, c.lon], { icon: L.divIcon({ className: 'pin-wrap', html: `<div class="cluster${open ? ' alert' : ''}${sel ? ' sel' : ''}">${thumbs}<b>${evs.length}</b></div>`, iconSize: [56, 40], iconAnchor: [28, 46] }), zIndexOffset: 500, keyboard: false });
-    m.on('click', () => { const place = placeOf(evs[0].eventId); setScope(new Set(c.ids), place ? place.canonicalName : `${evs.length} photos here`); });
-    m.on('mouseover', (ev: L.LeafletMouseEvent) => showTip(`<div class="tb"><div class="tt"><b>${evs.length} photos here</b> · ${fmtTime(evs[evs.length - 1].tMicros)}–${fmtTime(evs[0].tMicros)}</div><div class="ts">${[...new Set(evs.map(e => wearerName(e.deviceId)))].map(esc).join(', ')}${open ? ' · <span class="ta">open alert</span>' : ''}. Click to see what connects.</div></div>`, ev.originalEvent.clientX, ev.originalEvent.clientY));
-    m.on('mouseout', hideTip);
-    m.addTo(clusterLayer);
-  }
+  resetHeat();
+}
+function locate(lat: number, lon: number): string | undefined {
+  if (!site) return; const pt: [number, number] = [lon, lat];
+  for (const r of site.rooms) if (pointInRing(pt, r.ring)) return r.name;
+  if (site.outer && pointInRing(pt, site.outer)) return 'inside ECSW';
+  return site.kind === 'ecsw' ? 'outside the building' : undefined;
 }
 
-// ---------- tracks ----------
-function trackSegments(cut: bigint | null): Map<string, TrackPoint[]> {
-  const cutoff = state.windowMin ? BigInt(Date.now() - state.windowMin * 60_000) * 1000n : 0n;
-  const by = new Map<string, TrackPoint[]>();
-  for (const p of state.track.values()) {
-    if (p.kind !== 'point' || p.accuracyM > 35 || p.tMicros < cutoff || state.hiddenWearers.has(p.deviceId)) continue;
-    if (cut !== null && p.tMicros > cut) continue;
-    const k = `${p.deviceId}|${p.shiftId}`; (by.get(k) ?? by.set(k, []).get(k)!).push(p);
+// ---------- heat (incremental over the clock) ----------
+const heatCursor = new Map<string, number>(); let heatClock = -Infinity;
+function resetHeat() { scene?.heat?.reset(); heatCursor.clear(); heatClock = -Infinity; }
+function advanceHeat(sc: SiteScene, all: Shift[], clock: number) {
+  if (!sc.heat) return; if (clock < heatClock) resetHeat();
+  for (const s of all) {
+    let i = heatCursor.get(s.key) ?? 0; const p = s.smooth;
+    while (i < p.length && p[i].tMs <= clock) { const dt = Math.min(120_000, (p[i + 1]?.tMs ?? p[i].tMs + 30_000) - p[i].tMs) / 1000; const [x, z] = sc.proj.toXZ(p[i].lon, p[i].lat); sc.heat.add(x, z, dt); i++; }
+    heatCursor.set(s.key, i);
   }
-  for (const pts of by.values()) pts.sort((a, b) => (a.tMicros < b.tMicros ? -1 : 1));
-  return by;
+  heatClock = clock;
+}
+
+// ---------- frame ----------
+let lastDb = ''; let lastFilterSig = ''; const dbg = { frames: 0, lastError: '' as string }; (window as any).__s3 = dbg;
+function frame() {
+  raf = 0; dbg.frames++;
+  try { frameBody(); } catch (e: any) { dbg.lastError = String(e?.stack || e); console.error('[map] frame failed', e); raf = requestAnimationFrame(frame); }
+}
+function frameBody() {
+  if (view.mode !== 'map' || host.hidden) return;
+  const sc = ensureScene();
+  if (current().db !== lastDb) { lastDb = current().db; site = null; resetHeat(); for (const dev of [...sc.wearers.keys()]) sc.hideWearer(dev); sc.setPins([]); brainEl.innerHTML = ''; }
+  if (state.track.size || state.locations.size) ensureSite(sc);
+  const clock = viewClock();
+  if (!site) { const t = performance.now(); if (t - brainAt > 250) { brainAt = t; renderBrain(brainEl, { clock, locate, onSelect: select, onJump: jumpTo }); } sc.frame(); raf = requestAnimationFrame(frame); return; }
+  const filterSig = `${state.windowMin}|${[...state.hiddenWearers].sort().join(',')}`; if (filterSig !== lastFilterSig) { lastFilterSig = filterSig; resetHeat(); }
+  const cutoff = state.windowMin ? Date.now() - state.windowMin * 60_000 : 0;
+  const all = shifts().filter(s => !state.hiddenWearers.has(s.deviceId) && s.lastMs >= cutoff);
+  const byDevice = new Map<string, Shift[]>(); for (const s of all) (byDevice.get(s.deviceId) ?? byDevice.set(s.deviceId, []).get(s.deviceId)!).push(s);
+  sc.followId = (state.selected && state.events.get(state.selected)?.deviceId) || byDevice.keys().next().value || null;
+  const drawnDevices = new Set<string>();
+  for (const [dev, list] of byDevice) {
+    drawnDevices.add(dev); let drawn = false;
+    for (const s of list) {
+      const pos = positionAt(s, clock); if (!pos) continue;
+      const [x, z] = sc.proj.toXZ(pos.lon, pos.lat); const y = (pos.floor ?? 0) * sc.floorH + 1.1;
+      const trail: number[] = []; for (let i = 0; i <= pos.i; i++) { const q = s.smooth[i]; const [tx, tz] = sc.proj.toXZ(q.lon, q.lat); trail.push(tx, (q.floor ?? 0) * sc.floorH + 0.6, tz); } trail.push(x, y - 0.5, z);
+      const where = locate(pos.lat, pos.lon); const last = s.smooth[pos.i]; const stale = clock - last.tMs > 90_000;
+      sc.setWearer(dev, { color: wearerColor(dev), name: wearerName(dev), sub: where ? where : stale ? `last fix ${fmtTime(BigInt(Math.round(last.tMs)) * 1000n)}` : 'on site', pos: [x, y, z], trail });
+      drawn = true; break;
+    }
+    if (!drawn) {
+      const s = [...list].reverse().find(s => s.startMs <= clock && s.smooth.length >= 2);
+      if (s) { const trail: number[] = []; for (const q of s.smooth) { if (q.tMs > clock) break; const [tx, tz] = sc.proj.toXZ(q.lon, q.lat); trail.push(tx, (q.floor ?? 0) * sc.floorH + 0.6, tz); } sc.setWearer(dev, { color: wearerColor(dev), name: wearerName(dev), sub: '', pos: null, trail }); }
+      else sc.hideWearer(dev);
+    }
+  }
+  for (const dev of sc.wearers.keys()) if (!drawnDevices.has(dev)) sc.hideWearer(dev);
+  advanceHeat(sc, all, clock);
+  const pins: PinSpec[] = [];
+  for (const e of shownEvents()) {
+    const l = state.locations.get(e.eventId); if (!l) continue;
+    const [x, z] = sc.proj.toXZ(l.lon, l.lat); const url = state.photos.get(e.eventId); if (!url) loadPhoto(e.eventId);
+    const alert = alertsFor(e).some(a => openAt(a, clock));
+    pins.push({ id: e.eventId, x, y: (l.floor ?? 0) * sc.floorH, z, color: wearerColor(e.deviceId), time: fmtTime(e.tMicros), alert, thumb: url, selected: state.selected === e.eventId, title: e.summary });
+  }
+  sc.setPins(pins);
+  if (fitRequested !== seenFit) { seenFit = fitRequested; sc.resetView(); }
+  const now = performance.now();
+  if (now - brainAt > 250) { brainAt = now; renderBrain(brainEl, { clock, locate, onSelect: select, onJump: jumpTo }); }
+  sc.frame();
+  raf = requestAnimationFrame(frame);
 }
 
 export function renderMap() {
   const active = view.mode === 'map';
   host.hidden = !active; if (!active) { hideTip(); return; }
-  const m = ensureMap(); m.invalidateSize({ animate: false });
-  const cut = replayCut(); const evs = shownEvents();
-  // pins
-  placed = [];
-  const keep = new Set<string>(); let placedChanged = false;
-  for (const e of evs) {
-    const loc = state.locations.get(e.eventId); if (!loc) continue;
-    placed.push({ e, lat: loc.lat, lon: loc.lon }); keep.add(e.eventId);
-    const url = state.photos.get(e.eventId); const open = alertsFor(e).some(a => !a.acked); const sel = state.selected === e.eventId;
-    const html = pinHtml(e, url, open, sel); const sig = `${html}`;
-    let mk = pins.get(e.eventId);
-    if (!mk) {
-      mk = L.marker([loc.lat, loc.lon], { icon: icon(html), riseOnHover: true, keyboard: false, zIndexOffset: open ? 400 : 0 });
-      mk.on('click', () => select(e.eventId));
-      mk.on('mouseover', (ev: L.LeafletMouseEvent) => showTip(photoCard(e.eventId), ev.originalEvent.clientX, ev.originalEvent.clientY));
-      mk.on('mouseout', hideTip);
-      pins.set(e.eventId, mk); pinUrl.set(e.eventId, sig); placedChanged = true;
-      if (open) burning.add(e.eventId);
-      const el = () => mk!.getElement(); setTimeout(() => el()?.querySelector('.pin')?.classList.add('arrive'), 0);
-    } else if (pinUrl.get(e.eventId) !== sig) {
-      const wasBurning = burning.has(e.eventId);
-      mk.setIcon(icon(html)); pinUrl.set(e.eventId, sig); mk.setZIndexOffset(open ? 400 : 0);
-      if (wasBurning && !open) { burning.delete(e.eventId); setTimeout(() => mk!.getElement()?.querySelector('.pin')?.classList.add('resolved'), 0); } else if (open) burning.add(e.eventId);
-    }
-    // accuracy ring when the fix is loose
-    const c = circles.get(e.eventId);
-    if (loc.accuracyM > 15 && !c) { circles.set(e.eventId, L.circle([loc.lat, loc.lon], { radius: loc.accuracyM, weight: 1, color: wearerColor(e.deviceId), opacity: 0.35, fillOpacity: 0.06, interactive: false }).addTo(accuracyLayer!)); }
-    else if (loc.accuracyM <= 15 && c) { c.remove(); circles.delete(e.eventId); }
-  }
-  for (const [id, mk] of pins) if (!keep.has(id)) { mk.remove(); pins.delete(id); pinUrl.delete(id); placedChanged = true; circles.get(id)?.remove(); circles.delete(id); }
-  // tracks per wearer and shift
-  const segs = trackSegments(cut); const liveKeys = new Set<string>();
-  for (const [k, pts] of segs) {
-    liveKeys.add(k); const dev = k.split('|')[0];
-    const latlngs = pts.map((p, i) => { const w = pts.slice(Math.max(0, i - 2), Math.min(pts.length, i + 3)); return [w.reduce((s, q) => s + q.lat, 0) / w.length, w.reduce((s, q) => s + q.lon, 0) / w.length] as [number, number]; });
-    let pl = tracks.get(k);
-    if (!pl) { pl = L.polyline(latlngs, { color: wearerColor(dev), weight: 3, opacity: 0.85, lineJoin: 'round', lineCap: 'round', interactive: false }).addTo(m); tracks.set(k, pl); }
-    else pl.setLatLngs(latlngs);
-    const last = pts[pts.length - 1]; const ended = [...state.track.values()].some(p => p.kind === 'shift_end' && p.deviceId === dev && p.shiftId === last.shiftId && p.tMicros >= last.tMicros);
-    const recent = Date.now() * 1000 - Number(last.tMicros) < 10 * 60e6;
-    let dot = nowDots.get(k);
-    if (!ended && (recent || cut !== null)) { if (!dot) { dot = L.circleMarker([last.lat, last.lon], { radius: 6, color: '#fff', weight: 2, fillColor: wearerColor(dev), fillOpacity: 1, className: 'now-dot', interactive: false }).addTo(m); nowDots.set(k, dot); } else dot.setLatLng([last.lat, last.lon]); }
-    else if (dot) { dot.remove(); nowDots.delete(k); }
-  }
-  for (const [k, pl] of tracks) if (!liveKeys.has(k)) { pl.remove(); tracks.delete(k); nowDots.get(k)?.remove(); nowDots.delete(k); }
-  // fit: everything, until the user takes over; Fit button hands it back
-  if (fitRequested !== seenFit) { seenFit = fitRequested; userView = false; }
-  const all: [number, number][] = [...placed.map(p => [p.lat, p.lon] as [number, number]), ...[...segs.values()].flat().map(p => [p.lat, p.lon] as [number, number])];
-  if (!userView && all.length) {
-    const b = L.latLngBounds(all); const sig = all.length + ':' + b.toBBoxString();
-    if (sig !== String(lastFit)) { lastFit = sig as any; m.fitBounds(b.pad(0.25), { maxZoom: 19, animate: placedChanged || cut !== null, duration: 0.6 }); }
-  }
-  placePins();
-  // photos without a position
-  const missing = evs.filter(e => !state.locations.has(e.eventId));
-  unplaced.hidden = !missing.length;
-  if (missing.length) { unplaced.innerHTML = `<button type="button" class="pill" data-unplaced>${missing.length} photo${missing.length === 1 ? '' : 's'} without a position · see in graph</button>`; unplaced.querySelector('button')!.onclick = () => setScope(new Set(missing.map(e => e.eventId)), 'Photos without a position'); }
-  if (evs.length && !placed.length && !segs.size && !lastFit && !view.replay.on) m.setView([32.9858, -96.7501], 16, { animate: false });
+  if (!raf) raf = requestAnimationFrame(frame);
 }
-export function mapUserView() { return userView; }
+export function mapUserView() { return !!scene?.userView; }
 onView(() => renderMap());

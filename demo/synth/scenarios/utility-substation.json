@@ -76,5 +76,12 @@
       "expect": "alert",
       "edit": "change the position indicator flag so it reads \"TRIPPED\" and light the yellow alarm lamp; change nothing else."
     }
-  ]
+  ],
+  "site": {
+    "lat": 33.03,
+    "lon": -96.749,
+    "radius_m": 70,
+    "label": "Plano, TX substation (synthetic placement)",
+    "synthetic": true
+  }
 }

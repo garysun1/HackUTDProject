@@ -98,5 +98,12 @@
         "FZ-1"
       ]
     }
-  ]
+  ],
+  "site": {
+    "lat": 32.935,
+    "lon": -97.03,
+    "radius_m": 150,
+    "label": "DFW logistics park (synthetic placement)",
+    "synthetic": true
+  }
 }

@@ -1,7 +1,21 @@
 // Read access to the wm-physical SpacetimeDB module over its HTTP API.
 // Tables are public; procedures/reducers are called through /call/<name>.
 const HOST = (process.env.SPACETIME_HOST || 'https://maincloud.spacetimedb.com').replace(/\/+$/, '');
-const DB = process.env.SPACETIME_DB_NAME || 'wm-physical';
+// The directory database holds demo_config.active_dataset naming the database to read (decision
+// 0029). SPACETIME_DB_NAME pins one and ignores the switch.
+const DIRECTORY = 'wm-physical';
+const PINNED = process.env.SPACETIME_DB_NAME || '';
+let dbCache = { t: 0, name: PINNED || DIRECTORY };
+export async function activeDb() {
+  if (PINNED) return PINNED;
+  if (Date.now() - dbCache.t < 10_000) return dbCache.name;
+  try {
+    const r = await fetch(`${HOST}/v1/database/${DIRECTORY}/sql`, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: "SELECT value FROM demo_config WHERE key = 'active_dataset'" });
+    const [res] = await r.json(); const v = res?.rows?.[0]?.[0];
+    dbCache = { t: Date.now(), name: (v && String(v).trim()) || DIRECTORY };
+  } catch { dbCache.t = Date.now(); }
+  return dbCache.name;
+}
 const TZ = process.env.WM_TZ || 'America/Chicago';
 
 function decode(v) {
@@ -13,6 +27,7 @@ function decode(v) {
 }
 
 export async function sql(query) {
+  const DB = await activeDb();
   const r = await fetch(`${HOST}/v1/database/${DB}/sql`, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: query });
   if (!r.ok) throw new Error(`sql ${r.status}: ${(await r.text()).slice(0, 200)}`);
   const [res] = await r.json();
@@ -21,6 +36,7 @@ export async function sql(query) {
 }
 
 export async function call(name, args) {
+  const DB = await activeDb();
   const r = await fetch(`${HOST}/v1/database/${DB}/call/${name}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(args) });
   const text = await r.text();
   if (!r.ok) throw new Error(`${name} ${r.status}: ${text.slice(0, 300)}`);
@@ -31,6 +47,7 @@ let schemaCache = { t: 0, names: new Set() };
 export async function hasProcedure(name) {
   if (Date.now() - schemaCache.t > 30_000) {
     try {
+      const DB = await activeDb();
       const r = await fetch(`${HOST}/v1/database/${DB}/schema?version=9`);
       // Procedures live under misc_exports; a table of the same name (handoff) must not count.
       const s = r.ok ? await r.json() : {};
@@ -83,6 +100,8 @@ export async function snapshot() {
   const placeOf = id => { const e = (byEvent.get(id) || []).find(x => x.kind === 'INVOLVES' && props(x).role === 'setting'); return e ? entityById.get(e.to_id) : null; };
   const assetsOf = id => (byEvent.get(id) || []).filter(x => x.kind === 'INVOLVES' && props(x).role !== 'setting').map(x => entityById.get(x.to_id)).filter(Boolean);
   const changesOf = id => (byEvent.get(id) || []).filter(x => x.kind === 'CHANGES').map(x => ({ ...props(x), entity: entityById.get(x.to_id) }));
+  // a photo's time is when it was taken (client_t); server time is the fallback (unparseable or > 7 days off)
+  for (const e of ev) { const ms = Date.parse(e.client_t); if (Number.isFinite(ms)) { const c = Math.round(ms) * 1000; if (Math.abs(c - Number(e.t_micros)) <= 7 * 86_400_000_000) e.t_micros = c; } }
   ev.sort((a, b) => a.t_micros - b.t_micros);
   return { events: ev, entities: en, edges: ed, alerts: al, wearers: we, assets: as, episodes: ep, wearerName, entityById, placeOf, assetsOf, changesOf, byEvent };
 }
@@ -94,9 +113,28 @@ export function matchEntity(snap, query) {
     .sort((a, b) => (b.kind === 'asset') - (a.kind === 'asset'));
 }
 
-export function cite(snap, e) { return `[event:${e.event_id.slice(0, 8)} ${fmtTime(e.t_micros)} ${snap.wearerName(e.device_id)}]`; }
+/** Shortest prefix (at least 8 chars) that names one event in this snapshot; synthetic ids share long prefixes. */
+export function shortId(snap, id) {
+  for (let n = 8; n <= id.length; n++) { const pre = id.slice(0, n); if (snap.events.filter(e => e.event_id.startsWith(pre)).length <= 1) return pre; }
+  return id;
+}
+export function cite(snap, e) { return `[event:${shortId(snap, e.event_id)} ${fmtTime(e.t_micros)} ${snap.wearerName(e.device_id)}]`; }
 
 export async function imageBlock(eventId) {
   const p = await photo(eventId); if (!p) return null;
   return { type: 'image', data: p.b64, mimeType: p.mime || 'image/jpeg' };
+}
+
+// ---------- questions: what was asked, answered by which moments (decision 0031) ----------
+// Needs INGEST_TOKEN (or ADMIN_TOKEN) in the environment; without it, nothing is logged.
+const QTOKEN = process.env.ADMIN_TOKEN || process.env.INGEST_TOKEN || '';
+export async function logQuestion(tool, text, answerText, eventIds, asker = 'mcp client') {
+  if (!QTOKEN || !text) return;
+  const answer = String(answerText || '').split('\n').find(l => l.trim()) || '';
+  try { await call('log_question', [QTOKEN, 'mcp', tool, String(text).slice(0, 400), answer.slice(0, 400), [...new Set(eventIds)].slice(0, 20), asker]); } catch { /* best effort */ }
+}
+/** Event ids cited in a block of answer text: [event:<id8> ...] back to full ids. */
+export function citedIds(snap, text) {
+  const out = []; for (const m of String(text || '').matchAll(/\[event:([0-9a-z-]{4,})/gi)) { const hits = snap.events.filter(x => x.event_id.startsWith(m[1])); if (hits.length === 1) out.push(hits[0].event_id); }
+  return out;
 }

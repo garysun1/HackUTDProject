@@ -7,18 +7,34 @@ import { type Infer as __Infer } from "spacetimedb";
 
 // Import all reducer arg schemas
 import AckAlertReducer from "../ack_alert_reducer";
+import AckAlertWithEvidenceReducer from "../ack_alert_with_evidence_reducer";
 import DeleteAssetReducer from "../delete_asset_reducer";
+import DeleteEventReducer from "../delete_event_reducer";
+import DeleteQuestionReducer from "../delete_question_reducer";
+import DeleteTrackReducer from "../delete_track_reducer";
+import LogQuestionReducer from "../log_question_reducer";
 import ReperceiveReducer from "../reperceive_reducer";
+import SetConfigReducer from "../set_config_reducer";
+import SetIssueStatusReducer from "../set_issue_status_reducer";
 import SetLabelReducer from "../set_label_reducer";
 import SetNoteReducer from "../set_note_reducer";
 import UpsertAssetReducer from "../upsert_asset_reducer";
+import UpsertIssueReducer from "../upsert_issue_reducer";
 import UpsertWearerReducer from "../upsert_wearer_reducer";
 
 export type AckAlertParams = __Infer<typeof AckAlertReducer>;
+export type AckAlertWithEvidenceParams = __Infer<typeof AckAlertWithEvidenceReducer>;
 export type DeleteAssetParams = __Infer<typeof DeleteAssetReducer>;
+export type DeleteEventParams = __Infer<typeof DeleteEventReducer>;
+export type DeleteQuestionParams = __Infer<typeof DeleteQuestionReducer>;
+export type DeleteTrackParams = __Infer<typeof DeleteTrackReducer>;
+export type LogQuestionParams = __Infer<typeof LogQuestionReducer>;
 export type ReperceiveParams = __Infer<typeof ReperceiveReducer>;
+export type SetConfigParams = __Infer<typeof SetConfigReducer>;
+export type SetIssueStatusParams = __Infer<typeof SetIssueStatusReducer>;
 export type SetLabelParams = __Infer<typeof SetLabelReducer>;
 export type SetNoteParams = __Infer<typeof SetNoteReducer>;
 export type UpsertAssetParams = __Infer<typeof UpsertAssetReducer>;
+export type UpsertIssueParams = __Infer<typeof UpsertIssueReducer>;
 export type UpsertWearerParams = __Infer<typeof UpsertWearerReducer>;
 

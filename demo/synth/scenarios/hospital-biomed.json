@@ -101,5 +101,12 @@
         "ATS-1"
       ]
     }
-  ]
+  ],
+  "site": {
+    "lat": 32.811,
+    "lon": -96.84,
+    "radius_m": 90,
+    "label": "Dallas medical district (synthetic placement)",
+    "synthetic": true
+  }
 }

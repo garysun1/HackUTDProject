@@ -30,22 +30,31 @@ numerals on. Handoff section heads are 12px uppercase tracked, the one label-sty
 tooltip and drawer. Primary action is the ink-filled button; everything else is outlined.
 
 ## Signature move
-The site map (`src/map.ts`, Leaflet over Esri topographic tiles desaturated to the register) is
-the canvas since 2026-11-08: each wearer's walking track in their color (smoothed, fixes worse
-than 35 m dropped, a pulsing dot at the live end), photo pins carrying the thumbnail with the
-time beneath, red and breathing while an alert is open, settling green-then-neutral when it is
-acknowledged, an accuracy ring when the fix is loose, pins within 40 px clustered into a stack
-with a count. Clicking a pin opens the detail panel; clicking a cluster, or the "photos without
-a position" pill, opens the memory graph (`src/floor.ts`) as a lens over the map, scoped to those
-photos: photos as nodes, the places, assets and objects seen in them stemming outward, a line a
-relationship. The Map / Graph switch shows the graph full width. Replay empties both and rebuilds
-the shift in ten seconds with a scrubber; the view fits everything until the user takes over.
+Two views behind one switch, the shift line and the site map (decisions 0028, 0030).
+
+The shift line (`src/floor.ts`) is the primary view. Photos are 72×54 chips on one horizontal
+line in time order, bordered in the wearer's color, red with a soft glow while an alert is open,
+time and wearer beneath; gaps of 30 minutes or more compress into a labelled "quiet" break.
+Four kinds of thing appear: photo, equipment, issue, note. Equipment pills (registry name in plain
+words, type and code on hover) and issue pills (alert text in sentence case, red tint while open,
+a green check once acknowledged) sit in packed lanes above the line and thread down to every
+photo they touch; open issues take the lane nearest the line. Notes (what the wearer said) are
+quote cards below their photo. A change is an amber arc from the earlier photo of that equipment
+to the later one, its text printed once at the apex. Hovering a photo reveals dashed links to
+photos that share an identifier read in the scene (ticket numbers, asset tags) or look alike by
+embedding. Clicking a pill follows that equipment or issue: everything else dims to a quarter.
+Clicking a photo opens the detail panel, which holds place, people, objects and text read. The
+view fits the whole line while readable, otherwise keeps the newest photos at the right or
+centres the selection; wheel zooms, shift-wheel or drag pans, double-click or Fit returns.
+
+The site map (`src/map.ts`) is the second view: tracks per wearer, photo pins with thumbnails,
+alerts burning until acknowledged, clusters that open the shift line scoped to those photos.
 
 ## Motion
-Positions ease (110 ms exponential), so zoom, reflow and new arrivals move instead of snapping.
-A new photo rises from the "now" edge, the path draws itself to it over 650 ms, and a ring
-breathes out once. The detail panel slides 16px. Honors `prefers-reduced-motion` for CSS; the
-canvas easing is short enough to keep.
+Nothing on the shift line moves except arrivals: a new photo slides in from the right over about
+a third of a second, its threads draw down over 650 ms, and a ring breathes out once. The view
+eases (160 ms) when it refits. On the map a new pin drops in and an acknowledged alert flashes
+green before settling. The detail panel slides 16px. Honors `prefers-reduced-motion` for CSS.
 
 ## States
 Connection dot amber/green/red plus a staleness band when not live. Status chips are tinted

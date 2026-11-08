@@ -26,6 +26,22 @@ export const Alert = __t.object("Alert", {
 });
 export type Alert = __Infer<typeof Alert>;
 
+export const AlertResolution = __t.object("AlertResolution", {
+  id: __t.u64(),
+  alertId: __t.u64(),
+  eventId: __t.string(),
+  deviceId: __t.string(),
+  tMicros: __t.u64(),
+  how: __t.string(),
+});
+export type AlertResolution = __Infer<typeof AlertResolution>;
+
+export const AskResult = __t.object("AskResult", {
+  answer: __t.string(),
+  citations: __t.array(__t.string()),
+});
+export type AskResult = __Infer<typeof AskResult>;
+
 export const Asset = __t.object("Asset", {
   assetId: __t.string(),
   name: __t.string(),
@@ -34,6 +50,13 @@ export const Asset = __t.object("Asset", {
   patterns: __t.array(__t.string()),
 });
 export type Asset = __Infer<typeof Asset>;
+
+export const DemoConfig = __t.object("DemoConfig", {
+  key: __t.string(),
+  value: __t.string(),
+  updatedMicros: __t.u64(),
+});
+export type DemoConfig = __Infer<typeof DemoConfig>;
 
 export const Edge = __t.object("Edge", {
   edgeId: __t.u64(),
@@ -121,6 +144,19 @@ export const IngestResult = __t.object("IngestResult", {
 });
 export type IngestResult = __Infer<typeof IngestResult>;
 
+export const Issue = __t.object("Issue", {
+  issueId: __t.string(),
+  title: __t.string(),
+  assetId: __t.string(),
+  openedBy: __t.string(),
+  openedMicros: __t.u64(),
+  status: __t.string(),
+  resolvedEventId: __t.option(__t.string()),
+  resolvedMicros: __t.option(__t.u64()),
+  resolutionNote: __t.option(__t.string()),
+});
+export type Issue = __Infer<typeof Issue>;
+
 export const PerceiveJob = __t.object("PerceiveJob", {
   scheduledId: __t.u64(),
   scheduledAt: __t.scheduleAt(),
@@ -140,6 +176,30 @@ export const Pong = __t.object("Pong", {
   tMicros: __t.string(),
 });
 export type Pong = __Infer<typeof Pong>;
+
+export const Question = __t.object("Question", {
+  questionId: __t.u64(),
+  tMicros: __t.u64(),
+  source: __t.string(),
+  tool: __t.string(),
+  text: __t.string(),
+  answer: __t.string(),
+  eventIds: __t.array(__t.string()),
+  asker: __t.string(),
+});
+export type Question = __Infer<typeof Question>;
+
+export const SegmentJob = __t.object("SegmentJob", {
+  scheduledId: __t.u64(),
+  scheduledAt: __t.scheduleAt(),
+});
+export type SegmentJob = __Infer<typeof SegmentJob>;
+
+export const SegmentResult = __t.object("SegmentResult", {
+  episodes: __t.u32(),
+  titled: __t.u32(),
+});
+export type SegmentResult = __Infer<typeof SegmentResult>;
 
 export const SlackTestResult = __t.object("SlackTestResult", {
   status: __t.string(),

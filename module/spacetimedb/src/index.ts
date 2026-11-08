@@ -264,8 +264,36 @@ const trackPoint = table(
   }
 );
 
+// Demo configuration, switchable from the database without touching the frontend (decision 0029).
+// Key `active_dataset` names the database the console and MCP server should read: `wm-physical`
+// (the real capture) or one of the synthetic scenario databases. Only wm-physical's row is read.
+const demoConfig = table(
+  { name: 'demo_config', public: true },
+  {
+    key: t.string().primaryKey(),
+    value: t.string(),
+    updatedMicros: t.u64(),
+  }
+);
+
+// Questions asked of the memory (by an agent over MCP, or the console) and the moments that
+// answered them. Makes the memory look used, not only recorded (decision 0031).
+const question = table(
+  { name: 'question', public: true },
+  {
+    questionId: t.u64().primaryKey().autoInc(),
+    tMicros: t.u64().index('btree'),
+    source: t.string(), // mcp | console
+    tool: t.string(), // which capability answered: search_memory, what_changed, ask_floor, ...
+    text: t.string(), // the question as asked
+    answer: t.string(), // one line of the answer
+    eventIds: t.array(t.string()), // the moments cited
+    asker: t.string(), // free text: client name if known
+  }
+);
+
 const spacetimedb = schema(
-  { event, photo, entity, edge, episode, handoff: handoffTable, alert, asset, wearer, issue, alertResolution, perceiveJob, segmentJob, eventLocation, trackPoint },
+  { event, photo, entity, edge, episode, handoff: handoffTable, alert, asset, wearer, issue, alertResolution, perceiveJob, segmentJob, eventLocation, trackPoint, demoConfig, question },
   {
     // #14: secrets live in the database's environment, set with
     //   spacetime publish wm-physical --env-only --server maincloud  (see module/README.md)
@@ -1536,6 +1564,69 @@ export const ackAlert = spacetimedb.reducer({ alertId: t.u64() }, (ctx, { alertI
 });
 
 // ---------- admin reducers (token from env: ADMIN_TOKEN, else INGEST_TOKEN) ----------
+// Remove one event and everything hanging off it (photo, location, edges, alerts, pending jobs).
+// Entities stay: they may be shared with other events. For clearing test photos before a demo.
+export const deleteEvent = spacetimedb.reducer(
+  { adminToken: t.string(), eventId: t.string() },
+  (ctx, { adminToken, eventId }) => {
+    if (adminToken !== (ctx.env.ADMIN_TOKEN ?? ctx.env.INGEST_TOKEN)) throw new SenderError('unauthorized');
+    if (!ctx.db.event.eventId.find(eventId)) throw new SenderError('not_found');
+    for (const e of [...ctx.db.edge.fromId.filter(eventId)]) ctx.db.edge.edgeId.delete(e.edgeId);
+    for (const e of [...ctx.db.edge.toId.filter(eventId)]) ctx.db.edge.edgeId.delete(e.edgeId);
+    for (const a of [...ctx.db.alert.eventId.filter(eventId)]) ctx.db.alert.alertId.delete(a.alertId);
+    for (const j of [...ctx.db.perceiveJob.iter()]) if (j.eventId === eventId) ctx.db.perceiveJob.scheduledId.delete(j.scheduledId);
+    if (ctx.db.photo.eventId.find(eventId)) ctx.db.photo.eventId.delete(eventId);
+    if (ctx.db.eventLocation.eventId.find(eventId)) ctx.db.eventLocation.eventId.delete(eventId);
+    ctx.db.event.eventId.delete(eventId);
+  }
+);
+// Remove a wearer's track for one shift ('' = every shift of that device).
+export const deleteTrack = spacetimedb.reducer(
+  { adminToken: t.string(), deviceId: t.string(), shiftId: t.string() },
+  (ctx, { adminToken, deviceId, shiftId }) => {
+    if (adminToken !== (ctx.env.ADMIN_TOKEN ?? ctx.env.INGEST_TOKEN)) throw new SenderError('unauthorized');
+    for (const p of [...ctx.db.trackPoint.iter()]) if (p.deviceId === deviceId && (!shiftId || p.shiftId === shiftId)) ctx.db.trackPoint.pointId.delete(p.pointId);
+  }
+);
+// Record a question and the moments that answered it. Same token as ingest (the MCP server and
+// the console hold it); bounded text so a chatty client cannot bloat the table.
+export const logQuestion = spacetimedb.reducer(
+  { token: t.string(), source: t.string(), tool: t.string(), text: t.string(), answer: t.string(), eventIds: t.array(t.string()), asker: t.string() },
+  (ctx, { token, source, tool, text, answer, eventIds, asker }) => {
+    if (token !== ctx.env.INGEST_TOKEN && token !== (ctx.env.ADMIN_TOKEN ?? ctx.env.INGEST_TOKEN)) throw new SenderError('unauthorized');
+    if (!text.trim()) throw new SenderError('empty_question');
+    ctx.db.question.insert({
+      questionId: 0n,
+      tMicros: ctx.timestamp.microsSinceUnixEpoch,
+      source: source.slice(0, 20),
+      tool: tool.slice(0, 40),
+      text: text.slice(0, 400),
+      answer: answer.slice(0, 400),
+      eventIds: eventIds.slice(0, 20).filter(id => !!ctx.db.event.eventId.find(id)),
+      asker: asker.slice(0, 60),
+    });
+  }
+);
+export const deleteQuestion = spacetimedb.reducer(
+  { adminToken: t.string(), questionId: t.u64() },
+  (ctx, { adminToken, questionId }) => {
+    if (adminToken !== (ctx.env.ADMIN_TOKEN ?? ctx.env.INGEST_TOKEN)) throw new SenderError('unauthorized');
+    if (questionId === 0n) { for (const q of [...ctx.db.question.iter()]) ctx.db.question.questionId.delete(q.questionId); return; } // 0 = all
+    if (!ctx.db.question.questionId.find(questionId)) throw new SenderError('not_found');
+    ctx.db.question.questionId.delete(questionId);
+  }
+);
+export const setConfig = spacetimedb.reducer(
+  { adminToken: t.string(), key: t.string(), value: t.string() },
+  (ctx, { adminToken, key, value }) => {
+    if (adminToken !== (ctx.env.ADMIN_TOKEN ?? ctx.env.INGEST_TOKEN)) throw new SenderError('unauthorized');
+    if (!/^[a-z_]{1,40}$/.test(key)) throw new SenderError('bad_key');
+    const row = { key, value, updatedMicros: ctx.timestamp.microsSinceUnixEpoch };
+    if (ctx.db.demoConfig.key.find(key)) ctx.db.demoConfig.key.update(row);
+    else ctx.db.demoConfig.insert(row);
+  }
+);
+
 
 export const upsertAsset = spacetimedb.reducer(
   {

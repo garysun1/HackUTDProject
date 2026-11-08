@@ -1,7 +1,7 @@
 // The eight memory tools plus alert helpers. Facts come from the graph; prose is minimal
 // and every line carries a citation that resolves to an event and its photo.
 import { z } from 'zod';
-import { snapshot, matchEntity, cite, imageBlock, fmtTime, fmtDateTime, parseSince, perception, hasProcedure, call, handoffs, eventsWithEmbedding } from './db.mjs';
+import { snapshot, matchEntity, cite, imageBlock, fmtTime, fmtDateTime, parseSince, perception, hasProcedure, call, handoffs, eventsWithEmbedding, logQuestion, citedIds } from './db.mjs';
 
 const text = t => ({ type: 'text', text: t });
 const json = o => ({ type: 'text', text: JSON.stringify(o, null, 2) });
@@ -29,7 +29,17 @@ async function textEmbedding(q) {
 }
 const cosine = (a, b) => { let d = 0, na = 0, nb = 0; for (let i = 0; i < Math.min(a.length, b.length); i++) { d += a[i] * b[i]; na += a[i] * a[i]; nb += b[i] * b[i]; } return na && nb ? d / Math.sqrt(na * nb) : 0; };
 
+// Tools that answer a question are logged to the module's question table with the moments they
+// cited, so the console can show the memory being used (decision 0031). Best effort, needs a token.
+const QUESTION_OF = { search_memory: a => a.query, what_changed: a => `what changed on ${a.entity}`, find_object: a => `where is ${a.name}`, explain_change: a => `explain the change on ${a.entity}`, ask_floor: a => a.question, get_current_context: () => 'what is happening right now', summarize_handoff: a => `handoff${a?.since ? ` since ${a.since}` : ''}` };
 export function register(server) {
+  const registerRaw = server.registerTool.bind(server);
+  server.registerTool = (name, cfg, handler) => registerRaw(name, cfg, async (args, extra) => {
+    const res = await handler(args, extra);
+    const q = QUESTION_OF[name];
+    if (q) { const txt = (res?.content || []).filter(c => c.type === 'text').map(c => c.text).join('\n'); snapshot().then(snap => logQuestion(name, q(args || {}), txt, citedIds(snap, txt), extra?.requestInfo?.headers?.['user-agent'] ? 'mcp client' : 'Claude Desktop')).catch(() => {}); }
+    return res;
+  });
   server.registerTool('search_memory', {
     title: 'Search the floor memory',
     description: 'Find photographed events matching a query (text in the scene, objects, places, notes, summaries). Returns ranked events with citations and the top photo.',
@@ -175,7 +185,7 @@ export function register(server) {
     inputSchema: { question: z.string() },
   }, async ({ question }) => {
     if (await hasProcedure('ask')) {
-      try { const r = await call('ask', [question]); const answer = typeof r === 'string' ? r : r?.answer ?? r?.[0] ?? JSON.stringify(r); const cites = Array.isArray(r?.citations) ? r.citations : Array.isArray(r?.[1]) ? r[1] : []; return { content: [text(`${answer}${cites.length ? `\n\nCitations: ${cites.map(c => `[event:${String(c).slice(0, 8)}]`).join(' ')}` : ''}`)] }; }
+      try { const r = await call('ask', [question]); const answer = typeof r === 'string' ? r : r?.answer ?? r?.[0] ?? JSON.stringify(r); const cites = Array.isArray(r?.citations) ? r.citations : Array.isArray(r?.[1]) ? r[1] : []; const already = cites.filter(c => !String(answer).includes(String(c))); return { content: [text(`${answer}${already.length ? `\n\nAlso cited: ${already.map(c => `[event:${String(c)}]`).join(' ')}` : ''}`)] }; }
       catch (err) { return { content: [text(`The floor agent could not answer right now (${String(err.message).slice(0, 120)}). Use search_memory, what_changed, find_object, get_timeline, and summarize_handoff directly.`)] }; }
     }
     return { content: [text('The floor agent (ask procedure) is not deployed yet. Answer from the specific tools: search_memory for anything described in a photo, what_changed / explain_change for an asset\'s state, find_object for where something is, get_timeline for the sequence, summarize_handoff for the shift summary, get_current_context for right now. Every result cites events you can open with get_provenance.')] };

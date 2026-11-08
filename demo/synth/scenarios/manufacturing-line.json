@@ -94,5 +94,12 @@
         "LOT 2291"
       ]
     }
-  ]
+  ],
+  "site": {
+    "lat": 32.705,
+    "lon": -97.129,
+    "radius_m": 120,
+    "label": "Arlington, TX plant (synthetic placement)",
+    "synthetic": true
+  }
 }

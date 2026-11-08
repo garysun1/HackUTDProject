@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Shift Memory · Site</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+</head>
+<body>
+  <div id="app">
+    <canvas id="gl" aria-label="3D view of the site"></canvas>
+    <div id="labels" aria-hidden="true"></div>
+
+    <header id="top">
+      <div class="brand"><span class="dot" id="conn" title="connection"></span><h1>Shift Memory</h1><span class="sub" id="site">Site</span></div>
+      <div class="seg" role="group" aria-label="View">
+        <button type="button" data-view="3d" class="on">3D</button>
+        <button type="button" data-view="2d">Top-down</button>
+        <button type="button" id="follow" aria-pressed="false">Follow</button>
+      </div>
+      <div class="seg right">
+        <span class="pill" id="dataset">—</span>
+        <span class="pill mode" id="mode">live</span>
+      </div>
+    </header>
+
+    <aside id="brain" aria-label="Shift memory">
+      <div class="bh"><h2>Shift memory</h2><span class="think" id="think" hidden>updating</span></div>
+      <div id="brain-body"></div>
+    </aside>
+
+    <footer id="replay">
+      <button type="button" id="play" aria-label="Play">▶</button>
+      <button type="button" id="live" class="on">Live</button>
+      <div class="speeds" role="group" aria-label="Speed">
+        <button type="button" data-speed="1">1×</button>
+        <button type="button" data-speed="10">10×</button>
+        <button type="button" data-speed="60" class="on">60×</button>
+        <button type="button" data-speed="300">300×</button>
+      </div>
+      <div class="scrub"><input id="scrub" type="range" min="0" max="1000" value="1000" aria-label="Time" /><div id="marks"></div></div>
+      <span class="clock mono" id="clock">—</span>
+    </footer>
+
+    <div id="legend">
+      <span><i class="sw trail"></i>walk</span>
+      <span><i class="sw heat"></i>time spent</span>
+      <span><i class="sw photo"></i>photo</span>
+      <span><i class="sw alert"></i>open issue</span>
+      <span class="attr">Imagery © Esri · Building © OpenStreetMap contributors</span>
+    </div>
+    <div id="tip" hidden></div>
+  </div>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

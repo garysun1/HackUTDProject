@@ -3,7 +3,7 @@
 // ingest_photo call the phone makes, in shift order, after seeding the scenario's asset
 // registry and wearers.
 //
-//   INGEST_TOKEN=... ADMIN_TOKEN=... node demo/synth/replay.mjs <scenario-id> [--db wm-demo] [--gap 10] [--no-seed]
+//   INGEST_TOKEN=... ADMIN_TOKEN=... node demo/synth/replay.mjs <scenario-id> [--db wm-nmc2] [--gap 10] [--no-seed] [--no-location]
 //
 // SPACETIME_HOST defaults to Maincloud. ADMIN_TOKEN defaults to INGEST_TOKEN.
 // Every event is marked synthetic: event_id "synth-<scenario>-<shot>", device_id
@@ -71,11 +71,36 @@ if (!args.includes('--no-seed')) {
 const start = new Date(sc.shift_start);
 const offset = sc.shift_start.slice(-6); // keep the scenario's local UTC offset in client_t
 const shots = [...sc.shots].sort((a, b) => a.t - b.t).filter(s => manifest.shots[s.id]);
+const offMin = (offset[0] === '-' ? -1 : 1) * (Number(offset.slice(1, 3)) * 60 + Number(offset.slice(4, 6)));
+const localIso = minutes => new Date(start.getTime() + minutes * 60_000 + offMin * 60_000).toISOString().replace('Z', '') + offset;
+
+// ---- synthetic location (decision 0029): a plausible walk around the scenario's site ----
+// Deterministic per scenario. Photos get a fix at their waypoint; the track is sampled every 30 s
+// along the walk with small jitter, like the phone's own sampler, and sent through ingest_track.
+const site = args.includes('--no-location') ? null : sc.site;
+const shiftId = `synth-${sc.id}-shift`;
+let seed = [...sc.id].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7);
+const rng = () => { seed = (seed + 0x6d2b79f5) >>> 0; let t = seed; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+const way = [];
+if (site) {
+  let x = 0, y = 0, dir = rng() * Math.PI * 2;
+  for (const shot of shots) {
+    const step = 12 + rng() * 23; dir += (rng() - 0.5) * 1.6; x += Math.cos(dir) * step; y += Math.sin(dir) * step;
+    if (Math.hypot(x, y) > site.radius_m) { x *= 0.6; y *= 0.6; dir += Math.PI; }
+    way.push({ x, y, t: shot.t });
+  }
+}
+const M = 111_320; // metres per degree of latitude
+const toLL = (x, y) => ({ lat: +(site.lat + y / M).toFixed(6), lon: +(site.lon + x / (M * Math.cos((site.lat * Math.PI) / 180))).toFixed(6) });
+const posAt = tMin => {
+  if (tMin <= way[0].t) return way[0]; if (tMin >= way.at(-1).t) return way.at(-1);
+  const i = way.findIndex(w => w.t > tMin); const a = way[i - 1], b = way[i]; const k = (tMin - a.t) / Math.max(1e-6, b.t - a.t);
+  return { x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k };
+};
 for (const [i, shot] of shots.entries()) {
   // client_t in the scenario's local time with its offset, e.g. 2026-11-07T22:09:00.000-06:00
-  const offMin = (offset[0] === '-' ? -1 : 1) * (Number(offset.slice(1, 3)) * 60 + Number(offset.slice(4, 6)));
-  const local = new Date(start.getTime() + shot.t * 60_000 + offMin * 60_000);
-  const clientT = local.toISOString().replace('Z', '') + offset;
+  const clientT = localIso(shot.t);
+  const fix = site ? { ...toLL(way[i].x, way[i].y), accuracy_m: +(5 + rng() * 7).toFixed(1), t: clientT, age_ms: Math.round(rng() * 1500) } : null;
   const event = {
     ingest_token: ingestToken,
     event_id: `synth-${sc.id}-${shot.id}`,
@@ -85,11 +110,24 @@ for (const [i, shot] of shots.entries()) {
     photo: { mime: 'image/jpeg', width: 1600, height: 1209 },
     ...(shot.label ? { label: { name: shot.label } } : {}),
     ...(shot.note ? { note: shot.note } : {}),
+    ...(site ? { shift_id: shiftId, location: fix } : {}),
   };
   const b64 = readFileSync(join(outDir, manifest.shots[shot.id].file)).toString('base64');
   const r = await call('ingest_photo', [JSON.stringify(event), b64]);
   console.log(`${String(i + 1).padStart(2)}/${shots.length} ${shot.id} @ ${clientT.slice(11, 16)} -> ${r}`);
   if (i < shots.length - 1) await new Promise(res => setTimeout(res, gapS * 1000));
+}
+
+// the shift track: one batch per wearer, every 30 s from one minute before the first photo to one minute after the last
+if (site && shots.length) {
+  const byWearer = new Map();
+  for (const shot of shots) byWearer.set(shot.wearer, (byWearer.get(shot.wearer) || 0) + 1);
+  const main = [...byWearer.entries()].sort((a, b) => b[1] - a[1])[0][0]; // the wearer who walked most carries the track
+  const t0 = shots[0].t - 1, t1 = shots.at(-1).t + 1; const points = [];
+  for (let tm = t0; tm <= t1; tm += 0.5) { const p = posAt(tm); const ll = toLL(p.x + (rng() - 0.5) * 4, p.y + (rng() - 0.5) * 4); points.push({ t: localIso(tm), ...ll, accuracy_m: +(4 + rng() * 6).toFixed(1) }); }
+  const track = { device_id: deviceId(main), shift_id: shiftId, ingest_token: ingestToken, app_version: 'synth-replay', points, marks: [{ t: localIso(t0), kind: 'shift_start' }, { t: localIso(t1), kind: 'shift_end' }] };
+  const r = await call('ingest_track', [JSON.stringify(track)]);
+  console.log(`track: ${points.length} points for ${main} -> ${r}`);
 }
 
 // wait for the last photo to be perceived, then report

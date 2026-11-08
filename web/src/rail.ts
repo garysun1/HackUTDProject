@@ -3,6 +3,7 @@
 // graph first; it lives in git history (commit fc75319) if it comes back.
 import { state, placeOf, assetsOf, displayName, fmtTime, wearerName, loadPhoto, perception } from './store';
 import { select, esc } from './timeline';
+import { vocab } from './workspaces';
 
 const drawer = document.getElementById('drawer') as HTMLElement;
 const drawerImg = document.getElementById('drawer-img') as HTMLImageElement;
@@ -20,7 +21,7 @@ async function renderDrawer() {
     ['Summary', e.summary && e.confidence > 0 ? esc(e.summary) : `<span class="muted">${e.status === 'failed' ? 'This photo could not be read.' : e.summary ? 'Stored. Perception has not run on this photo yet.' : 'Reading the photo…'}</span>`],
     ['Status', `<span class="st ${e.status}">${e.status.replace('_', ' ')}</span>`],
     ['Place', place ? esc(place.canonicalName) : '—'],
-    ['Assets', registry.length ? registry.map(a => `<span title="${esc(a.canonicalName)}">${esc(displayName(a))}</span>`).join(', ') : '<span class="muted">none in registry</span>'],
+    [vocab().trackeds, registry.length ? registry.map(a => `<span title="${esc(a.canonicalName)}">${esc(displayName(a))}</span>`).join(', ') : '<span class="muted">none in registry</span>'],
     ...(other.length ? [['Also seen', other.map(a => esc(a.canonicalName)).join(', ')] as [string, string]] : []),
     ['Activity', esc(e.activity || '—')],
     ['People', String(e.peopleCount)],

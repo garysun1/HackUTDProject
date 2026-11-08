@@ -35,29 +35,44 @@ import {
 
 // Import all reducer arg schemas
 import AckAlertReducer from "./ack_alert_reducer";
+import AckAlertWithEvidenceReducer from "./ack_alert_with_evidence_reducer";
 import DeleteAssetReducer from "./delete_asset_reducer";
+import DeleteEventReducer from "./delete_event_reducer";
+import DeleteQuestionReducer from "./delete_question_reducer";
+import DeleteTrackReducer from "./delete_track_reducer";
+import LogQuestionReducer from "./log_question_reducer";
 import ReperceiveReducer from "./reperceive_reducer";
+import SetConfigReducer from "./set_config_reducer";
+import SetIssueStatusReducer from "./set_issue_status_reducer";
 import SetLabelReducer from "./set_label_reducer";
 import SetNoteReducer from "./set_note_reducer";
 import UpsertAssetReducer from "./upsert_asset_reducer";
+import UpsertIssueReducer from "./upsert_issue_reducer";
 import UpsertWearerReducer from "./upsert_wearer_reducer";
 
 // Import all procedure arg schemas
+import * as AskProcedure from "./ask_procedure";
+import * as HandoffProcedure from "./handoff_procedure";
 import * as IngestPhotoProcedure from "./ingest_photo_procedure";
 import * as IngestTrackProcedure from "./ingest_track_procedure";
 import * as PingProcedure from "./ping_procedure";
+import * as ResegmentProcedure from "./resegment_procedure";
 import * as SlackTestProcedure from "./slack_test_procedure";
 
 // Import all table schema definitions
 import AlertRow from "./alert_table";
+import AlertResolutionRow from "./alert_resolution_table";
 import AssetRow from "./asset_table";
+import DemoConfigRow from "./demo_config_table";
 import EdgeRow from "./edge_table";
 import EntityRow from "./entity_table";
 import EpisodeRow from "./episode_table";
 import EventRow from "./event_table";
 import EventLocationRow from "./event_location_table";
 import HandoffRow from "./handoff_table";
+import IssueRow from "./issue_table";
 import PhotoRow from "./photo_table";
+import QuestionRow from "./question_table";
 import TrackPointRow from "./track_point_table";
 import WearerRow from "./wearer_table";
 
@@ -82,6 +97,20 @@ const tablesSchema = __schema({
       { name: 'alert_alert_id_key', constraint: 'unique', columns: ['alertId'] },
     ],
   }, AlertRow),
+  alertResolution: __table({
+    name: 'alert_resolution',
+    indexes: [
+      { accessor: 'alertId', name: 'alert_resolution_alert_id_idx_btree', algorithm: 'btree', columns: [
+        'alertId',
+      ] },
+      { accessor: 'id', name: 'alert_resolution_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+    ],
+    constraints: [
+      { name: 'alert_resolution_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, AlertResolutionRow),
   asset: __table({
     name: 'asset',
     indexes: [
@@ -93,6 +122,17 @@ const tablesSchema = __schema({
       { name: 'asset_asset_id_key', constraint: 'unique', columns: ['assetId'] },
     ],
   }, AssetRow),
+  demoConfig: __table({
+    name: 'demo_config',
+    indexes: [
+      { accessor: 'key', name: 'demo_config_key_idx_btree', algorithm: 'btree', columns: [
+        'key',
+      ] },
+    ],
+    constraints: [
+      { name: 'demo_config_key_key', constraint: 'unique', columns: ['key'] },
+    ],
+  }, DemoConfigRow),
   edge: __table({
     name: 'edge',
     indexes: [
@@ -180,6 +220,20 @@ const tablesSchema = __schema({
       { name: 'handoff_handoff_id_key', constraint: 'unique', columns: ['handoffId'] },
     ],
   }, HandoffRow),
+  issue: __table({
+    name: 'issue',
+    indexes: [
+      { accessor: 'assetId', name: 'issue_asset_id_idx_btree', algorithm: 'btree', columns: [
+        'assetId',
+      ] },
+      { accessor: 'issueId', name: 'issue_issue_id_idx_btree', algorithm: 'btree', columns: [
+        'issueId',
+      ] },
+    ],
+    constraints: [
+      { name: 'issue_issue_id_key', constraint: 'unique', columns: ['issueId'] },
+    ],
+  }, IssueRow),
   photo: __table({
     name: 'photo',
     indexes: [
@@ -191,6 +245,20 @@ const tablesSchema = __schema({
       { name: 'photo_event_id_key', constraint: 'unique', columns: ['eventId'] },
     ],
   }, PhotoRow),
+  question: __table({
+    name: 'question',
+    indexes: [
+      { accessor: 'questionId', name: 'question_question_id_idx_btree', algorithm: 'btree', columns: [
+        'questionId',
+      ] },
+      { accessor: 'tMicros', name: 'question_t_micros_idx_btree', algorithm: 'btree', columns: [
+        'tMicros',
+      ] },
+    ],
+    constraints: [
+      { name: 'question_question_id_key', constraint: 'unique', columns: ['questionId'] },
+    ],
+  }, QuestionRow),
   trackPoint: __table({
     name: 'track_point',
     indexes: [
@@ -225,19 +293,30 @@ const tablesSchema = __schema({
 /** The schema information for all reducers in this module. This is defined the same way as the reducers would have been defined in the server, except the body of the reducer is omitted in code generation. */
 const reducersSchema = __reducers(
   __reducerSchema("ack_alert", AckAlertReducer),
+  __reducerSchema("ack_alert_with_evidence", AckAlertWithEvidenceReducer),
   __reducerSchema("delete_asset", DeleteAssetReducer),
+  __reducerSchema("delete_event", DeleteEventReducer),
+  __reducerSchema("delete_question", DeleteQuestionReducer),
+  __reducerSchema("delete_track", DeleteTrackReducer),
+  __reducerSchema("log_question", LogQuestionReducer),
   __reducerSchema("reperceive", ReperceiveReducer),
+  __reducerSchema("set_config", SetConfigReducer),
+  __reducerSchema("set_issue_status", SetIssueStatusReducer),
   __reducerSchema("set_label", SetLabelReducer),
   __reducerSchema("set_note", SetNoteReducer),
   __reducerSchema("upsert_asset", UpsertAssetReducer),
+  __reducerSchema("upsert_issue", UpsertIssueReducer),
   __reducerSchema("upsert_wearer", UpsertWearerReducer),
 );
 
 /** The schema information for all procedures in this module. This is defined the same way as the procedures would have been defined in the server. */
 const proceduresSchema = __procedures(
+  __procedureSchema("ask", AskProcedure.params, AskProcedure.returnType),
+  __procedureSchema("handoff", HandoffProcedure.params, HandoffProcedure.returnType),
   __procedureSchema("ingest_photo", IngestPhotoProcedure.params, IngestPhotoProcedure.returnType),
   __procedureSchema("ingest_track", IngestTrackProcedure.params, IngestTrackProcedure.returnType),
   __procedureSchema("ping", PingProcedure.params, PingProcedure.returnType),
+  __procedureSchema("resegment", ResegmentProcedure.params, ResegmentProcedure.returnType),
   __procedureSchema("slack_test", SlackTestProcedure.params, SlackTestProcedure.returnType),
 );
 
