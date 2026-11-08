@@ -64,7 +64,8 @@ const deviceId = key => `synth-${sc.id}-${key}`;
 if (!args.includes('--no-seed')) {
   for (const a of sc.assets || []) await call('upsert_asset', [adminToken, a.asset_id, a.name, a.type, a.location, a.patterns || []]);
   for (const w of sc.wearers || []) await call('upsert_wearer', [adminToken, deviceId(w.key), w.name, w.role, w.shift]);
-  console.log(`seeded ${sc.assets?.length ?? 0} assets, ${sc.wearers?.length ?? 0} wearers into ${db}`);
+  for (const i of sc.issues || []) await call('upsert_issue', [adminToken, i.issue_id, i.title, i.asset_id, i.opened_by || '', i.opened_at || '', i.status || 'open']);
+  console.log(`seeded ${sc.assets?.length ?? 0} assets, ${sc.wearers?.length ?? 0} wearers, ${sc.issues?.length ?? 0} work orders into ${db}`);
 }
 
 const start = new Date(sc.shift_start);

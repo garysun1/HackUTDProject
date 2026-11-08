@@ -45,10 +45,10 @@
         "faces": 0,
         "looks_real": true,
         "read": [
-          "R12",
           "10.9 kW",
           "PSU2 OK",
-          "PDU-A"
+          "PDU-A",
+          "R12"
         ]
       }
     },
@@ -64,11 +64,10 @@
         "faces": 0,
         "looks_real": true,
         "read": [
-          "R12",
-          "10.8 kW",
+          "11.8 kW",
           "PSU2 FAULT",
           "PDU-A",
-          "PRCD"
+          "R12"
         ]
       }
     },
@@ -206,6 +205,25 @@
           "38",
           "39",
           "40"
+        ]
+      }
+    },
+    "10-pdu-a-fixed": {
+      "file": "10-pdu-a-fixed.jpg",
+      "provider": "azure/flux-2-pro",
+      "seed": 32438,
+      "edited_from": "03-pdu-a-ok",
+      "prompt": "EDIT of previous shot: change only the small backlit LCD so it reads \"10.9 kW\" and \"PSU2 OK\", and make its status light green instead of red.",
+      "check": {
+        "pass": true,
+        "missing": [],
+        "faces": 0,
+        "looks_real": true,
+        "read": [
+          "10.9 kW",
+          "PSU2 OK",
+          "PDU-A",
+          "R12"
         ]
       }
     }
