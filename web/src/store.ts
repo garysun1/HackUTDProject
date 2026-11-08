@@ -25,6 +25,8 @@ export type Wearer = { deviceId: string; name: string; role: string; shift: stri
 export type Asset = { assetId: string; name: string; assetType: string; location: string; patterns: string[] };
 export type Loc = { eventId: string; deviceId: string; shiftId: string; tMicros: bigint; lat: number; lon: number; accuracyM: number; altM?: number; floor?: number; fixT: string; ageMs?: number };
 export type Question = { questionId: string; tMicros: bigint; source: string; tool: string; text: string; answer: string; eventIds: string[]; asker: string };
+export type Issue = { issueId: string; title: string; assetId: string; openedBy: string; openedMicros: bigint; status: string; resolvedEventId?: string; resolvedMicros?: bigint; resolutionNote?: string };
+export type Resolution = { id: string; alertId: string; eventId: string; deviceId: string; tMicros: bigint; how: string };
 export type TrackPoint = { pointId: string; deviceId: string; shiftId: string; tMicros: bigint; kind: string; lat: number; lon: number; accuracyM: number; floor?: number };
 
 export const state = {
@@ -40,6 +42,8 @@ export const state = {
   locations: new Map<string, Loc>(), // eventId -> where the photo was taken (#20)
   track: new Map<string, TrackPoint>(), // pointId -> shift track point (#20)
   questions: new Map<string, Question>(), // what was asked of the memory (decision 0031)
+  issues: new Map<string, Issue>(), // work orders (#23)
+  resolutions: new Map<string, Resolution>(), // alert resolutions with the photo that proved it (#23)
   selected: null as string | null,
   windowMin: 0 as number, // 0 = all
   hiddenWearers: new Set<string>(),
@@ -137,7 +141,7 @@ type OnState = (s: 'connecting' | 'live' | 'error', msg?: string) => void;
 let generation = 0; let dataConn: any = null;
 function resetState() {
   state.events.clear(); state.entities.clear(); state.edges = []; state.episodes.clear(); state.handoffs = []; state.alerts.clear();
-  state.wearers.clear(); state.assets.clear(); state.photos.clear(); state.locations.clear(); state.track.clear(); state.questions.clear();
+  state.wearers.clear(); state.assets.clear(); state.photos.clear(); state.locations.clear(); state.track.clear(); state.questions.clear(); state.issues.clear(); state.resolutions.clear();
   state.selected = null; state.fresh.clear(); state.assetFilter = null; state.hiddenWearers.clear();
 }
 function connectData(onState: OnState) {
@@ -180,13 +184,18 @@ function connectData(onState: OnState) {
       const toQ = (r: any): Question => ({ questionId: String(r.questionId), tMicros: BigInt(r.tMicros), source: r.source, tool: r.tool, text: r.text, answer: r.answer, eventIds: [...r.eventIds], asker: r.asker });
       conn.db.question.onInsert(on((_c: any, r: any) => { const q = toQ(r); state.questions.set(q.questionId, q); state.fresh.add('q:' + q.questionId); setTimeout(() => { state.fresh.delete('q:' + q.questionId); notify(); }, 1500); notify(); }));
       conn.db.question.onDelete(on((_c: any, r: any) => { state.questions.delete(String(r.questionId)); notify(); }));
+      const toIssue = (r: any): Issue => ({ issueId: r.issueId, title: r.title, assetId: r.assetId, openedBy: r.openedBy, openedMicros: BigInt(r.openedMicros), status: r.status, resolvedEventId: r.resolvedEventId ?? undefined, resolvedMicros: r.resolvedMicros != null ? BigInt(r.resolvedMicros) : undefined, resolutionNote: r.resolutionNote ?? undefined });
+      conn.db.issue.onInsert(on((_c: any, r: any) => { state.issues.set(r.issueId, toIssue(r)); notify(); }));
+      conn.db.issue.onUpdate(on((_c: any, _o: any, r: any) => { state.issues.set(r.issueId, toIssue(r)); notify(); }));
+      conn.db.issue.onDelete(on((_c: any, r: any) => { state.issues.delete(r.issueId); notify(); }));
+      conn.db.alertResolution.onInsert(on((_c: any, r: any) => { state.resolutions.set(String(r.id), { id: String(r.id), alertId: String(r.alertId), eventId: r.eventId, deviceId: r.deviceId, tMicros: BigInt(r.tMicros), how: r.how }); notify(); }));
       conn.db.wearer.onInsert(on((_c: any, r: any) => { state.wearers.set(r.deviceId, { ...r }); notify(); }));
       conn.db.wearer.onUpdate(on((_c: any, _o: any, r: any) => { state.wearers.set(r.deviceId, { ...r }); notify(); }));
       conn.db.asset.onInsert(on((_c: any, r: any) => { state.assets.set(r.assetId, { ...r, patterns: [...r.patterns] }); notify(); }));
       conn.db.asset.onUpdate(on((_c: any, _o: any, r: any) => { state.assets.set(r.assetId, { ...r, patterns: [...r.patterns] }); notify(); }));
       conn.subscriptionBuilder()
         .onApplied(() => { if (live()) notify(); })
-        .subscribe(['SELECT * FROM event', 'SELECT * FROM entity', 'SELECT * FROM edge', 'SELECT * FROM episode', 'SELECT * FROM handoff', 'SELECT * FROM alert', 'SELECT * FROM wearer', 'SELECT * FROM asset', 'SELECT * FROM event_location', 'SELECT * FROM track_point', 'SELECT * FROM question']);
+        .subscribe(['SELECT * FROM event', 'SELECT * FROM entity', 'SELECT * FROM edge', 'SELECT * FROM episode', 'SELECT * FROM handoff', 'SELECT * FROM alert', 'SELECT * FROM wearer', 'SELECT * FROM asset', 'SELECT * FROM event_location', 'SELECT * FROM track_point', 'SELECT * FROM question', 'SELECT * FROM issue', 'SELECT * FROM alert_resolution']);
     })
     .onConnectError((_ctx, err) => { if (live()) { state.connected = false; onState('error', String(err?.message ?? err)); } })
     .onDisconnect(() => { if (live()) { state.connected = false; onState('connecting', 'reconnecting'); } })

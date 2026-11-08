@@ -163,6 +163,8 @@ body[data-conn="connecting"] .col, body[data-conn="error"] .col { opacity: .7; }
 /* map (#21) */
 .map { flex: 1; min-height: 0; background: var(--page); }
 .map[hidden] { display: none; }
+.site { flex: 1; min-height: 0; background: var(--page); } .site[hidden] { display: none; } .site iframe { width: 100%; height: 100%; border: 0; display: block; }
+.floor[data-mode="site"] .empty, .floor[data-mode="site"] canvas { display: none; }
 .leaflet-container { font: inherit; background: var(--page); }
 .basemap { filter: saturate(.55) contrast(.96); }
 .map.dark .basemap { filter: invert(1) hue-rotate(180deg) saturate(.4) brightness(.85) contrast(.9); }

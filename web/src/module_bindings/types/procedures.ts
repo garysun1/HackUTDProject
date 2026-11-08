@@ -6,17 +6,26 @@
 import { type Infer as __Infer } from "spacetimedb";
 
 // Import all procedure arg schemas
+import * as AskProcedure from "../ask_procedure";
+import * as HandoffProcedure from "../handoff_procedure";
 import * as IngestPhotoProcedure from "../ingest_photo_procedure";
 import * as IngestTrackProcedure from "../ingest_track_procedure";
 import * as PingProcedure from "../ping_procedure";
+import * as ResegmentProcedure from "../resegment_procedure";
 import * as SlackTestProcedure from "../slack_test_procedure";
 
+export type AskArgs = __Infer<typeof AskProcedure.params>;
+export type AskResult = __Infer<typeof AskProcedure.returnType>;
+export type HandoffArgs = __Infer<typeof HandoffProcedure.params>;
+export type HandoffResult = __Infer<typeof HandoffProcedure.returnType>;
 export type IngestPhotoArgs = __Infer<typeof IngestPhotoProcedure.params>;
 export type IngestPhotoResult = __Infer<typeof IngestPhotoProcedure.returnType>;
 export type IngestTrackArgs = __Infer<typeof IngestTrackProcedure.params>;
 export type IngestTrackResult = __Infer<typeof IngestTrackProcedure.returnType>;
 export type PingArgs = __Infer<typeof PingProcedure.params>;
 export type PingResult = __Infer<typeof PingProcedure.returnType>;
+export type ResegmentArgs = __Infer<typeof ResegmentProcedure.params>;
+export type ResegmentResult = __Infer<typeof ResegmentProcedure.returnType>;
 export type SlackTestArgs = __Infer<typeof SlackTestProcedure.params>;
 export type SlackTestResult = __Infer<typeof SlackTestProcedure.returnType>;
 

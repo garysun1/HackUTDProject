@@ -11,7 +11,7 @@ let key = '';
 
 tools.addEventListener('click', e => {
   const t = e.target as HTMLElement;
-  const mode = t.closest('.seg [data-mode]') as HTMLElement | null; if (mode) { setMode(mode.dataset.mode as 'map' | 'graph'); return; }
+  const mode = t.closest('.seg [data-mode]') as HTMLElement | null; if (mode) { setMode(mode.dataset.mode as 'map' | 'graph' | 'site'); return; }
   if (t.closest('[data-replay]')) startReplay();
   if (t.closest('[data-live]')) stopReplay();
   if (t.closest('[data-fit]')) { fitRequested++; emitView(); }
@@ -28,11 +28,12 @@ export function renderTools(userView: boolean) {
     key = k;
     tools.innerHTML =
       (tracedName ? `<button type="button" class="pill" data-clear title="Stop tracing">Tracing <b>${esc(tracedName)}</b> · ${tracedCount} photo${tracedCount === 1 ? '' : 's'} · clear</button>` : '') +
-      (view.replay.on
+      (view.mode === 'site' ? '' : view.replay.on
         ? `<label class="scrub" title="Scrub the shift"><input type="range" min="0" max="1000" value="${Math.round(view.replay.progress * 1000)}" data-scrub aria-label="Replay position"></label><button type="button" class="btn ghost" data-live>Live</button>`
         : `<button type="button" class="btn ghost" data-replay title="Rebuild the shift from the first photo">▶ Replay</button>`) +
+      (view.mode === 'site' ? '' : '') +
       (userView ? `<button type="button" class="btn ghost" data-fit title="Fit everything in view">Fit</button>` : '') +
-      `<span class="seg" role="group" aria-label="View"><button type="button" data-mode="map" aria-pressed="${view.mode === 'map'}" ${hasMap ? '' : 'title="No photo has a position yet"'}>Map</button><button type="button" data-mode="graph" aria-pressed="${view.mode === 'graph'}">${esc(vocab().session)}</button></span>`;
+      `<span class="seg" role="group" aria-label="View"><button type="button" data-mode="map" aria-pressed="${view.mode === 'map'}" ${hasMap ? '' : 'title="No photo has a position yet"'}>Map</button><button type="button" data-mode="graph" aria-pressed="${view.mode === 'graph'}">${esc(vocab().session)}</button><button type="button" data-mode="site" aria-pressed="${view.mode === 'site'}" title="3D site view (Edward's site3d)">Site</button></span>`;
   }
   const s = tools.querySelector('[data-scrub]') as HTMLInputElement | null; if (s && view.replay.playing) s.value = String(Math.round(view.replay.progress * 1000));
 }

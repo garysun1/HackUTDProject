@@ -32,7 +32,7 @@ let raf = 0; let lastFrame = performance.now();
 let hover: { kind: 'photo' | 'node'; id: string } | null = null;
 let drag: { sx: number; sy: number; tx: number; ty: number; moved: boolean } | null = null;
 
-type Node = { id: string; kind: 'equipment' | 'issue'; label: string; sub: string; photos: string[]; alert?: Alert; x: number; y: number; w: number; lane: number; open: boolean };
+type Node = { id: string; kind: 'equipment' | 'issue'; label: string; sub: string; photos: string[]; alert?: Alert; assetId?: string; resolvedBy?: string; x: number; y: number; w: number; lane: number; open: boolean; progress?: boolean };
 type Note = { id: string; text: string; x: number; y: number; w: number; lane: number };
 type Q = { id: string; text: string; answer: string; photos: string[]; x: number; y: number; w: number; lane: number; t: bigint };
 const Q_W = 230, Q_H = 46;
@@ -98,7 +98,7 @@ addEventListener('mouseup', e => {
   if (!drag) return; const moved = drag.moved; drag = null; if (moved || e.target !== canvas) return;
   const r = canvas.getBoundingClientRect(); const h = hit(e.clientX - r.left, e.clientY - r.top);
   if (!h) { if (state.selected) select(null); return; }
-  if (h.kind === 'photo') select(h.id); else if (h.id.startsWith('q:')) { const q = state.questions.get(h.id.slice(2)); if (q?.eventIds[0]) select(q.eventIds[0]); } else { const n = nodeById.get(h.id); const ent = n?.kind === 'issue' ? n.alert?.assetId : h.id; if (ent) { state.assetFilter = state.assetFilter === ent ? null : ent; notify(); } }
+  if (h.kind === 'photo') select(h.id); else if (h.id.startsWith('q:')) { const q = state.questions.get(h.id.slice(2)); if (q?.eventIds[0]) select(q.eventIds[0]); } else { const n = nodeById.get(h.id); const ent = n?.kind === 'issue' ? n.assetId : h.id; if (ent) { state.assetFilter = state.assetFilter === ent ? null : ent; notify(); } }
 });
 canvas.addEventListener('mouseleave', () => { hover = null; hideTip(); frame(); });
 canvas.addEventListener('dblclick', () => { userView = false; frame(); });
@@ -125,7 +125,8 @@ function nodeCard(id: string): string {
   const n = nodeById.get(id); if (!n) return '';
   const last = n.photos.map(p => state.events.get(p)!).sort((a, b) => (a.tMicros < b.tMicros ? 1 : -1))[0];
   const head = n.kind === 'issue' ? `<span class="ta">${esc(n.label)}</span>` : `<b>${esc(n.label)}</b>`;
-  return `<div class="tb"><div class="tt">${head}</div><div class="ts">${esc(n.sub)}${n.kind === 'issue' ? (n.open ? ' · open' : ' · resolved') : ''} · in ${n.photos.length} photo${n.photos.length === 1 ? '' : 's'}${last ? ` · last ${fmtTime(last.tMicros)} by ${esc(wearerName(last.deviceId))}` : ''}. Click to follow.</div></div>`;
+  const resolved = n.resolvedBy ? state.events.get(n.resolvedBy) : null;
+  return `<div class="tb"><div class="tt">${head}</div><div class="ts">${esc(n.sub)}${n.kind === 'issue' && !n.id.startsWith('wo:') ? (n.open ? ' · open' : ' · resolved') : ''}${resolved ? ` · resolved by the ${fmtTime(resolved.tMicros)} photo` : ''} · in ${n.photos.length} photo${n.photos.length === 1 ? '' : 's'}${last ? ` · last ${fmtTime(last.tMicros)} by ${esc(wearerName(last.deviceId))}` : ''}. Click to follow.</div></div>`;
 }
 
 // ---------- layout ----------
@@ -154,7 +155,19 @@ function layout(evs: Ev[]): Layout {
     const until = a.acked && a.ackedMicros ? a.ackedMicros : null;
     for (const e of chrono) if (e.eventId !== a.eventId && e.tMicros > raised.tMicros && (until === null || e.tMicros <= until) && a.assetId && edgesFrom(e.eventId, 'INVOLVES').some(ed => ed.toId === a.assetId)) photos.push(e.eventId);
     const ent = a.assetId ? state.entities.get(a.assetId) : undefined; const where = ent ? equipmentWords(ent).label : a.assetName || '';
-    issues.push({ id: `alert:${a.id}`, kind: 'issue', label: issueWords(a), sub: where ? `${vocab().flag.toLowerCase()} on ${where}` : vocab().flag.toLowerCase(), photos, alert: a, x: 0, y: 0, w: 0, lane: 0, open: !a.acked });
+    const res = [...state.resolutions.values()].find(r => r.alertId === a.id && evIds.has(r.eventId));
+    if (res && !photos.includes(res.eventId)) photos.push(res.eventId);
+    issues.push({ id: `alert:${a.id}`, kind: 'issue', label: issueWords(a), sub: where ? `${vocab().flag.toLowerCase()} on ${where}` : vocab().flag.toLowerCase(), photos, alert: a, assetId: a.assetId, resolvedBy: res?.eventId, x: 0, y: 0, w: 0, lane: 0, open: !a.acked });
+  }
+  // work orders: a flag that existed before the first photo, threading to every photo of its asset
+  for (const wo of state.issues.values()) {
+    const assetEnt = state.assets.get(wo.assetId) ? state.entities.get(wo.assetId.toLowerCase().replace(/-/g, '_')) : undefined; const entId = assetEnt?.entityId ?? wo.assetId.toLowerCase().replace(/-/g, '_');
+    const photos = chrono.filter(e => edgesFrom(e.eventId, 'INVOLVES').some(ed => ed.toId === entId)).map(e => e.eventId);
+    if (wo.resolvedEventId && evIds.has(wo.resolvedEventId) && !photos.includes(wo.resolvedEventId)) photos.push(wo.resolvedEventId);
+    if (!photos.length) continue; // a work order nobody has looked at yet stays in the registry, not on the line
+    const where = assetEnt ? equipmentWords(assetEnt).label : state.assets.get(wo.assetId)?.name ?? wo.assetId;
+    const label = wo.title.length > 38 ? wo.title.slice(0, 37) + '…' : wo.title;
+    issues.push({ id: `wo:${wo.issueId}`, kind: 'issue', label, sub: `work order ${wo.issueId} on ${where}${wo.status === 'in_progress' ? ' · in progress' : wo.status === 'resolved' ? ' · resolved' : ' · open'}${wo.openedBy ? ` · opened by ${wo.openedBy}` : ''}`, photos, assetId: entId, resolvedBy: wo.resolvedEventId, x: 0, y: 0, w: 0, lane: 0, open: wo.status !== 'resolved', progress: wo.status === 'in_progress' });
   }
   // open issues nearest the line, then equipment by first appearance; lanes packed by horizontal overlap
   ctx.font = '500 12.5px Inter, sans-serif';
@@ -238,11 +251,11 @@ export function renderFloor() {
   const traceId = state.assetFilter;
   const focusNode = hover?.kind === 'node' ? nodeById.get(hover.id) : null;
   const litPhotos = new Set<string>(); let anyFocus = false;
-  if (traceId) { anyFocus = true; for (const n of L.nodes) if (n.id === traceId || n.alert?.assetId === traceId) n.photos.forEach(p => litPhotos.add(p)); }
+  if (traceId) { anyFocus = true; for (const n of L.nodes) if (n.id === traceId || n.assetId === traceId) n.photos.forEach(p => litPhotos.add(p)); }
   else if (focusNode) { anyFocus = true; focusNode.photos.forEach(p => litPhotos.add(p)); }
   const focusPhoto = hover?.kind === 'photo' ? hover.id : state.selected;
   const dim = (id: string) => (anyFocus && !litPhotos.has(id) ? 0.25 : 1);
-  const nodeDim = (n: Node) => (traceId ? (n.id === traceId || n.alert?.assetId === traceId ? 1 : 0.25) : focusNode ? (n === focusNode ? 1 : 0.35) : 1);
+  const nodeDim = (n: Node) => (traceId ? (n.id === traceId || n.assetId === traceId ? 1 : 0.25) : focusNode ? (n === focusNode ? 1 : 0.35) : 1);
 
   // the line and the breaks
   ctx.strokeStyle = C.soft; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(40, L.spineY); ctx.lineTo(L.width - 40, L.spineY); ctx.stroke();
@@ -255,8 +268,9 @@ export function renderFloor() {
     const col = n.kind === 'issue' ? (n.open ? C.crit : C.ink4) : C.line;
     for (const p of n.photos) {
       const pp = px.get(p); if (!pp) continue; const prog = Math.min(1, (now - pp.t0) / 650); if (prog < 1) moving = true;
+      const resolving = n.resolvedBy === p;
       ctx.globalAlpha = Math.min(pp.a, nodeDim(n)) * (n.kind === 'issue' ? 0.9 : 0.7) * prog;
-      ctx.strokeStyle = col; ctx.lineWidth = n.kind === 'issue' ? 1.6 : 1;
+      ctx.strokeStyle = resolving ? C.goodInk : col; ctx.lineWidth = resolving ? 2 : n.kind === 'issue' ? 1.6 : 1;
       const y0 = n.y + PILL_H / 2, y1 = L.spineY - PH / 2 - 3; const my = (y0 + y1) / 2;
       ctx.beginPath(); ctx.moveTo(n.x, y0); ctx.bezierCurveTo(n.x, my, pp.x, my, pp.x, y1); ctx.stroke();
     }
@@ -297,16 +311,16 @@ export function renderFloor() {
 
   // nodes above the line
   for (const n of L.nodes) {
-    ctx.globalAlpha = nodeDim(n); const isFocus = focusNode === n || n.id === traceId || n.alert?.assetId === traceId;
+    ctx.globalAlpha = nodeDim(n); const isFocus = focusNode === n || n.id === traceId || n.assetId === traceId;
     const x0 = n.x - n.w / 2, y0 = n.y - PILL_H / 2;
     if (n.kind === 'issue') {
-      ctx.fillStyle = n.open ? C.critBg : C.panel; ctx.strokeStyle = n.open ? C.crit : C.line; ctx.lineWidth = isFocus ? 1.5 : 1;
+      ctx.fillStyle = n.open ? (n.progress ? C.warnBg : C.critBg) : C.panel; ctx.strokeStyle = n.open ? (n.progress ? C.warn : C.crit) : C.line; ctx.lineWidth = isFocus ? 1.5 : 1;
       roundRect(x0, y0, n.w, PILL_H, 7); ctx.fill(); ctx.stroke();
       // mark: a small triangle while open, a check once resolved
-      ctx.fillStyle = n.open ? C.crit : C.goodInk;
+      ctx.fillStyle = n.open ? (n.progress ? C.warn : C.crit) : C.goodInk;
       if (n.open) { ctx.beginPath(); ctx.moveTo(x0 + 14, y0 + 7); ctx.lineTo(x0 + 20.5, y0 + 19); ctx.lineTo(x0 + 7.5, y0 + 19); ctx.closePath(); ctx.fill(); ctx.fillStyle = C.critBg; ctx.fillRect(x0 + 13.3, y0 + 11, 1.4, 4.5); ctx.fillRect(x0 + 13.3, y0 + 16.5, 1.4, 1.4); }
       else { ctx.strokeStyle = C.goodInk; ctx.lineWidth = 1.8; ctx.beginPath(); ctx.moveTo(x0 + 9, y0 + 13.5); ctx.lineTo(x0 + 13, y0 + 17.5); ctx.lineTo(x0 + 20, y0 + 9.5); ctx.stroke(); }
-      ctx.font = '600 12.5px Inter, sans-serif'; ctx.fillStyle = n.open ? C.critInk : C.ink2; ctx.textAlign = 'left'; ctx.fillText(fit(n.label, n.w - 36), x0 + 28, n.y + 0.5);
+      ctx.font = '600 12.5px Inter, sans-serif'; ctx.fillStyle = n.open ? (n.progress ? C.warn : C.critInk) : C.ink2; ctx.textAlign = 'left'; ctx.fillText(fit(n.label, n.w - 36), x0 + 28, n.y + 0.5);
     } else {
       ctx.fillStyle = isFocus ? C.ink : C.panel; ctx.strokeStyle = isFocus ? C.ink : C.line; ctx.lineWidth = 1;
       roundRect(x0, y0, n.w, PILL_H, 7); ctx.fill(); ctx.stroke();

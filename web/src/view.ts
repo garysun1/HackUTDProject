@@ -3,7 +3,7 @@
 // store so a replay tick re-renders the canvases without rebuilding the timeline DOM.
 import { state, visibleEvents, type Ev } from './store';
 
-export type Mode = 'map' | 'graph';
+export type Mode = 'map' | 'graph' | 'site';
 export const view = {
   mode: 'graph' as Mode,
   modeChosen: false, // the user picked a mode; stop auto-switching to the map when positions appear
@@ -11,7 +11,7 @@ export const view = {
   scope: null as Set<string> | null, // graph narrowed to these events (opened from a map cluster)
   scopeLabel: '',
 };
-try { const m = localStorage.getItem('wm.mode'); if (m === 'map' || m === 'graph') { view.mode = m; view.modeChosen = true; } } catch { /* private mode */ }
+try { const m = localStorage.getItem('wm.mode'); if (m === 'map' || m === 'graph' || m === 'site') { view.mode = m; view.modeChosen = true; } } catch { /* private mode */ }
 
 type Fn = () => void; const listeners = new Set<Fn>();
 export function onView(fn: Fn) { listeners.add(fn); }

@@ -5,6 +5,7 @@ import { renderFloor, floorUserView } from './floor';
 import { renderRail } from './rail';
 import { renderMap, mapUserView } from './map';
 import { renderTools } from './tools';
+import { renderSite } from './site';
 import { view, setMode } from './view';
 
 const dbEl = document.getElementById('db')!;
@@ -61,7 +62,7 @@ onChange(() => {
   if (!view.modeChosen && state.locations.size && view.mode !== 'map') setMode('map', false); // the first positioned photo brings the map up
   renderWorkspace(); // follows the dataset switch
   renderChips(); renderTimeline(); renderRail(); // detail panel first: it changes the canvas width
-  renderTools(view.mode === 'map' ? mapUserView() : floorUserView()); renderMap(); renderFloor();
+  renderTools(view.mode === 'map' ? mapUserView() : floorUserView()); renderMap(); renderFloor(); renderSite();
 });
 
 // Timeline collapse: the floor takes the width. Remembered per browser.
